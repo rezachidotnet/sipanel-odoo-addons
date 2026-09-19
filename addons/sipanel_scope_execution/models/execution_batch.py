@@ -123,9 +123,12 @@ class SipanelExecutionBatch(models.Model):
                     self.env['sipanel.execution.adapter'].create_or_link(d)
                 batch.write({'state': 'released', 'released_by_id': self.env.uid, 'released_date': fields.Datetime.now()})
         except UserError as e:
+            # everything created by the adapters is rolled back by the savepoint; the batch itself stays as FAILED evidence
             demands.sudo().write({'state': 'failed'})
             batch.write({'state': 'failed', 'error_summary': self._redact(str(e))})
-            raise UserError(_("Release failed and was rolled back: %s", self._redact(str(e))))
+            batch.message_post(body=_("Release failed and was rolled back: %s", self._redact(str(e))))
+            self.env['sipanel.scope.audit.event'].log(batch, 'release_execution_failed', after={'error': self._redact(str(e))}, correlation_uid=batch.action_uid)
+            return batch
         self.env['sipanel.scope.audit.event'].log(batch, 'release_execution', after={'demands': len(demands), 'revision_set_hash': batch.revision_set_hash},
                                                   correlation_uid=batch.action_uid)
         return batch

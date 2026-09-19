@@ -2,6 +2,7 @@
 """Finance route policy: exactly one terminal recognised event per economic cost (GAP-E01, BQ-04, AM-03-R1)."""
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 ROUTES = [('shared_stock', 'Shared-stock material'), ('direct_purchase', 'Direct project purchase / dropship'),
           ('mfg_material', 'Manufacturing (finished issue)'), ('mfg_labour', 'Manufacturing labour'), ('site_labour', 'Site labour'),
@@ -46,14 +47,14 @@ class SipanelCostRecognitionPolicy(models.Model):
             raise AccessError(self.env._("Only SIPANEL Finance may approve recognition policies."))
         for p in self:
             prev = self.search([('company_id', '=', p.company_id.id), ('route', '=', p.route), ('state', '=', 'approved'), ('id', '!=', p.id)])
-            prev.with_context(sipanel_policy_action=True).write({'state': 'superseded'})
-            p.with_context(sipanel_policy_action=True).write({'state': 'approved', 'approved_by_id': self.env.uid, 'approved_date': fields.Date.today(),
+            prev.with_context(**guard_ctx('sipanel_policy_action')).write({'state': 'superseded'})
+            p.with_context(**guard_ctx('sipanel_policy_action')).write({'state': 'approved', 'approved_by_id': self.env.uid, 'approved_date': fields.Date.today(),
                                                                'approval_source': source or p.approval_source})
             self.env['sipanel.scope.audit.event'].log(p, 'policy_approve', after={'route': p.route, 'version': p.version, 'source': p.approval_source})
         return True
 
     def write(self, vals):
-        if not self.env.context.get('sipanel_policy_action'):
+        if not guard(self.env, 'sipanel_policy_action'):
             if 'state' in vals or 'approved_by_id' in vals or 'approved_date' in vals:
                 raise UserError(self.env._("Policy approval is only possible through the approval action."))
             if any(p.state != 'draft' for p in self) and set(vals) - {'note'}:

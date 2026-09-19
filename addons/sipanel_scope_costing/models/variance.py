@@ -28,6 +28,17 @@ class SipanelScopeVariance(models.Model):
     recognised_margin = fields.Monetary(currency_field='currency_id', readonly=True, groups=COST_GROUP)
     completeness = fields.Selection([('complete', 'Complete'), ('incomplete', 'Incomplete'), ('policy_missing', 'Policy missing')], readonly=True)
 
+    # A SQL view reads committed-in-transaction rows: pending ORM writes (scope project, event allocations)
+    # must be flushed first, and the ORM cache of the view must not survive a projection refresh (CD-11).
+    def _search(self, domain, offset=0, limit=None, order=None, **kwargs):
+        self.env.flush_all()
+        self.invalidate_model()
+        return super()._search(domain, offset=offset, limit=limit, order=order, **kwargs)
+
+    def fetch(self, field_names):
+        self.env.flush_all()
+        return super().fetch(field_names)
+
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
         self.env.cr.execute(f"""

@@ -2,6 +2,7 @@
 """sale.order hooks: seal at send, verify at confirm, independent copy, currency guard (GAP-B14, B17, B18; SV-14)."""
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
 
@@ -10,8 +11,8 @@ class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
     sipanel_quote_scope_ids = fields.One2many('sipanel.quote.scope', 'order_id', copy=False)
-    sipanel_scope_count = fields.Integer(compute='_compute_sipanel_scopes')
-    sipanel_has_scopes = fields.Boolean(compute='_compute_sipanel_scopes', store=True)
+    sipanel_scope_count = fields.Integer(compute='_compute_sipanel_scope_count')
+    sipanel_has_scopes = fields.Boolean(compute='_compute_sipanel_has_scopes', store=True)
     sipanel_current_seal_hash = fields.Char(readonly=True, copy=False)
     sipanel_readiness_state = fields.Selection([('ok', 'OK'), ('warnings', 'Warnings'), ('blocked', 'Blocked')],
                                                compute='_compute_sipanel_readiness')
@@ -21,11 +22,14 @@ class SaleOrder(models.Model):
     sipanel_total_margin = fields.Monetary(compute='_compute_sipanel_totals', groups=COST_GROUP)
 
     @api.depends('sipanel_quote_scope_ids', 'sipanel_quote_scope_ids.active')
-    def _compute_sipanel_scopes(self):
+    def _compute_sipanel_scope_count(self):
         for o in self:
-            scopes = o.sipanel_quote_scope_ids.filtered('active')
-            o.sipanel_scope_count = len(scopes)
-            o.sipanel_has_scopes = bool(scopes)
+            o.sipanel_scope_count = len(o.sipanel_quote_scope_ids.filtered('active'))
+
+    @api.depends('sipanel_quote_scope_ids', 'sipanel_quote_scope_ids.active')
+    def _compute_sipanel_has_scopes(self):
+        for o in self:
+            o.sipanel_has_scopes = bool(o.sipanel_quote_scope_ids.filtered('active'))
 
     @api.depends('currency_id', 'company_id.currency_id')
     def _compute_sipanel_currency_ok(self):
@@ -103,7 +107,7 @@ class SaleOrder(models.Model):
         return super().action_quotation_sent()
 
     def write(self, vals):
-        if vals.get('state') == 'sent' and not self.env.context.get('sipanel_seal_transaction'):
+        if vals.get('state') == 'sent' and not guard(self.env, 'sipanel_seal_transaction'):
             self.filtered(lambda o: o.state == 'draft')._sipanel_seal_current_revisions(actor='mark_sent')
         if 'currency_id' in vals or 'pricelist_id' in vals:
             res = super().write(vals)
@@ -113,7 +117,7 @@ class SaleOrder(models.Model):
 
     def action_confirm(self):
         self._sipanel_check_currency()
-        self._sipanel_accept_current_revisions(reference=self.env.context.get('sipanel_acceptance_reference'))
+        self._sipanel_accept_current_revisions(reference=guard(self.env, 'sipanel_acceptance_reference'))
         return super().action_confirm()
 
     def _action_cancel(self):
@@ -152,9 +156,9 @@ class SaleOrder(models.Model):
             })
             scope.write({'current_revision_id': new_rev.id})
             if src.is_optional:
-                new_rev.with_context(sipanel_seal_transaction=True).write({'offered_scope_qty': rev.offered_scope_qty or rev.scope_qty})
+                new_rev.with_context(**guard_ctx('sipanel_seal_transaction')).write({'offered_scope_qty': rev.offered_scope_qty or rev.scope_qty})
             rev._copy_components_to(new_rev, keep_uids=False)
-            new_rev.with_context(sipanel_note_sync=True).write({'note_fingerprint': new_rev._eligible_fingerprint(), 'note_reviewed': rev.note_reviewed})
+            new_rev.with_context(**guard_ctx('sipanel_note_sync')).write({'note_fingerprint': new_rev._eligible_fingerprint(), 'note_reviewed': rev.note_reviewed})
             self.env['sipanel.scope.audit.event'].log(scope, 'copy_scope', after={'from_scope_id': src.id}, revision_ref=new_rev.display_name)
         return True
 

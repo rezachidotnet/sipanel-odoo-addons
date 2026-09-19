@@ -4,6 +4,7 @@ import uuid
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError, ValidationError
+from .sipanel_tools import guard, guard_ctx
 
 from .sipanel_tools import (BASIS, CERTAINTY, DIMENSION_FAMILY, DISCLOSURE, EXECUTION_MODE, KIND,
                             NO_ACTION_REASON, PERCENT_BASES, PLACEMENT, RESPONSIBILITY, ROUNDING_MODE,
@@ -123,7 +124,7 @@ class SipanelScopeRecipeLine(models.Model):
     # ---------------------------------------------------------------- immutability (PT-24)
     def _check_version_draft(self, action):
         frozen = self.filtered(lambda l: l.version_id.state != 'draft')
-        if frozen and not self.env.context.get('sipanel_release_transaction'):
+        if frozen and not guard(self.env, 'sipanel_release_transaction'):
             raise UserError(self.env._("Cannot %(a)s recipe lines of %(v)s: the version is %(s)s.",
                                        a=action, v=frozen[0].version_id.display_name, s=frozen[0].version_id.state))
 

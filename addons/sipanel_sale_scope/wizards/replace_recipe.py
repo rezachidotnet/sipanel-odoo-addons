@@ -2,6 +2,7 @@
 """Replace the master part of a WORKING revision with another released version; explicit diff, never silent (GAP-B15)."""
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 
 class SipanelWizardReplaceRecipe(models.TransientModel):
@@ -73,7 +74,7 @@ class SipanelWizardReplaceRecipe(models.TransientModel):
             if l.base_line_ids:
                 Comp.browse(id_map[l.id]).write({'base_component_ids': [(6, 0, [id_map[b.id] for b in l.base_line_ids if b.id in id_map])]})
         scope.write({'source_version_id': self.version_id.id})
-        rev.with_context(sipanel_note_sync=True).write({'note_reviewed': False})
+        rev.with_context(**guard_ctx('sipanel_note_sync')).write({'note_reviewed': False})
         self.env['sipanel.scope.audit.event'].log(scope, 'replace_recipe', after={'version_id': self.version_id.id, 'diff': self.diff_text},
                                                   revision_ref=rev.display_name)
         return {'type': 'ir.actions.act_window_close'}

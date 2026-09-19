@@ -7,6 +7,7 @@ from odoo.exceptions import LockError, UserError, ValidationError
 from odoo.tools import float_compare, float_is_zero
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import ACCEPTANCE
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
 
@@ -174,7 +175,7 @@ class SipanelQuoteScope(models.Model):
         if rev.quote_uom_id and rev.base_uom_id and rev.quote_uom_id != rev.base_uom_id and line.product_uom_id == rev.quote_uom_id:
             qty = rev.base_uom_id._compute_quantity(qty, rev.quote_uom_id, round=False) if qty else 0.0
         with self.env.protecting([line._fields['discount'], line._fields['price_unit']], line):
-            line.with_context(sipanel_governed_transition=True).write({'product_uom_qty': qty})
+            line.with_context(**guard_ctx('sipanel_governed_transition')).write({'product_uom_qty': qty})
         self.write({'acceptance_state': new_state,
                     'acceptance_reference': f"{actor}:{rev.id}:{uuid.uuid4().hex[:12]}" if new_state == 'accepted' else self.acceptance_reference})
         self.env['sipanel.scope.audit.event'].log(
@@ -240,7 +241,7 @@ class SipanelQuoteScope(models.Model):
             line_vals['sequence'] = sequence
         elif section_line:
             line_vals['sequence'] = section_line.sequence + 1
-        line = self.env['sale.order.line'].with_context(sipanel_anchor_create=True).create(line_vals)
+        line = self.env['sale.order.line'].with_context(**guard_ctx('sipanel_anchor_create')).create(line_vals)
         scope = self.create({
             'order_id': order.id, 'source_scope_id': version.scope_id.id, 'source_version_id': version.id,
             'anchor_line_id': line.id, 'is_optional': optional, 'optional_section_line_id': section_line.id if section_line else False,
@@ -258,7 +259,7 @@ class SipanelQuoteScope(models.Model):
         scope.write({'current_revision_id': rev.id})
         if optional:
             # OFFERED scope: snapshot quantities are computed on the offered scope qty, stored on the revision
-            rev.with_context(sipanel_seal_transaction=True).write({'offered_scope_qty': qty_base})
+            rev.with_context(**guard_ctx('sipanel_seal_transaction')).write({'offered_scope_qty': qty_base})
         Comp = self.env['sipanel.quote.scope.component'].sudo()
         id_map = {}
         for l in version.recipe_line_ids.sorted(lambda l: (l.sequence, l.id)):

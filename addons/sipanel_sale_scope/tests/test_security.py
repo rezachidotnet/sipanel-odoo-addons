@@ -69,7 +69,8 @@ class TestSecurity(SipanelSaleCase):
         order.action_quotation_sent()
         rev = scope.current_revision_id
         comp = rev.component_ids[0]
-        xid = comp.export_data(['id'])['datas'][0][0]
+        xid = f'__export__.sipanel_quote_scope_component_{comp.id}_pt'
+        self.env['ir.model.data']._update_xmlids([{'xml_id': xid, 'record': comp}])
         res = self.env['sipanel.quote.scope.component'].with_user(self.estimator).load(['id', 'rate'], [[xid, '77']])
         self.assertTrue(res.get('messages'))
         self.assertNotEqual(comp.rate, 77)
@@ -106,6 +107,8 @@ class TestSecurity(SipanelSaleCase):
         bracket = self._comp(scope, self.p_bracket)
         bracket.write({'qty_override': True, 'override_qty': 200, 'override_reason': 'audit test'})
         bracket.set_manual_cost(7.0, 'quote from supplier X')
+        scope.anchor_line_id.write({'price_unit': 200.0})
+        rev.action_mark_note_reviewed()  # component changes reset the review flag (PT-08 rule)
         order.action_quotation_sent()
         events = self.env['sipanel.scope.audit.event'].search([('res_model', 'in', [bracket._name, rev._name]), ('res_id', 'in', [bracket.id, rev.id])])
         actions = set(events.mapped('action'))

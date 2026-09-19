@@ -3,7 +3,7 @@
     <data noupdate="0">
         <record id="group_scope_finance" model="res.groups">
             <field name="name">Finance (cost recognition)</field>
-            <field name="category_id" ref="sipanel_commercial_scope_core.module_category_sipanel_scope"/>
+            <field name="privilege_id" ref="sipanel_commercial_scope_core.privilege_sipanel_scope"/>
             <field name="implied_ids" eval="[(4, ref('account.group_account_manager')), (4, ref('sipanel_commercial_scope_core.group_scope_cost_viewer'))]"/>
             <field name="comment">Approve recognition policies, review allocations, reconcile.</field>
         </record>

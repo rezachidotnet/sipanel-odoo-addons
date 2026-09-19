@@ -16,8 +16,8 @@ case "$MODE" in
   install) deploy; docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init -i "$MODS" 2>&1 | tee "$LOG" ;;
   upgrade) deploy; docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init -u sipanel_commercial_scope_core 2>&1 | tee "$LOG" ;;
   test)    deploy; sudo rsync -a --delete "$REPO/test_addons/sipanel_scope_demo/" /opt/odoo/addons/sipanel_scope_demo/
-           docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init -u "$MODS" --test-enable --test-tags /sipanel 2>&1 | tee "$LOG" ;;
-  smoke)   docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init --test-enable --test-tags /sipanel_pilot -i sipanel_scope_demo 2>&1 | tee "$LOG" ;;
+           docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init -u "$MODS" --test-enable --test-tags sipanel 2>&1 | tee "$LOG" ;;
+  smoke)   docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d sipanel --no-http --stop-after-init --test-enable --test-tags sipanel_pilot -i sipanel_scope_demo 2>&1 | tee "$LOG" ;;
   *) echo "unknown mode"; exit 2 ;;
 esac
 grep -E "ERROR|FAIL|CRITICAL" "$LOG" | grep -v "0 failed" | head -50 || true

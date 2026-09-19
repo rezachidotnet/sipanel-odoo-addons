@@ -11,6 +11,7 @@ Route -> terminal event (IF-01: `stock.move.value` is a field; `product.value` i
   freight_landed    : NONE (deferred; stock_landed_costs not installed)
 """
 from odoo import api, fields, models
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 ROUTE_BY_MODE = {'stock_issue': 'shared_stock', 'buy_direct': 'direct_purchase', 'manufacture': 'mfg_material',
                  'labour': 'site_labour', 'equipment_service': 'equipment_service', 'native_anchor_covered': 'shared_stock'}
@@ -23,8 +24,8 @@ class SipanelActualProjection(models.AbstractModel):
     @api.model
     def refresh_order(self, order):
         """Rebuild events/allocations for one order's demands. Idempotent (natural keys)."""
-        Event = self.env['sipanel.actual.cost.event'].with_context(sipanel_projection=True).sudo()
-        Alloc = self.env['sipanel.actual.allocation'].with_context(sipanel_projection=True).sudo()
+        Event = self.env['sipanel.actual.cost.event'].with_context(**guard_ctx('sipanel_projection')).sudo()
+        Alloc = self.env['sipanel.actual.allocation'].with_context(**guard_ctx('sipanel_projection')).sudo()
         Policy = self.env['sipanel.cost.recognition.policy'].sudo()
         company = order.company_id
         demands = self.env['sipanel.execution.demand'].sudo().search([('order_id', '=', order.id), ('state', 'not in', ('failed',))])
@@ -93,6 +94,8 @@ class SipanelActualProjection(models.AbstractModel):
                     Alloc.create({'event_id': ev.id, 'quote_scope_id': scope.id, 'allocation_basis': 'target_link', 'amount': ev.amount})
                 touched |= ev
         self.env['sipanel.scope.audit.event'].log(order, 'refresh_actuals', after={'events': len(touched)})
+        self.env.flush_all()
+        self.env['sipanel.scope.variance'].invalidate_model()  # SQL view: the ORM cache does not see event changes
         return touched
 
     # ------------------------------------------------------------------ candidates per demand

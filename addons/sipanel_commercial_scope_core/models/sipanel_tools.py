@@ -7,6 +7,7 @@ Decision references: C1-D04 (per-line rounding), C2-D03, C0-D07.
 import hashlib
 import json
 import math
+import uuid
 
 from odoo.tools import float_round
 
@@ -121,3 +122,22 @@ def find_cycle(edges):
         return False
 
     return any(colour[n] == WHITE and visit(n) for n in list(edges))
+
+
+# ---------------------------------------------------------------------------
+# Internal transaction guards (CD-12). RPC callers can send any context key, so a
+# bare context flag must never unlock a privileged path. Internal code passes the
+# flag together with a process-local token that no external caller can know.
+GUARD_TOKEN = uuid.uuid4().hex
+
+
+def guard_ctx(*names):
+    """Context values that activate the given internal guard flags."""
+    ctx = {name: True for name in names}
+    ctx['sipanel_guard_token'] = GUARD_TOKEN
+    return ctx
+
+
+def guard(env, name):
+    """True only when the flag was set by internal code (token matches)."""
+    return bool(env.context.get(name)) and env.context.get('sipanel_guard_token') == GUARD_TOKEN

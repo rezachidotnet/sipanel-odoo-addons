@@ -55,7 +55,8 @@ class TestScopeLifecycle(SipanelCoreCase):
         with self.assertRaises(UserError):
             v1.sudo().write({'label_fa': 'z'})
         # base_import path: load() -> write()
-        xid = v1.recipe_line_ids[0].export_data(['id'])['datas'][0][0]
+        xid = f'__export__.sipanel_scope_recipe_line_{v1.recipe_line_ids[0].id}_pt'
+        self.env['ir.model.data']._update_xmlids([{'xml_id': xid, 'record': v1.recipe_line_ids[0]}])
         res = self.env['sipanel.scope.recipe.line'].load(['id', 'rate'], [[xid, '99']])
         self.assertTrue(res.get('messages'), "import must be refused on a released version")
         self.assertEqual(v1.recipe_line_ids[0].rate, 1.0)

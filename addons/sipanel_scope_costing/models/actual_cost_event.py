@@ -2,6 +2,7 @@
 """Read-only projection of selected recognised events (GAP-E02, E03, E07; C8-D04)."""
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
 
@@ -70,11 +71,11 @@ class SipanelActualCostEvent(models.Model):
         return f"{model}:{res_id}:{component_type}:{company.id}"
 
     def write(self, vals):
-        if not self.env.context.get('sipanel_projection'):
+        if not guard(self.env, 'sipanel_projection'):
             raise UserError(self.env._("Actual cost events are a projection; refresh them instead of editing."))
         return super().write(vals)
 
     def unlink(self):
-        if not self.env.context.get('sipanel_projection'):
+        if not guard(self.env, 'sipanel_projection'):
             raise UserError(self.env._("Actual cost events are a projection; refresh them instead of deleting."))
         return super().unlink()

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from odoo.exceptions import LockError, UserError
 from odoo.tests import tagged
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 from .common import SipanelExecutionCase
 
@@ -74,14 +75,20 @@ class TestRelease(SipanelExecutionCase):
         n_po = self.env['purchase.order'].search_count([])
         n_mo = self.env['mrp.production'].search_count([])
         n_pick = self.env['stock.picking'].search_count([])
-        with self.assertRaises(UserError):
-            self.env['sipanel.execution.batch'].with_user(self.exec_owner).release_for_order(order)
+        batch = self.env['sipanel.execution.batch'].with_user(self.exec_owner).release_for_order(order)
+        self.assertEqual(batch.state, 'failed')
+        self.assertIn('vendor', batch.error_summary)
         self.assertEqual(self.env['purchase.order'].search_count([]), n_po)
         self.assertEqual(self.env['mrp.production'].search_count([]), n_mo)
         self.assertEqual(self.env['stock.picking'].search_count([]), n_pick)
-        batch = self.env['sipanel.execution.batch'].search([('order_id', '=', order.id)])
-        self.assertEqual(batch.state, 'failed')
+        self.assertEqual(self.env['sipanel.execution.batch'].search([('order_id', '=', order.id)]), batch)
         self.assertFalse(self.env['sipanel.execution.target'].search([('demand_id.order_id', '=', order.id)]))
+        self.assertTrue(all(d.state == 'failed' for d in batch.demand_ids))
+        # a failed batch does not block a later successful release once the cause is fixed
+        self.env['product.supplierinfo'].create({'partner_id': self.vendor.id, 'product_tmpl_id': self.p_crane.product_tmpl_id.id, 'price': 400.0, 'min_qty': 0})
+        batch2 = self.env['sipanel.execution.batch'].with_user(self.exec_owner).release_for_order(order)
+        self.assertNotEqual(batch2, batch)
+        self.assertEqual(batch2.state, 'released')
 
     def test_pt12_estimate_only_blocks(self):
         order, scope = self._make_order(85.0)
@@ -113,7 +120,7 @@ class TestRelease(SipanelExecutionCase):
         order = self.env['sale.order'].create({'partner_id': self.partner.id})
         scope = self.env['sipanel.quote.scope']._create_from_version(order, v2, 85.0, self.uom_m)
         scope.write({'project_id': self.project.id, 'system_id': self.system_a.id})
-        scope.anchor_line_id.write({'price_unit': 100})
+        scope.anchor_line_id.write({'price_unit': 200, 'tax_ids': [(5, 0, 0)]})
         order.action_quotation_sent()
         order.action_confirm()
         task = scope.anchor_line_id.task_id
@@ -144,7 +151,7 @@ class TestRelease(SipanelExecutionCase):
         self.assertEqual(created.target_ids.filtered(lambda t: t.target_model == 'stock.move').target_record().product_uom_qty, 10.0)
         # price-only amendment: no demand
         new2 = scope.current_revision_id.action_amend()
-        scope.anchor_line_id.with_context(sipanel_apply_price=True).write({'price_unit': 150})
+        scope.anchor_line_id.with_context(**guard_ctx('sipanel_apply_price')).write({'price_unit': 150})
         scope.action_accept_change_order('CO-3')
         self.assertFalse(order.with_user(self.exec_owner).action_sipanel_release_amendment_delta())
         # decrease: planned draft moves are cancelled, nothing deleted, lineage recorded

@@ -2,6 +2,7 @@
 """Allocation of an event to demand/occurrence; the remainder is visible UNALLOCATED (GAP-E08, BQ-06=A)."""
 from odoo import api, fields, models
 from odoo.exceptions import UserError, ValidationError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 
 class SipanelActualAllocation(models.Model):
@@ -33,7 +34,7 @@ class SipanelActualAllocation(models.Model):
             raise UserError(self.env._("Only SIPANEL Finance may allocate manually."))
         if not reason:
             raise UserError(self.env._("A reason is required for manual allocation."))
-        alloc = self.with_context(sipanel_projection=True).create({
+        alloc = self.with_context(**guard_ctx('sipanel_projection')).create({
             'event_id': event.id, 'quote_scope_id': quote_scope.id, 'component_id': component.id if component else False,
             'allocation_basis': 'manual', 'amount': amount, 'reviewer_id': self.env.uid, 'reason': reason})
         self.env['sipanel.scope.audit.event'].log(event, 'manual_allocation', after={'amount': amount, 'quote_scope_id': quote_scope.id}, reason=reason)

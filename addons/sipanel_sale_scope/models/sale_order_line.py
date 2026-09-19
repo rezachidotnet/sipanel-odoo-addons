@@ -3,6 +3,7 @@
 (GAP-B01, C02, C03, C04; SV-03, SV-05, SV-06, IF-03)."""
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 STRUCTURE_FIELDS = {'sequence', 'display_type', 'is_optional'}
 ANCHOR_FROZEN_FIELDS = {'product_id', 'product_uom_id', 'display_type', 'linked_line_id', 'combo_item_id', 'order_id', 'product_template_id'}
@@ -11,8 +12,8 @@ ANCHOR_FROZEN_FIELDS = {'product_id', 'product_uom_id', 'display_type', 'linked_
 class SaleOrderLine(models.Model):
     _inherit = 'sale.order.line'
 
-    sipanel_quote_scope_ids = fields.One2many('sipanel.quote.scope', 'anchor_line_id', copy=False)
-    sipanel_quote_scope_id = fields.Many2one('sipanel.quote.scope', compute='_compute_sipanel_scope', store=True)
+    sipanel_quote_scope_ids = fields.One2many('sipanel.quote.scope', 'anchor_line_id', string='Anchored scopes (all)', copy=False)
+    sipanel_quote_scope_id = fields.Many2one('sipanel.quote.scope', string='Anchored scope', compute='_compute_sipanel_scope', store=True)
     sipanel_is_anchor = fields.Boolean(compute='_compute_sipanel_scope', store=True)
     sipanel_guard_state = fields.Selection([('free', 'Free'), ('sealed', 'Sealed'), ('accepted', 'Accepted')],
                                            compute='_compute_sipanel_guard', store=True)
@@ -50,7 +51,7 @@ class SaleOrderLine(models.Model):
 
     def write(self, vals):
         ctx = self.env.context
-        if not ctx.get('sipanel_governed_transition') and not ctx.get('sipanel_seal_transaction'):
+        if not guard(self.env, 'sipanel_governed_transition') and not guard(self.env, 'sipanel_seal_transaction'):
             for line in self:
                 scope = line.sipanel_quote_scope_id
                 if scope:
@@ -61,7 +62,7 @@ class SaleOrderLine(models.Model):
                         if scope.is_optional and rev.state == 'sent_sealed':
                             raise UserError(self.env._("Quantity of an optional Scope changes only through the governed acceptance transition."))
                         raise UserError(self.env._("Scope %s is sealed; amend it to change the quantity.", scope.display_name))
-                    if 'price_unit' in vals and rev.state != 'working' and not ctx.get('sipanel_apply_price'):
+                    if 'price_unit' in vals and rev.state != 'working' and not guard(self.env, 'sipanel_apply_price'):
                         raise UserError(self.env._("Scope %s is sealed; price changes require an amendment.", scope.display_name))
                 if line.sipanel_is_scoped_section and STRUCTURE_FIELDS & set(vals):
                     sealed = line.order_id.sipanel_quote_scope_ids.filtered(
@@ -69,11 +70,11 @@ class SaleOrderLine(models.Model):
                     if sealed:
                         raise UserError(self.env._("Section %s structures a sealed Scope and cannot be moved or retyped.", line.display_name))
         res = super().write(vals)
-        if 'name' in vals and not ctx.get('sipanel_note_sync'):
+        if 'name' in vals and not guard(self.env, 'sipanel_note_sync'):
             for line in self.filtered('sipanel_is_anchor'):
                 rev = line.sipanel_quote_scope_id.current_revision_id
                 if rev.state == 'working':
-                    rev.with_context(sipanel_note_sync=True).write({'final_note': vals['name'], 'note_manually_edited': True})
+                    rev.with_context(**guard_ctx('sipanel_note_sync')).write({'final_note': vals['name'], 'note_manually_edited': True})
         return res
 
     @api.ondelete(at_uninstall=False)

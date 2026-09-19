@@ -7,6 +7,7 @@ from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare, float_is_zero
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import (
+    guard, guard_ctx,
     ACCEPTANCE, BASIS, CERTAINTY, DIMENSION_FAMILY, DISCLOSURE, EXECUTION_MODE, KIND, NO_ACTION_REASON,
     PERCENT_BASES, PLACEMENT, PRESETS, RESPONSIBILITY, ROUNDING_MODE, find_cycle, preset_from_axes,
     round_to_increment, sha256_of)
@@ -179,7 +180,7 @@ class SipanelQuoteScopeComponent(models.Model):
             elif c.kind == 'estimate_only' and c.cost_source == 'product_cost':
                 c.cost_status = 'missing'
             elif float_is_zero(c.unit_cost or 0.0, precision_digits=6):
-                c.cost_status = 'known_zero' if (c.known_zero_reason or c.product_value_id) else 'missing'
+                c.cost_status = 'known_zero' if c.known_zero_reason else 'missing'
             else:
                 c.cost_status = 'known'
 
@@ -198,9 +199,9 @@ class SipanelQuoteScopeComponent(models.Model):
     @api.depends('responsibility', 'active_state', 'origin', 'acceptance', 'placement')
     def _compute_eligible(self):
         for c in self:
+            # origin is lineage only: a TRANSFERRED destination copy is a live component; the source side is tombstoned
             c.eligible_for_rollup = (
                 c.responsibility == 'sipanel' and c.active_state == 'active'
-                and c.origin not in ('transferred', 'removed')
                 and c.acceptance in ('base', 'accepted')
             )
 
@@ -237,6 +238,8 @@ class SipanelQuoteScopeComponent(models.Model):
     def _check_component(self):
         _ = self.env._
         for c in self:
+            if c.active_state != 'active':
+                continue
             if c.basis in PERCENT_BASES:
                 if c.percent <= 0:
                     raise ValidationError(_("Percent must be > 0 (%s).", c.display_name))
@@ -246,7 +249,7 @@ class SipanelQuoteScopeComponent(models.Model):
                     raise ValidationError(_("Percent bases must belong to the same scope revision (cross-scope reference refused)."))
                 if any(b.basis in PERCENT_BASES for b in c.base_component_ids):
                     raise ValidationError(_("Percent-on-percent is forbidden."))
-                if any(b.active_state != 'active' or b.origin == 'transferred' for b in c.base_component_ids):
+                if any(b.active_state != 'active' for b in c.base_component_ids):
                     raise ValidationError(_("A percent base is tombstoned or transferred: relocate the dependent line explicitly (%s).", c.display_name))
                 if c.basis == 'percent_of_quantity':
                     fams = set(c.base_component_ids.mapped('dimension_family'))
@@ -270,10 +273,11 @@ class SipanelQuoteScopeComponent(models.Model):
     def create(self, vals_list):
         recs = super().create(vals_list)
         recs.mapped('revision_id')._check_working('add components to')
+        recs.mapped('revision_id')._reset_review_if_stale()
         return recs
 
     def write(self, vals):
-        if not self.env.context.get('sipanel_seal_transaction'):
+        if not guard(self.env, 'sipanel_seal_transaction'):
             self.mapped('revision_id')._check_working('modify components of')
         if 'qty_override' in vals or 'override_qty' in vals:
             for c in self:
@@ -285,8 +289,12 @@ class SipanelQuoteScopeComponent(models.Model):
                     self.env['sipanel.scope.audit.event'].log(
                         c, 'override_qty', before={'final_qty': before}, after={'final_qty': c.final_qty},
                         reason=c.sudo().override_reason, revision_ref=c.revision_id.display_name)
+            self.mapped('revision_id')._reset_review_if_stale()
             return True
-        return super().write(vals)
+        res = super().write(vals)
+        if not guard(self.env, 'sipanel_seal_transaction'):
+            self.mapped('revision_id')._reset_review_if_stale()
+        return res
 
     @api.ondelete(at_uninstall=False)
     def _unlink_except_working(self):
@@ -363,7 +371,7 @@ class SipanelQuoteScopeComponent(models.Model):
     def _customer_payload(self, language):
         """Allowlist builder: the only path to customer text (C7-D01, C0-D09)."""
         self.ensure_one()
-        if self.disclosure != 'customer_eligible' or self.active_state != 'active' or self.origin in ('transferred', 'removed'):
+        if self.disclosure != 'customer_eligible' or self.active_state != 'active':
             return None
         label = self.customer_label_fa if (language or '').startswith('fa') else self.customer_label_en
         label = label or (self.customer_label_fa or self.customer_label_en)

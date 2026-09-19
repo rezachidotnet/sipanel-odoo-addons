@@ -5,6 +5,7 @@ from odoo.exceptions import UserError
 from odoo.tools import float_is_zero
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import sha256_of
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
 REVISION_MUTABLE_AFTER_SEAL = {
@@ -62,7 +63,7 @@ class SipanelQuoteScopeRevision(models.Model):
     note_manually_edited = fields.Boolean(readonly=True)
     note_fingerprint = fields.Char(readonly=True, help="Fingerprint of the eligible payload at last generate/review.")
     note_stale = fields.Boolean(compute='_compute_note_stale', store=True)
-    note_reviewed = fields.Boolean(compute='_compute_note_stale', store=True, readonly=False)
+    note_reviewed = fields.Boolean(readonly=True)
     review_user_id = fields.Many2one('res.users', readonly=True)
     review_date = fields.Datetime(readonly=True)
     sealed_hash = fields.Char(readonly=True, copy=False)
@@ -158,19 +159,23 @@ class SipanelQuoteScopeRevision(models.Model):
                  'component_ids.provisional_basis', 'component_ids.sequence', 'note_fingerprint', 'language')
     def _compute_note_stale(self):
         for r in self:
-            stale = bool(r.note_fingerprint) and r._eligible_fingerprint() != r.note_fingerprint
-            r.note_stale = stale
-            r.note_reviewed = False if stale else r.note_reviewed
+            r.note_stale = bool(r.note_fingerprint) and r._eligible_fingerprint() != r.note_fingerprint
+
+    def _reset_review_if_stale(self):
+        """Called after component changes: a stale note loses its review flag (design 2.2, PT-08)."""
+        for r in self.filtered(lambda r: r.state == 'working' and r.note_reviewed):
+            if r.note_fingerprint and r._eligible_fingerprint() != r.note_fingerprint:
+                r.with_context(**guard_ctx('sipanel_note_sync')).write({'note_reviewed': False})
 
     # ---------------------------------------------------------- guards
     def _check_working(self, action):
         sealed = self.filtered(lambda r: r.state != 'working')
-        if sealed and not self.env.context.get('sipanel_seal_transaction'):
+        if sealed and not guard(self.env, 'sipanel_seal_transaction'):
             raise UserError(self.env._("Cannot %(a)s revision %(r)s: it is %(s)s. Create an amendment revision.",
                                        a=action, r=sealed[0].display_name, s=sealed[0].state))
 
     def write(self, vals):
-        if not self.env.context.get('sipanel_seal_transaction'):
+        if not guard(self.env, 'sipanel_seal_transaction'):
             content = set(vals) - REVISION_MUTABLE_AFTER_SEAL
             sealed = self.filtered(lambda r: r.state != 'working')
             if sealed and content:
@@ -178,12 +183,12 @@ class SipanelQuoteScopeRevision(models.Model):
                                            r=sealed[0].display_name, f=', '.join(sorted(content))))
             if 'state' in vals:
                 raise UserError(self.env._("Revision states change only through seal/accept actions."))
-        if 'final_note' in vals and not self.env.context.get('sipanel_note_sync'):
+        if 'final_note' in vals and not guard(self.env, 'sipanel_note_sync'):
             vals = dict(vals, note_manually_edited=True)
         res = super().write(vals)
-        if 'final_note' in vals and not self.env.context.get('sipanel_note_sync'):
+        if 'final_note' in vals and not guard(self.env, 'sipanel_note_sync'):
             for r in self.filtered(lambda r: r.state == 'working' and r.quote_scope_id.anchor_line_id):
-                r.quote_scope_id.anchor_line_id.with_context(sipanel_note_sync=True).write({'name': r.final_note or ''})
+                r.quote_scope_id.anchor_line_id.with_context(**guard_ctx('sipanel_note_sync')).write({'name': r.final_note or ''})
         return res
 
     @api.ondelete(at_uninstall=False)
@@ -231,14 +236,14 @@ class SipanelQuoteScopeRevision(models.Model):
             if accept:
                 vals.update({'final_note': generated, 'note_manually_edited': False, 'note_reviewed': True,
                              'review_user_id': self.env.uid, 'review_date': fields.Datetime.now()})
-            r.with_context(sipanel_note_sync=True).write(vals)
+            r.with_context(**guard_ctx('sipanel_note_sync')).write(vals)
             if accept and r.quote_scope_id.anchor_line_id:
-                r.quote_scope_id.anchor_line_id.with_context(sipanel_note_sync=True).write({'name': generated})
+                r.quote_scope_id.anchor_line_id.with_context(**guard_ctx('sipanel_note_sync')).write({'name': generated})
         return True
 
     def action_mark_note_reviewed(self):
         for r in self:
-            r.with_context(sipanel_note_sync=True).write({'note_reviewed': True, 'note_fingerprint': r._eligible_fingerprint(),
+            r.with_context(**guard_ctx('sipanel_note_sync')).write({'note_reviewed': True, 'note_fingerprint': r._eligible_fingerprint(),
                                                           'review_user_id': self.env.uid, 'review_date': fields.Datetime.now()})
             self.env['sipanel.scope.audit.event'].log(r, 'note_reviewed', revision_ref=r.display_name)
         return True
@@ -269,7 +274,7 @@ class SipanelQuoteScopeRevision(models.Model):
                 continue
             payload = r._seal_payload()
             h = sha256_of(payload)
-            r.with_context(sipanel_seal_transaction=True).write({
+            r.with_context(**guard_ctx('sipanel_seal_transaction')).write({
                 'state': 'sent_sealed', 'sealed_hash': h, 'sealed_date': fields.Datetime.now(), 'sealed_by_id': self.env.uid,
                 'commercial_projection_json': payload['anchor'], 'net_revenue_projection': payload['anchor'].get('price_subtotal', 0.0),
                 'scope_qty': r.scope_qty,
@@ -324,7 +329,7 @@ class SipanelQuoteScopeRevision(models.Model):
                 raise UserError(self.env._(
                     "Scope %(s)s changed after it was sent (sealed %(a)s…, now %(b)s…). Re-send the quotation to seal a new revision.",
                     s=r.quote_scope_id.display_name, a=r.sealed_hash[:12], b=current[:12]))
-            r.with_context(sipanel_seal_transaction=True).write({
+            r.with_context(**guard_ctx('sipanel_seal_transaction')).write({
                 'state': 'accepted_sealed', 'accepted_date': fields.Datetime.now(), 'accepted_by_id': self.env.uid,
                 'acceptance_reference': reference, 'change_order_ref': change_order_ref})
             r.quote_scope_id.write({'accepted_revision_id': r.id})
@@ -350,10 +355,11 @@ class SipanelQuoteScopeRevision(models.Model):
         vals.pop('component_ids', None)
         vals.pop('artifact_ids', None)
         vals.pop('waiver_ids', None)
-        new = self.env['sipanel.quote.scope.revision'].with_context(sipanel_seal_transaction=True).create(vals)
+        self.env.flush_all()  # pending state writes must reach the DB before the partial unique index is evaluated
+        new = self.env['sipanel.quote.scope.revision'].with_context(**guard_ctx('sipanel_seal_transaction')).create(vals)
         self._copy_components_to(new, keep_uids=True)
         scope._sync_current_revision()
-        new.with_context(sipanel_note_sync=True).write({'note_fingerprint': new._eligible_fingerprint()})
+        new.with_context(**guard_ctx('sipanel_note_sync')).write({'note_fingerprint': new._eligible_fingerprint()})
         self.env['sipanel.scope.audit.event'].log(new, 'amend', after={'prior_revision_id': self.id}, revision_ref=new.display_name)
         return new
 

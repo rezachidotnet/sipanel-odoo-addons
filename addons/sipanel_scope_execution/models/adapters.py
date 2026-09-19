@@ -110,7 +110,7 @@ class SipanelExecutionAdapter(models.AbstractModel):
             'origin': demand.order_id.name, 'company_id': demand.company_id.id, 'partner_id': demand.order_id.partner_id.id,
         })
         move = self.env['stock.move'].create({
-            'name': demand.product_id.display_name, 'product_id': demand.product_id.id, 'product_uom_qty': demand.normalized_qty,
+            'product_id': demand.product_id.id, 'product_uom_qty': demand.normalized_qty,
             'product_uom': demand.uom_id.id, 'picking_id': picking.id, 'location_id': picking.location_id.id,
             'location_dest_id': picking.location_dest_id.id, 'company_id': demand.company_id.id, 'origin': demand.order_id.name,
         })

@@ -2,6 +2,7 @@
 """Scope version: DRAFT -> RELEASED -> SUPERSEDED (GAP-A02, GAP-A03, GAP-A09; C1-D02, C1-D09)."""
 from odoo import api, fields, models
 from odoo.exceptions import LockError, UserError, ValidationError
+from .sipanel_tools import guard, guard_ctx
 
 from .sipanel_tools import (CERTAINTY, DIMENSION_FAMILY, DISCLOSURE, OWNER_MODE, PLACEMENT,
                             RESPONSIBILITY, PERCENT_BASES, find_cycle, sha256_of)
@@ -91,12 +92,12 @@ class SipanelScopeVersion(models.Model):
                 scope_id = vals.get('scope_id')
                 last = self.search([('scope_id', '=', scope_id)], order='revision desc', limit=1)
                 vals['revision'] = (last.revision or 0) + 1
-            if vals.get('state', 'draft') != 'draft' and not self.env.context.get('sipanel_release_transaction'):
+            if vals.get('state', 'draft') != 'draft' and not guard(self.env, 'sipanel_release_transaction'):
                 raise UserError(self.env._("A version can only be created in Draft state."))
         return super().create(vals_list)
 
     def write(self, vals):
-        if not self.env.context.get('sipanel_release_transaction'):
+        if not guard(self.env, 'sipanel_release_transaction'):
             content_keys = set(vals) - VERSION_MUTABLE_AFTER_RELEASE
             frozen = self.filtered(lambda v: v.state != 'draft')
             if frozen and content_keys:
@@ -116,7 +117,7 @@ class SipanelScopeVersion(models.Model):
                 raise UserError(self.env._("Version %s is referenced by quotations and cannot be deleted.", v.display_name))
 
     def copy(self, default=None):
-        if not self.env.context.get('sipanel_allow_copy'):
+        if not guard(self.env, 'sipanel_allow_copy'):
             raise UserError(self.env._("Use 'New version' or 'Duplicate as new Scope' (C1-D07)."))
         return super().copy(default=default)
 
@@ -130,7 +131,7 @@ class SipanelScopeVersion(models.Model):
 
     def _copy_content_to(self, scope, parent=None):
         self.ensure_one()
-        vals = self.with_context(sipanel_allow_copy=True).copy_data({
+        vals = self.with_context(**guard_ctx('sipanel_allow_copy')).copy_data({
             'scope_id': scope.id, 'state': 'draft', 'revision': 0,
             'parent_version_id': parent.id if parent else False,
         })[0]
@@ -173,9 +174,10 @@ class SipanelScopeVersion(models.Model):
             raise ValidationError(self.env._("Release blocked:\n%s", '\n'.join(f"- [{i['rule']}] {i['msg']}" for i in blocking)))
         previous = self.scope_id.current_version_id
         checksum = self._compute_content_checksum()
-        ctx = self.with_context(sipanel_release_transaction=True)
+        ctx = self.with_context(**guard_ctx('sipanel_release_transaction'))
         if previous and previous != self:
             ctx.browse(previous.id).write({'state': 'superseded', 'superseded_by_id': self.id})
+            self.env.flush_all()  # partial unique index (one released per scope) is evaluated in SQL
         ctx.browse(self.id).write({
             'state': 'released', 'released_by_id': self.env.uid, 'released_date': fields.Datetime.now(),
             'release_checksum': checksum,

@@ -2,6 +2,7 @@
 """PT-10 (optional scope, governed transition, section guard), PT-22 partial (price-only amendment), PT-32 (roundtrip), seal/accept flow."""
 from odoo.exceptions import UserError
 from odoo.tests import tagged
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 from .common import SipanelSaleCase
 
@@ -11,7 +12,7 @@ class TestGovernance(SipanelSaleCase):
 
     def test_seal_accept_flow_and_mismatch(self):
         order, scope = self._make_order(85.0)
-        scope.anchor_line_id.write({'price_unit': 100.0})
+        scope.anchor_line_id.write({'price_unit': 200.0})
         with self.assertRaises(UserError):
             order.action_confirm()  # never sent (C3-D03)
         order.action_quotation_sent()
@@ -45,7 +46,7 @@ class TestGovernance(SipanelSaleCase):
 
     def test_mismatch_after_send_blocks_confirm(self):
         order, scope = self._make_order(85.0)
-        scope.anchor_line_id.write({'price_unit': 100.0})
+        scope.anchor_line_id.write({'price_unit': 200.0})
         order.action_quotation_sent()
         rev = scope.current_revision_id
         # unrelated commercial change on the order after send => hash mismatch
@@ -123,7 +124,7 @@ class TestGovernance(SipanelSaleCase):
 
     def test_pt22_price_only_amendment_keeps_baseline(self):
         order, scope = self._make_order(85.0)
-        scope.anchor_line_id.write({'price_unit': 100.0})
+        scope.anchor_line_id.write({'price_unit': 200.0})
         order.action_quotation_sent()
         order.action_confirm()
         base = scope.accepted_revision_id
@@ -132,7 +133,7 @@ class TestGovernance(SipanelSaleCase):
         self.assertEqual(new.state, 'working')
         self.assertEqual(len(new.component_ids), 8)
         self.assertEqual(set(new.component_ids.mapped('occurrence_uid')), set(base.component_ids.mapped('occurrence_uid')))
-        scope.anchor_line_id.with_context(sipanel_apply_price=True).write({'price_unit': 110.0})
+        scope.anchor_line_id.with_context(**guard_ctx('sipanel_apply_price')).write({'price_unit': 210.0})
         scope.action_accept_change_order('CO-SIPANEL-PT-001')
         self.assertEqual(scope.accepted_revision_id, new)
         self.assertEqual(new.change_order_ref, 'CO-SIPANEL-PT-001')

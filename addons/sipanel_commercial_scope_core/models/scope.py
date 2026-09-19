@@ -4,6 +4,7 @@ import uuid
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from .sipanel_tools import guard, guard_ctx
 
 
 class SipanelScope(models.Model):
@@ -82,7 +83,7 @@ class SipanelScope(models.Model):
 
     def action_duplicate_as_new_scope(self, code=None, name=None):
         self.ensure_one()
-        new = self.with_context(sipanel_allow_copy=True).env['sipanel.scope'].create({
+        new = self.with_context(**guard_ctx('sipanel_allow_copy')).env['sipanel.scope'].create({
             'code': code or self.env._("%s-COPY", self.code),
             'name': name or self.name,
             'company_id': self.company_id.id,

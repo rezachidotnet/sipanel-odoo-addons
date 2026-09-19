@@ -3,6 +3,7 @@
 from odoo import api, fields, models
 from odoo.exceptions import LockError, UserError
 from odoo.tools import float_compare, float_is_zero
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 
 class SipanelWizardSplitMove(models.TransientModel):
@@ -91,7 +92,8 @@ class SipanelWizardSplitMove(models.TransientModel):
                     raise UserError(_("%s would have no base left; move it too.", d.display_name))
                 d.write({'base_component_ids': [(6, 0, remaining.ids)]})
         for c in moved_full:
-            c.write({'active_state': 'tombstone', 'origin': 'transferred', 'moved_to_id': id_map[c.id]})
+            c.write({'moved_to_id': id_map[c.id]})
+        moved_full.write({'active_state': 'tombstone', 'origin': 'transferred'})
         # partial moves: source remainder + destination part
         for l in moved_partial:
             c = l.component_id
@@ -121,7 +123,7 @@ class SipanelWizardSplitMove(models.TransientModel):
         if float_compare(cost_before, cost_after, precision_digits=4) != 0:
             raise UserError(_("Cost conservation violated: before %(b).4f, after %(a).4f. Nothing was saved.", b=cost_before, a=cost_after))
         for rev in (src_rev, dest_rev):
-            rev.with_context(sipanel_note_sync=True).write({'note_reviewed': False})
+            rev.with_context(**guard_ctx('sipanel_note_sync')).write({'note_reviewed': False})
         self.env['sipanel.scope.audit.event'].log(
             src_scope, 'split_move', after={'moved_full': list(id_map.keys()), 'partial': moved_partial.mapped('component_id').ids,
                                             'destination_scope_id': dest_scope.id, 'cost_before': cost_before, 'cost_after': cost_after},
@@ -138,7 +140,7 @@ class SipanelWizardSplitMove(models.TransientModel):
             if not section:
                 section = self.env['sale.order.line'].create({'order_id': order.id, 'display_type': 'line_section', 'name': self.env._('Options'),
                                                               'is_optional': True, 'sequence': max(order.order_line.mapped('sequence') or [0]) + 10})
-        line = self.env['sale.order.line'].with_context(sipanel_anchor_create=True).create({
+        line = self.env['sale.order.line'].with_context(**guard_ctx('sipanel_anchor_create')).create({
             'order_id': order.id, 'product_id': src_scope.anchor_line_id.product_id.id,
             'product_uom_qty': 0.0 if self.new_optional else src_scope.anchor_line_id.product_uom_qty,
             'product_uom_id': src_scope.anchor_line_id.product_uom_id.id,
@@ -160,7 +162,7 @@ class SipanelWizardSplitMove(models.TransientModel):
         })
         dest.write({'current_revision_id': rev.id})
         if self.new_optional:
-            rev.with_context(sipanel_seal_transaction=True).write({'offered_scope_qty': src_rev.scope_qty})
+            rev.with_context(**guard_ctx('sipanel_seal_transaction')).write({'offered_scope_qty': src_rev.scope_qty})
         return dest
 
 

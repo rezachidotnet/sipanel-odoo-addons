@@ -5,6 +5,7 @@ from odoo.exceptions import AccessError, UserError
 from odoo.tests import tagged, new_test_user
 
 from odoo.addons.sipanel_scope_execution.tests.common import SipanelExecutionCase, TEST_BATCH
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 
 @tagged('post_install', '-at_install', 'sipanel')
@@ -23,7 +24,6 @@ class TestActuals(SipanelExecutionCase):
         # valuation: real-time/automated not required — value field is populated on done moves by stock_account
         cls.p_bracket.write({'standard_price': 5.0})
         cls.p_screw.write({'standard_price': 1.0})
-        cls.p_sealant.write({'standard_price': 22.0})  # actual differs from estimate (20) on purpose
         cls.p_gutter.write({'standard_price': 100.0})
         Quant = env['stock.quant']
         wh = env['stock.warehouse'].search([('company_id', '=', cls.company.id)], limit=1)
@@ -51,6 +51,7 @@ class TestActuals(SipanelExecutionCase):
 
     def test_pt16_pt21_reconciliation(self):
         order, scope = self._confirmed_order()
+        self.p_sealant.write({'standard_price': 22.0})  # actual cost differs from the sealed estimate (20) on purpose; set AFTER acceptance
         batch = self.env['sipanel.execution.batch'].with_user(self.exec_owner).release_for_order(order)
         demands = {d.execution_mode + ':' + (d.component_id.product_id.name or ''): d for d in batch.demand_ids}
         # --- PT-16 shared stock: issue brackets / screws / sealant to site; receipt & bill excluded
@@ -69,7 +70,7 @@ class TestActuals(SipanelExecutionCase):
         self.assertEqual(mo.state, 'done')
         issue = self.env['stock.picking'].create({'picking_type_id': self.picking_type.id, 'location_id': self.picking_type.default_location_src_id.id,
                                                   'location_dest_id': self.picking_type.default_location_dest_id.id, 'origin': order.name})
-        fin_move = self.env['stock.move'].create({'name': 'gutter issue', 'product_id': self.p_gutter.id, 'product_uom_qty': 85, 'product_uom': self.uom_m.id,
+        fin_move = self.env['stock.move'].create({'product_id': self.p_gutter.id, 'product_uom_qty': 85, 'product_uom': self.uom_m.id,
                                                   'picking_id': issue.id, 'location_id': issue.location_id.id, 'location_dest_id': issue.location_dest_id.id,
                                                   'origin': order.name, 'reference_ids': [(6, 0, mo.reference_ids.ids)] if 'reference_ids' in self.env['stock.move']._fields else False})
         self._validate_picking(issue)
@@ -83,6 +84,7 @@ class TestActuals(SipanelExecutionCase):
         self.assertAlmostEqual(ts.amount, -270.0, places=2)
         # --- revenue: invoice the anchor
         inv = order._create_invoices()
+        inv.write({'partner_bank_id': False})  # Production company bank is untrusted for outbound payments; not the subject of this test
         inv.action_post()
         # --- projection
         events = self.env['sipanel.actual.projection'].with_user(self.fin_user).refresh_order(order)
@@ -133,7 +135,9 @@ class TestActuals(SipanelExecutionCase):
         self.assertEqual(self.env['account.analytic.line'].search_count([('project_id', '=', self.project.id), ('employee_id', '!=', False)]), 1)
         # events are read-only for everyone but the projection
         with self.assertRaises(UserError):
-            included[0].with_user(self.fin_user).write({'amount': 1})
+            self.env['sipanel.actual.cost.event'].browse(included[0].id).with_user(self.fin_user).write({'amount': 1})
+        with self.assertRaises(UserError):  # a spoofed RPC context flag must not unlock the projection guard (CD-12)
+            self.env['sipanel.actual.cost.event'].browse(included[0].id).with_context(sipanel_projection=True).write({'amount': 1})
         with self.assertRaises(AccessError):
             included[0].with_user(self.sales).read(['amount'])
 
@@ -158,7 +162,7 @@ class TestActuals(SipanelExecutionCase):
     def test_policy_fail_closed_and_pt29_unallocated(self):
         # supersede the site_labour policy with a draft: labour events become POLICY_MISSING and sum nothing
         pol = self.env['sipanel.cost.recognition.policy'].approved_for('site_labour', self.company)
-        pol.with_context(sipanel_policy_action=True).write({'state': 'superseded'})
+        pol.with_context(**guard_ctx('sipanel_policy_action')).write({'state': 'superseded'})
         order, scope = self._confirmed_order()
         self.env['sipanel.execution.batch'].with_user(self.exec_owner).release_for_order(order)
         self.env['account.analytic.line'].create({'name': 'stray hours', 'project_id': self.project.id, 'employee_id': self.employee.id, 'unit_amount': 2.0, 'company_id': self.company.id})
@@ -188,7 +192,12 @@ class TestActuals(SipanelExecutionCase):
         self.assertAlmostEqual(ev.unallocated_amount, 30.0, places=2)
         var = self.env['sipanel.scope.variance'].with_user(self.fin_user).search([('quote_scope_id', '=', scope.id)])
         self.assertEqual(var.completeness, 'incomplete')
-        self.assertAlmostEqual(var.unallocated_cost, 30.0, places=2)
+        self.env.flush_all()
+        self.env.cr.execute("SELECT id, source_model, source_res_id, component_type, amount, unallocated_amount, project_id, layer, inclusion FROM sipanel_actual_cost_event WHERE project_id = %s AND layer = 'recognized' AND component_type <> 'revenue'", (other_project.id,))
+        raw_events = self.env.cr.fetchall()
+        self.env.cr.execute("SELECT id, quote_scope_id, project_id, unallocated_cost FROM sipanel_scope_variance WHERE quote_scope_id = %s", (scope.id,))
+        raw_var = self.env.cr.fetchall()
+        self.assertAlmostEqual(var.unallocated_cost, 30.0, places=2, msg=f'events={raw_events} variance_rows={raw_var}')
         # manual allocation by Finance with reason closes the gap and is audited
         self.env['sipanel.actual.allocation'].with_user(self.fin_user).allocate_manually(ev, scope, False, 30.0, 'reviewed: belongs to gutter job')
         self.assertEqual(ev.allocation_state, 'allocated')
