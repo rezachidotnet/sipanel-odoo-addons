@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="rule_batch_company" model="ir.rule">
+            <field name="name">SIPANEL batch: company</field>
+            <field name="model_id" ref="model_sipanel_execution_batch"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_demand_company" model="ir.rule">
+            <field name="name">SIPANEL demand: company</field>
+            <field name="model_id" ref="model_sipanel_execution_demand"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_target_company" model="ir.rule">
+            <field name="name">SIPANEL target: company</field>
+            <field name="model_id" ref="model_sipanel_execution_target"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_owner_rule_company" model="ir.rule">
+            <field name="name">SIPANEL owner rule: company</field>
+            <field name="model_id" ref="model_sipanel_execution_owner_rule"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+    </data>
+</odoo>

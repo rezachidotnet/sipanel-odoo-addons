@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Route matrix shipped in DRAFT. Approval is a Finance action recording the authorization source
+             (management authorization of 2026-09-19; statutory tax/accounting validation still required). -->
+        <record id="policy_shared_stock" model="sipanel.cost.recognition.policy">
+            <field name="route">shared_stock</field>
+            <field name="terminal_event_model">stock.move</field>
+            <field name="terminal_event_filter_json" eval="{'state': 'done', 'direction': 'out', 'value_field': 'stock.move.value'}"/>
+            <field name="commitment_model">purchase.order.line</field>
+            <field name="operational_qty_model">stock.move</field>
+            <field name="excluded_models_json" eval="['purchase.order.line', 'stock.move(receipt)', 'stock.move(internal)', 'account.move.line(vendor bill)']"/>
+            <field name="note">Project Actual = validated issue/consumption to Project at governed inventory cost.</field>
+        </record>
+        <record id="policy_direct_purchase" model="sipanel.cost.recognition.policy">
+            <field name="route">direct_purchase</field>
+            <field name="terminal_event_model">account.move.line</field>
+            <field name="terminal_event_filter_json" eval="{'parent_state': 'posted', 'move_type': ['in_invoice', 'in_refund'], 'link': 'purchase_line_id'}"/>
+            <field name="commitment_model">purchase.order.line</field>
+            <field name="operational_qty_model">stock.move</field>
+            <field name="excluded_models_json" eval="['purchase.order.line(commitment)', 'stock.move(receipt value)', 'account.payment']"/>
+            <field name="note">Project Actual = posted vendor-bill allocation after delivery/service acceptance.</field>
+        </record>
+        <record id="policy_mfg_material" model="sipanel.cost.recognition.policy">
+            <field name="route">mfg_material</field>
+            <field name="terminal_event_model">stock.move</field>
+            <field name="terminal_event_filter_json" eval="{'state': 'done', 'direction': 'out', 'product': 'mo.product_id', 'value_field': 'stock.move.value'}"/>
+            <field name="operational_qty_model">mrp.production</field>
+            <field name="excluded_models_json" eval="['stock.move(raw consumption)', 'mrp.workorder analytic lines', 'account.analytic.line(timesheet on MO)']"/>
+            <field name="wip_reporting">wip_separate</field>
+            <field name="note">Project Actual = finished-product issue at complete governed production cost; raw/labour/overhead feed WIP only.</field>
+        </record>
+        <record id="policy_mfg_labour" model="sipanel.cost.recognition.policy">
+            <field name="route">mfg_labour</field>
+            <field name="terminal_event_model">none</field>
+            <field name="excluded_models_json" eval="['mrp.workorder', 'account.analytic.line(timesheet)']"/>
+            <field name="note">Included in the finished-product issue (mfg_material); never added separately.</field>
+        </record>
+        <record id="policy_site_labour" model="sipanel.cost.recognition.policy">
+            <field name="route">site_labour</field>
+            <field name="terminal_event_model">account.analytic.line</field>
+            <field name="terminal_event_filter_json" eval="{'employee_id': '!= False', 'amount': '-unit_amount x hourly_cost (SV-17)'}"/>
+            <field name="operational_qty_model">account.analytic.line</field>
+            <field name="excluded_models_json" eval="['payroll duplicate', 'estimated recipe hours']"/>
+            <field name="note">Payroll actual allocated by approved timesheets; timesheet is the driver, never a second expense.</field>
+        </record>
+        <record id="policy_equipment_service" model="sipanel.cost.recognition.policy">
+            <field name="route">equipment_service</field>
+            <field name="terminal_event_model">account.move.line</field>
+            <field name="terminal_event_filter_json" eval="{'or': ['account.move.line(posted vendor bill)', 'hr.expense(approved)'], 'exactly_one': True}"/>
+            <field name="commitment_model">purchase.order.line</field>
+            <field name="excluded_models_json" eval="['purchase.order.line(commitment)']"/>
+        </record>
+        <record id="policy_company_equipment" model="sipanel.cost.recognition.policy">
+            <field name="route">company_equipment</field>
+            <field name="terminal_event_model">account.move.line</field>
+            <field name="terminal_event_filter_json" eval="{'source': 'approved depreciation / operating-cost allocation'}"/>
+            <field name="excluded_models_json" eval="['equipment purchase price']"/>
+            <field name="note">Never charge the equipment purchase price again to each project.</field>
+        </record>
+        <record id="policy_freight_landed" model="sipanel.cost.recognition.policy">
+            <field name="route">freight_landed</field>
+            <field name="terminal_event_model">none</field>
+            <field name="excluded_models_json" eval="['direct expense + material cost double count']"/>
+            <field name="note">DEFERRED: capitalize when directly attributable; disabled until installed support and accounting configuration pass tests.</field>
+        </record>
+        <record id="policy_return_credit" model="sipanel.cost.recognition.policy">
+            <field name="route">return_credit</field>
+            <field name="terminal_event_model">account.move.line</field>
+            <field name="terminal_event_filter_json" eval="{'reversal_of': 'original event', 'linked': True}"/>
+            <field name="excluded_models_json" eval="['double reversal']"/>
+            <field name="note">Reverse the exact original event through a linked reversal; never delete historical monetary records.</field>
+        </record>
+    </data>
+</odoo>

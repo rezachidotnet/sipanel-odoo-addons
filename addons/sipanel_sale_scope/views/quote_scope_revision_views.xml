@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_revision_list" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.revision.list</field>
+        <field name="model">sipanel.quote.scope.revision</field>
+        <field name="arch" type="xml">
+            <list create="0">
+                <field name="name"/>
+                <field name="state" widget="badge"/>
+                <field name="scope_qty"/>
+                <field name="base_uom_id"/>
+                <field name="eligible_cost_total" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                <field name="net_revenue_projection" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                <field name="margin_percent" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                <field name="sealed_date"/>
+                <field name="currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_sipanel_revision_form" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.revision.form</field>
+        <field name="model">sipanel.quote.scope.revision</field>
+        <field name="arch" type="xml">
+            <form create="0">
+                <header>
+                    <button name="%(sipanel_sale_scope.action_wizard_regenerate_note)d" type="action" string="Regenerate note" context="{'default_revision_id': id}" invisible="state != 'working'"/>
+                    <button name="action_mark_note_reviewed" type="object" string="Mark note reviewed" invisible="state != 'working' or not note_stale"/>
+                    <button name="%(sipanel_sale_scope.action_wizard_refresh_cost)d" type="action" string="Refresh cost" context="{'default_revision_id': id}" invisible="state != 'working'" groups="sipanel_commercial_scope_core.group_scope_estimator"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group string="Scope">
+                            <field name="quote_scope_id"/>
+                            <field name="order_id"/>
+                            <field name="revision"/>
+                            <field name="prior_revision_id"/>
+                            <field name="language"/>
+                            <field name="scope_qty"/>
+                            <field name="quote_uom_id"/>
+                            <field name="base_uom_id"/>
+                            <field name="system_id"/>
+                        </group>
+                        <group string="Estimate (internal)" groups="sipanel_commercial_scope_core.group_scope_cost_viewer">
+                            <field name="direct_cost_total"/>
+                            <field name="derived_cost_total"/>
+                            <field name="eligible_cost_total"/>
+                            <field name="offered_cost_total"/>
+                            <field name="missing_cost_count"/>
+                            <field name="net_revenue_projection"/>
+                            <field name="margin_amount"/>
+                            <field name="margin_percent" invisible="margin_percent_na"/>
+                            <field name="margin_percent_na" string="Margin % N/A (zero revenue)"/>
+                            <field name="fx_rate"/>
+                            <field name="fx_source"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Customer labels">
+                            <field name="label_fa"/>
+                            <field name="label_en"/>
+                            <field name="customer_description_fa"/>
+                            <field name="customer_description_en"/>
+                        </group>
+                        <group string="Seal">
+                            <field name="sealed_hash"/>
+                            <field name="sealed_date"/>
+                            <field name="sealed_by_id"/>
+                            <field name="accepted_date"/>
+                            <field name="acceptance_reference"/>
+                            <field name="change_order_ref"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Components">
+                            <field name="component_ids" context="{'default_revision_id': id}">
+                                <list editable="bottom" decoration-muted="active_state == 'tombstone'">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="active_state" column_invisible="1"/>
+                                    <field name="origin"/>
+                                    <field name="kind"/>
+                                    <field name="product_id"/>
+                                    <field name="customer_label_fa"/>
+                                    <field name="uom_id"/>
+                                    <field name="basis"/>
+                                    <field name="rate"/>
+                                    <field name="fixed_qty"/>
+                                    <field name="manual_qty"/>
+                                    <field name="manual_qty_set"/>
+                                    <field name="percent"/>
+                                    <field name="base_component_ids" widget="many2many_tags" domain="[('revision_id', '=', parent.id)]"/>
+                                    <field name="calc_raw_qty"/>
+                                    <field name="calc_rounded_qty"/>
+                                    <field name="final_qty"/>
+                                    <field name="qty_override"/>
+                                    <field name="override_qty"/>
+                                    <field name="override_stale"/>
+                                    <field name="cost_source" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                                    <field name="unit_cost" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                                    <field name="cost_status"/>
+                                    <field name="cost_amount" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                                    <field name="treatment_preset"/>
+                                    <field name="execution_mode"/>
+                                    <field name="activity_id" optional="hide"/>
+                                    <field name="resolution_state" optional="hide"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <button name="action_tombstone" type="object" string="Remove" icon="fa-trash" invisible="active_state == 'tombstone'"/>
+                                    <button name="action_confirm_override" type="object" string="Confirm override" icon="fa-check" invisible="not override_stale"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Customer note">
+                            <group>
+                                <field name="note_stale"/>
+                                <field name="note_reviewed"/>
+                                <field name="note_manually_edited"/>
+                            </group>
+                            <field name="final_note" placeholder="Final customer note (authoritative)"/>
+                            <field name="generated_note" readonly="1"/>
+                        </page>
+                        <page string="Artifacts">
+                            <field name="artifact_ids" readonly="1">
+                                <list><field name="kind"/><field name="language"/><field name="content_hash"/><field name="sent_date"/><field name="attachment_id"/></list>
+                            </field>
+                        </page>
+                        <page string="Waivers">
+                            <field name="waiver_ids" context="{'default_revision_id': id}">
+                                <list><field name="waiver_type"/><field name="state"/><field name="sales_approver_id"/><field name="finance_approver_id"/></list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+</odoo>

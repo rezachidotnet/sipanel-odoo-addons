@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_replace_recipe" model="ir.ui.view">
+        <field name="name">sipanel.wizard.replace.recipe.form</field>
+        <field name="model">sipanel.wizard.replace.recipe</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="quote_scope_id" readonly="1"/>
+                    <field name="version_id"/>
+                    <field name="keep_overrides"/>
+                    <field name="diff_text"/>
+                </group>
+                <footer>
+                    <button name="action_apply" type="object" string="Replace" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_replace_recipe" model="ir.actions.act_window">
+        <field name="name">Replace Recipe</field>
+        <field name="res_model">sipanel.wizard.replace.recipe</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

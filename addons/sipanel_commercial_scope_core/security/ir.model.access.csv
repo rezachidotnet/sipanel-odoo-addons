@@ -1,0 +1,13 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_scope_steward,sipanel.scope steward,model_sipanel_scope,group_scope_steward,1,1,1,1
+access_scope_estimator,sipanel.scope estimator,model_sipanel_scope,group_scope_estimator,1,0,0,0
+access_scope_user,sipanel.scope internal user,model_sipanel_scope,base.group_user,1,0,0,0
+access_scope_version_steward,sipanel.scope.version steward,model_sipanel_scope_version,group_scope_steward,1,1,1,1
+access_scope_version_user,sipanel.scope.version internal user,model_sipanel_scope_version,base.group_user,1,0,0,0
+access_recipe_line_steward,sipanel.scope.recipe.line steward,model_sipanel_scope_recipe_line,group_scope_steward,1,1,1,1
+access_recipe_line_user,sipanel.scope.recipe.line internal user,model_sipanel_scope_recipe_line,base.group_user,1,0,0,0
+access_audit_event_user,sipanel.scope.audit.event internal user,model_sipanel_scope_audit_event,base.group_user,1,0,1,0
+access_favorite_user,sipanel.scope.favorite internal user,model_sipanel_scope_favorite,base.group_user,1,1,1,1
+access_uom_family_user,sipanel.uom.family internal user,model_sipanel_uom_family,base.group_user,1,0,0,0
+access_uom_family_steward,sipanel.uom.family steward,model_sipanel_uom_family,group_scope_steward,1,1,1,1
+access_uom_family_admin,sipanel.uom.family admin,model_sipanel_uom_family,base.group_system,1,1,1,1

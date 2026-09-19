@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="rule_policy_company" model="ir.rule">
+            <field name="name">SIPANEL policy: company</field>
+            <field name="model_id" ref="model_sipanel_cost_recognition_policy"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_event_company" model="ir.rule">
+            <field name="name">SIPANEL event: company</field>
+            <field name="model_id" ref="model_sipanel_actual_cost_event"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_alloc_company" model="ir.rule">
+            <field name="name">SIPANEL allocation: company</field>
+            <field name="model_id" ref="model_sipanel_actual_allocation"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_variance_company" model="ir.rule">
+            <field name="name">SIPANEL variance: company</field>
+            <field name="model_id" ref="model_sipanel_scope_variance"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+    </data>
+</odoo>

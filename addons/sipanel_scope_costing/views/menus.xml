@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_sipanel_costing" name="Actual Cost" parent="sipanel_commercial_scope_core.menu_sipanel_root" sequence="40" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+    <menuitem id="menu_sipanel_variance" name="Scope Variance" parent="menu_sipanel_costing" action="action_variance" sequence="10"/>
+    <menuitem id="menu_sipanel_events" name="Actual Cost Events" parent="menu_sipanel_costing" action="action_event" sequence="20"/>
+    <menuitem id="menu_sipanel_policies" name="Recognition Policies" parent="sipanel_commercial_scope_core.menu_sipanel_config" action="action_policy" sequence="40" groups="sipanel_scope_costing.group_scope_finance,sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+</odoo>

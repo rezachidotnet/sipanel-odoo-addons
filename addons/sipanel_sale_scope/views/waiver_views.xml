@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_waiver_form" model="ir.ui.view">
+        <field name="name">sipanel.quote.waiver.form</field>
+        <field name="model">sipanel.quote.waiver</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_approve_sales" type="object" string="Approve (Sales)" groups="sipanel_sale_scope.group_scope_waiver_sales" invisible="state != 'pending' or sales_approver_id"/>
+                    <button name="action_approve_finance" type="object" string="Approve (Finance)" groups="sipanel_sale_scope.group_scope_waiver_finance" invisible="state != 'pending' or finance_approver_id"/>
+                    <button name="action_reject" type="object" string="Reject" groups="sipanel_sale_scope.group_scope_waiver_sales,sipanel_sale_scope.group_scope_waiver_finance" invisible="state != 'pending'"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="revision_id"/>
+                        <field name="waiver_type"/>
+                        <field name="reason"/>
+                        <field name="sales_approver_id"/>
+                        <field name="sales_approved_date"/>
+                        <field name="finance_approver_id"/>
+                        <field name="finance_approved_date"/>
+                        <field name="rejected_by_id"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_sipanel_waiver_list" model="ir.ui.view">
+        <field name="name">sipanel.quote.waiver.list</field>
+        <field name="model">sipanel.quote.waiver</field>
+        <field name="arch" type="xml">
+            <list><field name="revision_id"/><field name="waiver_type"/><field name="state"/><field name="sales_approver_id"/><field name="finance_approver_id"/></list>
+        </field>
+    </record>
+    <record id="action_sipanel_waiver" model="ir.actions.act_window">
+        <field name="name">Commercial Waivers</field>
+        <field name="res_model">sipanel.quote.waiver</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_sipanel_execution" name="Execution" parent="sipanel_commercial_scope_core.menu_sipanel_root" sequence="30"/>
+    <menuitem id="menu_sipanel_batches" name="Release Batches" parent="menu_sipanel_execution" action="action_execution_batch" sequence="10"/>
+    <menuitem id="menu_sipanel_demands" name="Demands" parent="menu_sipanel_execution" action="action_execution_demand" sequence="20"/>
+    <menuitem id="menu_sipanel_owner_rules" name="Owner Registry" parent="sipanel_commercial_scope_core.menu_sipanel_config" action="action_owner_rule" sequence="30"/>
+</odoo>

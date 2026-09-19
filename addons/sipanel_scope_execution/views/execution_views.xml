@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_execution_batch_list" model="ir.ui.view">
+        <field name="name">sipanel.execution.batch.list</field>
+        <field name="model">sipanel.execution.batch</field>
+        <field name="arch" type="xml">
+            <list create="0"><field name="name"/><field name="order_id"/><field name="state" widget="badge"/><field name="demand_count"/><field name="released_date"/><field name="retry_count"/></list>
+        </field>
+    </record>
+    <record id="view_execution_batch_form" model="ir.ui.view">
+        <field name="name">sipanel.execution.batch.form</field>
+        <field name="model">sipanel.execution.batch</field>
+        <field name="arch" type="xml">
+            <form create="0">
+                <header>
+                    <button name="action_cancel_planned" type="object" string="Cancel planned demand" invisible="state not in ('released', 'validated', 'planned')" groups="sipanel_scope_execution.group_scope_execution_owner"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group><field name="order_id"/><field name="accepted_revision_ids" widget="many2many_tags"/><field name="revision_set_hash"/><field name="action_uid"/></group>
+                        <group><field name="requested_by_id"/><field name="requested_date"/><field name="released_by_id"/><field name="released_date"/><field name="retry_count"/></group>
+                    </group>
+                    <field name="error_summary"/>
+                    <notebook>
+                        <page string="Demands">
+                            <field name="demand_ids" readonly="1">
+                                <list><field name="name"/><field name="execution_mode"/><field name="owner"/><field name="normalized_qty"/><field name="uom_id"/><field name="state" widget="badge"/><field name="target_count"/><field name="demand_key" optional="hide"/></list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_execution_demand_form" model="ir.ui.view">
+        <field name="name">sipanel.execution.demand.form</field>
+        <field name="model">sipanel.execution.demand</field>
+        <field name="arch" type="xml">
+            <form create="0">
+                <sheet>
+                    <group>
+                        <group><field name="batch_id"/><field name="quote_scope_id"/><field name="component_id"/><field name="execution_mode"/><field name="owner"/><field name="state"/></group>
+                        <group><field name="product_id"/><field name="normalized_qty"/><field name="signed_qty"/><field name="uom_id"/><field name="project_id"/><field name="system_id"/><field name="activity_id"/><field name="delta_uid"/><field name="demand_key"/><field name="reversal_required"/><field name="reversal_of_id"/></group>
+                    </group>
+                    <field name="target_ids" readonly="1">
+                        <list><field name="target_model"/><field name="target_res_id"/><field name="target_display"/><field name="link_kind"/><field name="allocated_qty"/><field name="stock_reference_id"/></list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="view_execution_demand_list" model="ir.ui.view">
+        <field name="name">sipanel.execution.demand.list</field>
+        <field name="model">sipanel.execution.demand</field>
+        <field name="arch" type="xml">
+            <list create="0"><field name="name"/><field name="order_id"/><field name="execution_mode"/><field name="owner"/><field name="normalized_qty"/><field name="state" widget="badge"/><field name="target_count"/></list>
+        </field>
+    </record>
+    <record id="action_execution_batch" model="ir.actions.act_window">
+        <field name="name">Release Batches</field>
+        <field name="res_model">sipanel.execution.batch</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <record id="action_execution_demand" model="ir.actions.act_window">
+        <field name="name">Execution Demands</field>
+        <field name="res_model">sipanel.execution.demand</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

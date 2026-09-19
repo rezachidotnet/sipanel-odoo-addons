@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_apply_price" model="ir.ui.view">
+        <field name="name">sipanel.wizard.apply.price.form</field>
+        <field name="model">sipanel.wizard.apply.price</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="quote_scope_id" readonly="1"/>
+                    <field name="mode"/>
+                    <field name="value"/>
+                    <field name="cost_total" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                    <field name="suggested_revenue" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                    <field name="suggested_price_unit" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                    <field name="reason"/>
+                </group>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply price" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_apply_price" model="ir.actions.act_window">
+        <field name="name">Apply Price</field>
+        <field name="res_model">sipanel.wizard.apply.price</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

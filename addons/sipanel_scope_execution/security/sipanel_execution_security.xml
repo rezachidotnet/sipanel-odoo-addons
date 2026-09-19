@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <record id="group_scope_execution_owner" model="res.groups">
+            <field name="name">Execution Owner</field>
+            <field name="category_id" ref="sipanel_commercial_scope_core.module_category_sipanel_scope"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Run Release Execution and track demands. Native Inventory/Purchase/MRP/Project rights are granted separately.</field>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_sipanel" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_sipanel_add_scope" type="object" string="Add Scope" invisible="state not in ('draft', 'sent')" groups="sipanel_sale_scope.group_scope_sales,sipanel_commercial_scope_core.group_scope_estimator"/>
+            </xpath>
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_sipanel_open_scopes" type="object" class="oe_stat_button" icon="fa-cubes" invisible="not sipanel_has_scopes">
+                    <field name="sipanel_scope_count" widget="statinfo" string="Scopes"/>
+                </button>
+            </xpath>
+            <xpath expr="//page[@name='other_information']" position="before">
+                <page string="SIPANEL Scopes" name="sipanel_scopes" invisible="not sipanel_has_scopes">
+                    <group>
+                        <group>
+                            <field name="sipanel_readiness_state"/>
+                            <field name="sipanel_company_currency_ok"/>
+                            <field name="sipanel_current_seal_hash"/>
+                        </group>
+                        <group groups="sipanel_commercial_scope_core.group_scope_cost_viewer">
+                            <field name="sipanel_total_cost"/>
+                            <field name="sipanel_total_margin"/>
+                        </group>
+                    </group>
+                    <field name="sipanel_readiness_text" readonly="1"/>
+                    <field name="sipanel_quote_scope_ids" readonly="1">
+                        <list>
+                            <field name="name"/>
+                            <field name="anchor_line_id"/>
+                            <field name="state" widget="badge"/>
+                            <field name="acceptance_state"/>
+                            <field name="readiness_state"/>
+                            <field name="eligible_cost_total" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                            <field name="margin_percent" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_qty']" position="before">
+                <field name="sipanel_is_anchor" column_invisible="1"/>
+                <field name="sipanel_guard_state" column_invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

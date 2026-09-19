@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_sipanel_root" name="SIPANEL Scope" sequence="45" web_icon="sipanel_commercial_scope_core,static/description/icon.png"/>
+    <menuitem id="menu_sipanel_masters" name="Masters" parent="menu_sipanel_root" sequence="10"/>
+    <menuitem id="menu_sipanel_scope" name="Commercial Scopes" parent="menu_sipanel_masters" action="action_sipanel_scope" sequence="10"/>
+    <menuitem id="menu_sipanel_scope_version" name="Scope Versions" parent="menu_sipanel_masters" action="action_sipanel_scope_version" sequence="20"/>
+    <menuitem id="menu_sipanel_config" name="Configuration" parent="menu_sipanel_root" sequence="90" groups="base.group_system,sipanel_commercial_scope_core.group_scope_steward"/>
+    <menuitem id="menu_sipanel_uom_family" name="UoM Families" parent="menu_sipanel_config" action="action_sipanel_uom_family" sequence="10"/>
+    <menuitem id="menu_sipanel_audit" name="Audit Events" parent="menu_sipanel_config" action="action_sipanel_audit_event" sequence="80" groups="sipanel_commercial_scope_core.group_scope_auditor,base.group_system"/>
+</odoo>

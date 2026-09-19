@@ -1,0 +1,37 @@
+# -*- coding: utf-8 -*-
+{
+    'name': 'SIPANEL Sale Scope',
+    'summary': 'Quote Scope, revisions, component snapshots, quantity/cost engine, pricing & margin, notes, seal, optional/provisional governance, portal guard (Slices B + C)',
+    'version': '19.0.1.0.0',
+    'category': 'Sales/Sales',
+    'author': 'SIPANEL',
+    'license': 'LGPL-3',
+    'depends': ['sipanel_commercial_scope_core', 'sale_management', 'portal'],
+    'data': [
+        'security/sipanel_sale_security.xml',
+        'security/ir.model.access.csv',
+        'security/sipanel_sale_record_rules.xml',
+        'wizards/add_scope_views.xml',
+        'wizards/refresh_cost_views.xml',
+        'wizards/split_move_views.xml',
+        'wizards/apply_price_views.xml',
+        'wizards/regenerate_note_views.xml',
+        'wizards/treatment_transition_views.xml',
+        'wizards/replace_recipe_views.xml',
+        'views/quote_scope_views.xml',
+        'views/quote_scope_revision_views.xml',
+        'views/quote_scope_component_views.xml',
+        'views/waiver_views.xml',
+        'views/sale_order_views.xml',
+        'views/sale_portal_templates.xml',
+        'views/menus.xml',
+    ],
+    'assets': {
+        'web.assets_frontend': [
+            'sipanel_sale_scope/static/src/interactions/**/*',
+        ],
+    },
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+}

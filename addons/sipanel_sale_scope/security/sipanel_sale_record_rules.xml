@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="rule_quote_scope_company" model="ir.rule">
+            <field name="name">SIPANEL quote scope: company</field>
+            <field name="model_id" ref="model_sipanel_quote_scope"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_quote_scope_revision_company" model="ir.rule">
+            <field name="name">SIPANEL quote scope revision: company</field>
+            <field name="model_id" ref="model_sipanel_quote_scope_revision"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_quote_scope_component_company" model="ir.rule">
+            <field name="name">SIPANEL quote scope component: company</field>
+            <field name="model_id" ref="model_sipanel_quote_scope_component"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_artifact_company" model="ir.rule">
+            <field name="name">SIPANEL artifact: company (internal)</field>
+            <field name="model_id" ref="model_sipanel_quote_scope_artifact"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+        <record id="rule_waiver_company" model="ir.rule">
+            <field name="name">SIPANEL waiver: company</field>
+            <field name="model_id" ref="model_sipanel_quote_waiver"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <!-- Scope visibility mirrors sale.order personal rule for plain salesmen -->
+        <record id="rule_quote_scope_sales_own" model="ir.rule">
+            <field name="name">SIPANEL quote scope: own orders (salesman)</field>
+            <field name="model_id" ref="model_sipanel_quote_scope"/>
+            <field name="domain_force">['|', ('order_id.user_id', '=', user.id), ('order_id.user_id', '=', False)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman'))]"/>
+        </record>
+        <record id="rule_quote_scope_sales_all" model="ir.rule">
+            <field name="name">SIPANEL quote scope: all (sales manager / estimator / auditor)</field>
+            <field name="model_id" ref="model_sipanel_quote_scope"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman_all_leads')), (4, ref('sales_team.group_sale_manager')), (4, ref('sipanel_commercial_scope_core.group_scope_estimator')), (4, ref('sipanel_commercial_scope_core.group_scope_auditor')), (4, ref('sipanel_commercial_scope_core.group_scope_steward'))]"/>
+        </record>
+        <!-- Portal: only own sealed artifacts -->
+        <record id="rule_portal_artifact_own" model="ir.rule">
+            <field name="name">SIPANEL artifact: portal own sealed</field>
+            <field name="model_id" ref="model_sipanel_quote_scope_artifact"/>
+            <field name="domain_force">[('revision_id.quote_scope_id.order_id.partner_id', 'child_of', user.partner_id.commercial_partner_id.id), ('revision_id.state', 'in', ['sent_sealed', 'accepted_sealed'])]</field>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_sipanel" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.sipanel</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="SIPANEL Scope" string="SIPANEL Scope" name="sipanel_commercial_scope_core" groups="base.group_system">
+                    <block title="Dimensions (System / Activity plans)" name="sipanel_dimensions">
+                        <setting string="System plan" help="Analytic plan used as the System dimension (B-03).">
+                            <field name="sipanel_system_plan_id"/>
+                        </setting>
+                        <setting string="Activity plan" help="Analytic plan used as the Activity dimension (B-03).">
+                            <field name="sipanel_activity_plan_id"/>
+                        </setting>
+                    </block>
+                    <block title="Thresholds (TBE)" name="sipanel_thresholds">
+                        <setting string="Release retry count" help="Bounded LockError retries for Release Execution (C8-D02).">
+                            <field name="sipanel_release_retry_count"/>
+                        </setting>
+                        <setting string="Cost stale days">
+                            <field name="sipanel_cost_stale_days"/>
+                        </setting>
+                        <setting string="Minimum margin %">
+                            <field name="sipanel_min_margin_pct"/>
+                        </setting>
+                        <setting string="Company-currency-only quotations (BQ-09)">
+                            <field name="sipanel_company_currency_only"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>

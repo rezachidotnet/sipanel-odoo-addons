@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_sipanel_execution" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.execution</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sipanel_sale_scope.view_order_form_sipanel"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_sipanel_add_scope']" position="after">
+                <button name="action_sipanel_release_execution" type="object" string="Release Execution" class="btn-primary" invisible="state != 'sale' or not sipanel_has_scopes" groups="sipanel_scope_execution.group_scope_execution_owner"/>
+                <button name="action_sipanel_release_amendment_delta" type="object" string="Release amendment delta" invisible="state != 'sale' or not sipanel_has_scopes or not sipanel_batch_count" groups="sipanel_scope_execution.group_scope_execution_owner"/>
+            </xpath>
+            <xpath expr="//page[@name='sipanel_scopes']//field[@name='sipanel_quote_scope_ids']" position="after">
+                <field name="sipanel_batch_count" invisible="1"/>
+                <field name="sipanel_execution_batch_ids" readonly="1">
+                    <list><field name="name"/><field name="state" widget="badge"/><field name="demand_count"/><field name="released_date"/></list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_quote_scope_form_execution" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.form.execution</field>
+        <field name="model">sipanel.quote.scope</field>
+        <field name="inherit_id" ref="sipanel_sale_scope.view_sipanel_quote_scope_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='system_id']" position="after">
+                <field name="project_id"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

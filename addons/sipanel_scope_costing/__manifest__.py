@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+{
+    'name': 'SIPANEL Scope Costing',
+    'summary': 'Finance route policy, actual-cost projection (one terminal event per economic cost), allocations, UNALLOCATED, baseline/forecast/actual variance (Slice E)',
+    'version': '19.0.1.0.0',
+    'category': 'Accounting/Accounting',
+    'author': 'SIPANEL',
+    'license': 'LGPL-3',
+    'depends': ['sipanel_scope_execution', 'stock_account', 'mrp_account', 'account', 'hr_expense', 'project_account'],
+    'data': [
+        'security/sipanel_costing_security.xml',
+        'security/ir.model.access.csv',
+        'security/sipanel_costing_record_rules.xml',
+        'data/recognition_policies.xml',
+        'data/ir_cron.xml',
+        'views/policy_views.xml',
+        'views/event_views.xml',
+        'views/variance_views.xml',
+        'views/sale_order_views.xml',
+        'views/menus.xml',
+    ],
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+}

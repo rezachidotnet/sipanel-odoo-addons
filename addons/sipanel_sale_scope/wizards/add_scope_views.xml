@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_add_scope" model="ir.ui.view">
+        <field name="name">sipanel.wizard.add.scope.form</field>
+        <field name="model">sipanel.wizard.add.scope</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="order_id" readonly="1"/>
+                    <field name="company_id" invisible="1"/>
+                    <field name="scope_id"/>
+                    <field name="version_id"/>
+                    <field name="scope_qty"/>
+                    <field name="quote_uom_id"/>
+                    <field name="optional"/>
+                    <field name="section_line_id" invisible="not optional"/>
+                    <field name="create_section" invisible="not optional"/>
+                    <field name="system_id"/>
+                </group>
+                <footer>
+                    <button name="action_add" type="object" string="Add Scope" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_add_scope" model="ir.actions.act_window">
+        <field name="name">Add Scope</field>
+        <field name="res_model">sipanel.wizard.add.scope</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

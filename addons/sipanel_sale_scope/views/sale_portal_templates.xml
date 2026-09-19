@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Wrap the optional-quantity widget with the current sealed revision binding for Scope anchors (GAP-S04). -->
+    <template id="sale_order_portal_optional_product_quantity_sipanel" inherit_id="sale_management.sale_order_portal_optional_product_quantity">
+        <xpath expr="//div[hasclass('js_quantity_container')]" position="attributes">
+            <attribute name="t-att-data-sipanel-revision-id">line._sipanel_portal_binding().get('revision_id')</attribute>
+            <attribute name="t-att-data-sipanel-seal-hash">line._sipanel_portal_binding().get('seal_hash')</attribute>
+        </xpath>
+    </template>
+</odoo>

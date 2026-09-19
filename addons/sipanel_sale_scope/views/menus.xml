@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_sipanel_quotes" name="Quotations" parent="sipanel_commercial_scope_core.menu_sipanel_root" sequence="20"/>
+    <menuitem id="menu_sipanel_quote_scope" name="Quote Scopes" parent="menu_sipanel_quotes" action="action_sipanel_quote_scope" sequence="10"/>
+    <menuitem id="menu_sipanel_waiver" name="Commercial Waivers" parent="menu_sipanel_quotes" action="action_sipanel_waiver" sequence="20"/>
+</odoo>

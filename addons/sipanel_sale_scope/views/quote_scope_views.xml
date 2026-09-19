@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_quote_scope_list" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.list</field>
+        <field name="model">sipanel.quote.scope</field>
+        <field name="arch" type="xml">
+            <list create="0">
+                <field name="name"/>
+                <field name="order_id"/>
+                <field name="source_version_id"/>
+                <field name="state" widget="badge"/>
+                <field name="acceptance_state"/>
+                <field name="is_optional"/>
+                <field name="readiness_state"/>
+                <field name="eligible_cost_total" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                <field name="margin_amount" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                <field name="currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_sipanel_quote_scope_form" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.form</field>
+        <field name="model">sipanel.quote.scope</field>
+        <field name="arch" type="xml">
+            <form create="0">
+                <header>
+                    <button name="action_amend" type="object" string="Amend (new working revision)" invisible="state not in ('sent', 'accepted')" groups="sipanel_sale_scope.group_scope_sales,sipanel_commercial_scope_core.group_scope_estimator"/>
+                    <button name="%(sipanel_sale_scope.action_wizard_split_move)d" type="action" string="Split / Move" context="{'default_source_scope_id': id}" invisible="state not in ('draft', 'amending')" groups="sipanel_commercial_scope_core.group_scope_estimator"/>
+                    <button name="%(sipanel_sale_scope.action_wizard_apply_price)d" type="action" string="Apply Price" context="{'default_quote_scope_id': id}" invisible="state not in ('draft', 'amending')" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                    <button name="%(sipanel_sale_scope.action_wizard_treatment_transition)d" type="action" string="Acceptance transition" context="{'default_quote_scope_id': id, 'default_kind': 'acceptance'}" invisible="not is_optional or state != 'sent'" groups="sipanel_sale_scope.group_scope_sales"/>
+                    <button name="%(sipanel_sale_scope.action_wizard_replace_recipe)d" type="action" string="Replace recipe" context="{'default_quote_scope_id': id}" invisible="state not in ('draft', 'amending')" groups="sipanel_commercial_scope_core.group_scope_estimator"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_revisions" type="object" class="oe_stat_button" icon="fa-history">
+                            <field name="revision_count" widget="statinfo" string="Revisions"/>
+                        </button>
+                    </div>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="order_id"/>
+                            <field name="anchor_line_id"/>
+                            <field name="source_scope_id"/>
+                            <field name="source_version_id"/>
+                            <field name="is_adhoc"/>
+                            <field name="system_id"/>
+                        </group>
+                        <group>
+                            <field name="current_revision_id"/>
+                            <field name="accepted_revision_id"/>
+                            <field name="is_optional"/>
+                            <field name="acceptance_state"/>
+                            <field name="acceptance_reference"/>
+                            <field name="optional_section_line_id"/>
+                            <field name="scope_uid"/>
+                        </group>
+                        <group string="Estimate (internal)" groups="sipanel_commercial_scope_core.group_scope_cost_viewer">
+                            <field name="eligible_cost_total"/>
+                            <field name="margin_amount"/>
+                            <field name="margin_percent"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Readiness">
+                            <field name="readiness_state"/>
+                            <field name="readiness_text" nolabel="1" colspan="2"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_sipanel_quote_scope" model="ir.actions.act_window">
+        <field name="name">Quote Scopes</field>
+        <field name="res_model">sipanel.quote.scope</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

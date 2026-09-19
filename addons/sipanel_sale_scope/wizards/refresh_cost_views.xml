@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_refresh_cost" model="ir.ui.view">
+        <field name="name">sipanel.wizard.refresh.cost.form</field>
+        <field name="model">sipanel.wizard.refresh.cost</field>
+        <field name="arch" type="xml">
+            <form>
+                <field name="revision_id" readonly="1"/>
+                <field name="line_ids">
+                    <list editable="bottom"><field name="selected"/><field name="component_id"/><field name="old_unit_cost"/><field name="new_unit_cost"/></list>
+                </field>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply selected" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_refresh_cost" model="ir.actions.act_window">
+        <field name="name">Refresh Cost</field>
+        <field name="res_model">sipanel.wizard.refresh.cost</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

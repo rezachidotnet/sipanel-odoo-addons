@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_split_move" model="ir.ui.view">
+        <field name="name">sipanel.wizard.split.move.form</field>
+        <field name="model">sipanel.wizard.split.move</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="source_scope_id" readonly="1"/>
+                    <field name="order_id" invisible="1"/>
+                    <field name="destination_mode"/>
+                    <field name="destination_scope_id" invisible="destination_mode != 'existing'"/>
+                    <field name="new_label" invisible="destination_mode != 'new'"/>
+                    <field name="new_optional" invisible="destination_mode != 'new'"/>
+                    <field name="dependent_policy"/>
+                </group>
+                <field name="line_ids">
+                    <list editable="bottom"><field name="component_id"/><field name="available_qty"/><field name="move_qty"/><field name="move_all"/></list>
+                </field>
+                <footer>
+                    <button name="action_split" type="object" string="Split / Move" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_split_move" model="ir.actions.act_window">
+        <field name="name">Split / Move</field>
+        <field name="res_model">sipanel.wizard.split.move</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

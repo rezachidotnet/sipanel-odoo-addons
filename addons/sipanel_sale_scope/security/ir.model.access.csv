@@ -1,0 +1,30 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_quote_scope_user,sipanel.quote.scope user,model_sipanel_quote_scope,base.group_user,1,0,0,0
+access_quote_scope_sales,sipanel.quote.scope sales,model_sipanel_quote_scope,group_scope_sales,1,1,1,0
+access_quote_scope_estimator,sipanel.quote.scope estimator,model_sipanel_quote_scope,sipanel_commercial_scope_core.group_scope_estimator,1,1,1,0
+access_quote_scope_manager,sipanel.quote.scope manager,model_sipanel_quote_scope,sales_team.group_sale_manager,1,1,1,1
+access_revision_user,sipanel.quote.scope.revision user,model_sipanel_quote_scope_revision,base.group_user,1,0,0,0
+access_revision_sales,sipanel.quote.scope.revision sales,model_sipanel_quote_scope_revision,group_scope_sales,1,1,1,0
+access_revision_estimator,sipanel.quote.scope.revision estimator,model_sipanel_quote_scope_revision,sipanel_commercial_scope_core.group_scope_estimator,1,1,1,0
+access_revision_manager,sipanel.quote.scope.revision manager,model_sipanel_quote_scope_revision,sales_team.group_sale_manager,1,1,1,1
+access_component_user,sipanel.quote.scope.component user,model_sipanel_quote_scope_component,base.group_user,1,0,0,0
+access_component_sales,sipanel.quote.scope.component sales,model_sipanel_quote_scope_component,group_scope_sales,1,1,1,0
+access_component_estimator,sipanel.quote.scope.component estimator,model_sipanel_quote_scope_component,sipanel_commercial_scope_core.group_scope_estimator,1,1,1,1
+access_component_manager,sipanel.quote.scope.component manager,model_sipanel_quote_scope_component,sales_team.group_sale_manager,1,1,1,1
+access_artifact_user,sipanel.quote.scope.artifact user,model_sipanel_quote_scope_artifact,base.group_user,1,0,0,0
+access_artifact_sales,sipanel.quote.scope.artifact sales,model_sipanel_quote_scope_artifact,group_scope_sales,1,0,1,0
+access_artifact_portal,sipanel.quote.scope.artifact portal,model_sipanel_quote_scope_artifact,base.group_portal,1,0,0,0
+access_waiver_user,sipanel.quote.waiver user,model_sipanel_quote_waiver,base.group_user,1,0,0,0
+access_waiver_sales,sipanel.quote.waiver sales,model_sipanel_quote_waiver,group_scope_sales,1,1,1,0
+access_waiver_estimator,sipanel.quote.waiver estimator,model_sipanel_quote_waiver,sipanel_commercial_scope_core.group_scope_estimator,1,1,1,0
+access_waiver_approver_sales,sipanel.quote.waiver approver sales,model_sipanel_quote_waiver,group_scope_waiver_sales,1,1,1,0
+access_waiver_approver_finance,sipanel.quote.waiver approver finance,model_sipanel_quote_waiver,group_scope_waiver_finance,1,1,1,0
+access_wiz_add_scope,wizard add scope,model_sipanel_wizard_add_scope,base.group_user,1,1,1,1
+access_wiz_refresh_cost,wizard refresh cost,model_sipanel_wizard_refresh_cost,base.group_user,1,1,1,1
+access_wiz_refresh_cost_line,wizard refresh cost line,model_sipanel_wizard_refresh_cost_line,base.group_user,1,1,1,1
+access_wiz_split_move,wizard split move,model_sipanel_wizard_split_move,base.group_user,1,1,1,1
+access_wiz_split_move_line,wizard split move line,model_sipanel_wizard_split_move_line,base.group_user,1,1,1,1
+access_wiz_apply_price,wizard apply price,model_sipanel_wizard_apply_price,base.group_user,1,1,1,1
+access_wiz_regenerate_note,wizard regenerate note,model_sipanel_wizard_regenerate_note,base.group_user,1,1,1,1
+access_wiz_treatment,wizard treatment transition,model_sipanel_wizard_treatment_transition,base.group_user,1,1,1,1
+access_wiz_replace_recipe,wizard replace recipe,model_sipanel_wizard_replace_recipe,base.group_user,1,1,1,1

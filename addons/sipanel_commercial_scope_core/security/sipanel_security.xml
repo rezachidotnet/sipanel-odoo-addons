@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <record id="module_category_sipanel_scope" model="ir.module.category">
+            <field name="name">SIPANEL Commercial Scope</field>
+            <field name="description">Roles for the SIPANEL Commercial Scope / Recipe / Estimation modules. No user is assigned by data files.</field>
+            <field name="sequence">60</field>
+        </record>
+
+        <record id="group_scope_cost_viewer" model="res.groups">
+            <field name="name">Cost &amp; Margin Viewer</field>
+            <field name="category_id" ref="module_category_sipanel_scope"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Explicit permission to read cost/margin fields (field-level groups). No structural rights.</field>
+        </record>
+        <record id="group_scope_steward" model="res.groups">
+            <field name="name">Scope Steward</field>
+            <field name="category_id" ref="module_category_sipanel_scope"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Create, version, release and archive Scope masters.</field>
+        </record>
+        <record id="group_scope_estimator" model="res.groups">
+            <field name="name">Estimator</field>
+            <field name="category_id" ref="module_category_sipanel_scope"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user')), (4, ref('group_scope_cost_viewer'))]"/>
+            <field name="comment">Edit draft snapshots, components, quantity/cost overrides.</field>
+        </record>
+        <record id="group_scope_auditor" model="res.groups">
+            <field name="name">Auditor (read-only)</field>
+            <field name="category_id" ref="module_category_sipanel_scope"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+    </data>
+</odoo>

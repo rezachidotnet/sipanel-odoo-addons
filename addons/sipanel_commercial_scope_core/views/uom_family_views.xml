@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_uom_family_list" model="ir.ui.view">
+        <field name="name">sipanel.uom.family.list</field>
+        <field name="model">sipanel.uom.family</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="uom_id"/>
+                <field name="family"/>
+                <field name="note"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_sipanel_uom_family" model="ir.actions.act_window">
+        <field name="name">UoM Dimensional Families</field>
+        <field name="res_model">sipanel.uom.family</field>
+        <field name="view_mode">list</field>
+    </record>
+</odoo>

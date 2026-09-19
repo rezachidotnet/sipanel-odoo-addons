@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_sipanel_execution" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.sipanel.execution</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="sipanel_commercial_scope_core.res_config_settings_view_form_sipanel"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@name='sipanel_thresholds']" position="after">
+                <block title="Execution" name="sipanel_execution">
+                    <setting string="Stock issue operation type"><field name="sipanel_stock_issue_picking_type_id"/></setting>
+                    <setting string="Default execution project"><field name="sipanel_default_project_id"/></setting>
+                    <setting string="Release retry backoff (ms)"><field name="sipanel_release_backoff_ms"/></setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

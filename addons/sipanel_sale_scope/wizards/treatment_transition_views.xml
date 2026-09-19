@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_treatment_transition" model="ir.ui.view">
+        <field name="name">sipanel.wizard.treatment.transition.form</field>
+        <field name="model">sipanel.wizard.treatment.transition</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="kind"/>
+                    <field name="quote_scope_id" invisible="kind != 'acceptance'"/>
+                    <field name="new_acceptance" invisible="kind != 'acceptance'"/>
+                    <field name="component_id" invisible="kind != 'axes'"/>
+                    <field name="responsibility" invisible="kind != 'axes'"/>
+                    <field name="placement" invisible="kind != 'axes'"/>
+                    <field name="certainty" invisible="kind != 'axes'"/>
+                    <field name="provisional_basis" invisible="kind != 'axes'"/>
+                    <field name="disclosure" invisible="kind != 'axes'"/>
+                    <field name="reason"/>
+                </group>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_treatment_transition" model="ir.actions.act_window">
+        <field name="name">Treatment transition</field>
+        <field name="res_model">sipanel.wizard.treatment.transition</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

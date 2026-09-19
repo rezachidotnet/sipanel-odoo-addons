@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_component_form" model="ir.ui.view">
+        <field name="name">sipanel.quote.scope.component.form</field>
+        <field name="model">sipanel.quote.scope.component</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group string="Identity">
+                            <field name="revision_id"/>
+                            <field name="occurrence_uid"/>
+                            <field name="origin"/>
+                            <field name="active_state"/>
+                            <field name="kind"/>
+                            <field name="product_id"/>
+                            <field name="description"/>
+                            <field name="spec_json" widget="json"/>
+                        </group>
+                        <group string="Quantity engine">
+                            <field name="uom_id"/>
+                            <field name="dimension_family"/>
+                            <field name="basis"/>
+                            <field name="rate"/>
+                            <field name="fixed_qty"/>
+                            <field name="manual_qty"/>
+                            <field name="manual_qty_set"/>
+                            <field name="percent"/>
+                            <field name="base_component_ids" widget="many2many_tags"/>
+                            <field name="rounding_increment"/>
+                            <field name="rounding_mode"/>
+                            <field name="calc_raw_qty"/>
+                            <field name="calc_rounded_qty"/>
+                            <field name="final_qty"/>
+                            <field name="qty_override"/>
+                            <field name="override_qty"/>
+                            <field name="override_reason" groups="sipanel_commercial_scope_core.group_scope_estimator"/>
+                            <field name="override_stale"/>
+                        </group>
+                        <group string="Cost snapshot" groups="sipanel_commercial_scope_core.group_scope_cost_viewer">
+                            <field name="cost_source"/>
+                            <field name="unit_cost"/>
+                            <field name="cost_uom_id"/>
+                            <field name="cost_uom_factor"/>
+                            <field name="cost_source_date"/>
+                            <field name="product_value_id"/>
+                            <field name="cost_status"/>
+                            <field name="known_zero_reason" groups="sipanel_commercial_scope_core.group_scope_estimator"/>
+                            <field name="cost_amount"/>
+                            <field name="stale_cost"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Treatment (AM-02)">
+                            <field name="responsibility"/>
+                            <field name="placement"/>
+                            <field name="acceptance"/>
+                            <field name="certainty"/>
+                            <field name="provisional_basis"/>
+                            <field name="disclosure"/>
+                            <field name="treatment_preset"/>
+                            <field name="customer_label_fa"/>
+                            <field name="customer_label_en"/>
+                        </group>
+                        <group string="Execution intent">
+                            <field name="activity_id"/>
+                            <field name="system_id"/>
+                            <field name="execution_mode"/>
+                            <field name="execution_owner"/>
+                            <field name="no_action_reason"/>
+                            <field name="resolution_state"/>
+                            <field name="resolution_owner_id"/>
+                            <field name="resolution_note"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>

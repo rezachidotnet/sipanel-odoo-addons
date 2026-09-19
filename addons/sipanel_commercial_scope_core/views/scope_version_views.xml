@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_scope_version_list" model="ir.ui.view">
+        <field name="name">sipanel.scope.version.list</field>
+        <field name="model">sipanel.scope.version</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="scope_id"/>
+                <field name="revision"/>
+                <field name="state" widget="badge"/>
+                <field name="label_fa"/>
+                <field name="anchor_product_id"/>
+                <field name="released_date"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_sipanel_scope_version_form" model="ir.ui.view">
+        <field name="name">sipanel.scope.version.form</field>
+        <field name="model">sipanel.scope.version</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_release" type="object" string="Release" class="btn-primary" invisible="state != 'draft'" groups="sipanel_commercial_scope_core.group_scope_steward"/>
+                    <button name="action_new_version" type="object" string="New version from this" invisible="state == 'draft'" groups="sipanel_commercial_scope_core.group_scope_steward"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,released,superseded"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group string="Identity">
+                            <field name="scope_id" readonly="revision != 0"/>
+                            <field name="revision"/>
+                            <field name="parent_version_id"/>
+                            <field name="is_current"/>
+                            <field name="requires_quote_resolution"/>
+                        </group>
+                        <group string="Anchor and unit">
+                            <field name="anchor_product_id"/>
+                            <field name="anchor_owner_mode"/>
+                            <field name="base_uom_id"/>
+                            <field name="dimension_family"/>
+                        </group>
+                        <group string="Customer labels">
+                            <field name="label_fa"/>
+                            <field name="label_en"/>
+                            <field name="customer_description_fa"/>
+                            <field name="customer_description_en"/>
+                        </group>
+                        <group string="Applicability">
+                            <field name="all_systems"/>
+                            <field name="system_ids" widget="many2many_tags" invisible="all_systems"/>
+                        </group>
+                        <group string="Default treatment (AM-02)">
+                            <field name="default_responsibility"/>
+                            <field name="default_placement"/>
+                            <field name="default_certainty"/>
+                            <field name="default_disclosure"/>
+                        </group>
+                        <group string="Release evidence">
+                            <field name="released_by_id"/>
+                            <field name="released_date"/>
+                            <field name="release_checksum"/>
+                            <field name="superseded_by_id"/>
+                            <field name="usage_count"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Recipe">
+                            <field name="recipe_line_ids" context="{'default_version_id': id}">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="kind"/>
+                                    <field name="product_id"/>
+                                    <field name="internal_description"/>
+                                    <field name="uom_id"/>
+                                    <field name="dimension_family"/>
+                                    <field name="basis"/>
+                                    <field name="rate"/>
+                                    <field name="fixed_qty"/>
+                                    <field name="manual_qty_default"/>
+                                    <field name="percent"/>
+                                    <field name="base_line_ids" widget="many2many_tags" domain="[('version_id', '=', parent.id)]"/>
+                                    <field name="rounding_increment"/>
+                                    <field name="rounding_mode"/>
+                                    <field name="activity_id"/>
+                                    <field name="execution_mode"/>
+                                    <field name="no_action_reason"/>
+                                    <field name="cost_policy"/>
+                                    <field name="manual_cost_default" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+                                    <field name="customer_label_fa"/>
+                                    <field name="customer_eligible"/>
+                                    <field name="disclosure"/>
+                                    <field name="responsibility" optional="hide"/>
+                                    <field name="placement" optional="hide"/>
+                                    <field name="certainty" optional="hide"/>
+                                    <field name="resolution_owner_id" optional="hide"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Internal">
+                            <field name="internal_description"/>
+                            <field name="note_template"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_sipanel_scope_version" model="ir.actions.act_window">
+        <field name="name">Scope Versions</field>
+        <field name="res_model">sipanel.scope.version</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_sipanel_costing" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.costing</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sipanel_scope_execution.view_order_form_sipanel_execution"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_sipanel_release_execution']" position="after">
+                <button name="action_sipanel_refresh_actuals" type="object" string="Refresh actuals" invisible="state != 'sale' or not sipanel_has_scopes" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

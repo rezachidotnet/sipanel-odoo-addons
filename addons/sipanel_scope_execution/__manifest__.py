@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+{
+    'name': 'SIPANEL Scope Execution',
+    'summary': 'Owner registry, Release Execution, batches/demands/targets, adapters, LockError retry, amendment/cancel lineage (Slice D)',
+    'version': '19.0.1.0.0',
+    'category': 'Sales/Sales',
+    'author': 'SIPANEL',
+    'license': 'LGPL-3',
+    'depends': ['sipanel_sale_scope', 'sale_stock', 'sale_project', 'sale_purchase', 'sale_mrp', 'sale_timesheet',
+                'purchase_stock', 'mrp', 'project', 'hr_timesheet'],
+    'data': [
+        'security/sipanel_execution_security.xml',
+        'security/ir.model.access.csv',
+        'security/sipanel_execution_record_rules.xml',
+        'data/owner_rules.xml',
+        'views/owner_rule_views.xml',
+        'views/execution_views.xml',
+        'views/sale_order_views.xml',
+        'views/res_config_settings_views.xml',
+        'views/menus.xml',
+    ],
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+}

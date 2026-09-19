@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wizard_regenerate_note" model="ir.ui.view">
+        <field name="name">sipanel.wizard.regenerate.note.form</field>
+        <field name="model">sipanel.wizard.regenerate.note</field>
+        <field name="arch" type="xml">
+            <form>
+                <field name="revision_id" readonly="1"/>
+                <group>
+                    <field name="current_note"/>
+                    <field name="generated_note"/>
+                    <field name="decision"/>
+                </group>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_wizard_regenerate_note" model="ir.actions.act_window">
+        <field name="name">Regenerate Note</field>
+        <field name="res_model">sipanel.wizard.regenerate.note</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

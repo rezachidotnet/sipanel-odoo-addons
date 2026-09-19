@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_owner_rule_list" model="ir.ui.view">
+        <field name="name">sipanel.execution.owner.rule.list</field>
+        <field name="model">sipanel.execution.owner.rule</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="product_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="service_tracking"/>
+                <field name="route_kind"/>
+                <field name="owner"/>
+                <field name="native_hook"/>
+                <field name="active"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_owner_rule" model="ir.actions.act_window">
+        <field name="name">Execution Owner Registry</field>
+        <field name="res_model">sipanel.execution.owner.rule</field>
+        <field name="view_mode">list</field>
+    </record>
+</odoo>

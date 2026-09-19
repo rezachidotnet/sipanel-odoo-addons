@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- All values are SYNTHETIC TEST DATA in an artificial currency unit (C9-D01). Prefix SIPANEL-PT. -->
+        <record id="uom_family_m" model="sipanel.uom.family"><field name="uom_id" ref="uom.product_uom_meter"/><field name="family">length</field></record>
+        <record id="uom_family_cm" model="sipanel.uom.family"><field name="uom_id" ref="uom.product_uom_cm"/><field name="family">length</field></record>
+        <record id="uom_family_unit" model="sipanel.uom.family"><field name="uom_id" ref="uom.product_uom_unit"/><field name="family">count</field></record>
+        <record id="uom_family_hour" model="sipanel.uom.family"><field name="uom_id" ref="uom.product_uom_hour"/><field name="family">time</field></record>
+
+        <record id="plan_system" model="account.analytic.plan"><field name="name">SIPANEL-PT System</field></record>
+        <record id="plan_activity" model="account.analytic.plan"><field name="name">SIPANEL-PT Activity</field></record>
+        <record id="aa_system_a" model="account.analytic.account"><field name="name">SIPANEL-PT System A</field><field name="plan_id" ref="plan_system"/></record>
+        <record id="aa_mfg" model="account.analytic.account"><field name="name">SIPANEL-PT MFG</field><field name="plan_id" ref="plan_activity"/></record>
+        <record id="aa_ins" model="account.analytic.account"><field name="name">SIPANEL-PT INS</field><field name="plan_id" ref="plan_activity"/></record>
+        <record id="aa_eqp" model="account.analytic.account"><field name="name">SIPANEL-PT EQP</field><field name="plan_id" ref="plan_activity"/></record>
+        <record id="aa_gen" model="account.analytic.account"><field name="name">SIPANEL-PT GEN</field><field name="plan_id" ref="plan_activity"/></record>
+
+        <record id="partner_customer" model="res.partner"><field name="name">SIPANEL-PT Synthetic Customer</field><field name="lang">en_US</field></record>
+        <record id="project_site" model="project.project"><field name="name">SIPANEL-PT Gutter site</field></record>
+
+        <record id="p_anchor" model="product.product"><field name="name">SIPANEL-PT Gutter run (anchor)</field><field name="type">service</field><field name="uom_id" ref="uom.product_uom_meter"/><field name="sale_ok" eval="True"/><field name="list_price">0</field></record>
+        <record id="p_gutter" model="product.product"><field name="name">SIPANEL-PT Gutter</field><field name="type">consu</field><field name="is_storable" eval="True"/><field name="uom_id" ref="uom.product_uom_meter"/><field name="standard_price">100</field></record>
+        <record id="p_bracket" model="product.product"><field name="name">SIPANEL-PT Bracket</field><field name="type">consu</field><field name="is_storable" eval="True"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="standard_price">5</field></record>
+        <record id="p_screw" model="product.product"><field name="name">SIPANEL-PT Screw</field><field name="type">consu</field><field name="is_storable" eval="True"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="standard_price">1</field></record>
+        <record id="p_sealant" model="product.product"><field name="name">SIPANEL-PT Sealant cartridge</field><field name="type">consu</field><field name="is_storable" eval="True"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="standard_price">20</field></record>
+        <record id="p_labour" model="product.product"><field name="name">SIPANEL-PT Installation labour</field><field name="type">service</field><field name="uom_id" ref="uom.product_uom_hour"/><field name="standard_price">30</field></record>
+        <record id="p_crane" model="product.product"><field name="name">SIPANEL-PT Base crane service</field><field name="type">service</field><field name="uom_id" ref="uom.product_uom_unit"/><field name="standard_price">400</field></record>
+
+        <record id="scope_gutter" model="sipanel.scope"><field name="code">SIPANEL-PT-GUTTER</field><field name="name">SIPANEL-PT Gutter accessories (متعلقات آبرو)</field></record>
+        <record id="version_v1" model="sipanel.scope.version">
+            <field name="scope_id" ref="scope_gutter"/>
+            <field name="label_fa">متعلقات آبرو</field>
+            <field name="label_en">Gutter accessories</field>
+            <field name="base_uom_id" ref="uom.product_uom_meter"/>
+            <field name="dimension_family">length</field>
+            <field name="anchor_product_id" ref="p_anchor"/>
+            <field name="anchor_owner_mode">component_bridge_owner</field>
+            <field name="all_systems" eval="True"/>
+        </record>
+        <record id="rl_gutter" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">10</field><field name="product_id" ref="p_gutter"/><field name="uom_id" ref="uom.product_uom_meter"/><field name="dimension_family">length</field><field name="basis">per_scope_qty</field><field name="rate">1</field><field name="activity_id" ref="aa_mfg"/><field name="execution_mode">manufacture</field><field name="customer_label_fa">ناودان</field><field name="customer_label_en">Gutter</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_bracket" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">20</field><field name="product_id" ref="p_bracket"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="dimension_family">count</field><field name="basis">per_scope_qty</field><field name="rate">2</field><field name="activity_id" ref="aa_ins"/><field name="execution_mode">stock_issue</field><field name="customer_label_fa">بست</field><field name="customer_label_en">Bracket</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_screw" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">30</field><field name="product_id" ref="p_screw"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="dimension_family">count</field><field name="basis">per_scope_qty</field><field name="rate">4</field><field name="activity_id" ref="aa_ins"/><field name="execution_mode">stock_issue</field><field name="customer_label_fa">پیچ</field><field name="customer_label_en">Screw</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_sealant" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">40</field><field name="product_id" ref="p_sealant"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="dimension_family">count</field><field name="basis">manual</field><field name="manual_qty_default">10</field><field name="activity_id" ref="aa_ins"/><field name="execution_mode">stock_issue</field><field name="customer_label_fa">درزگیر</field><field name="customer_label_en">Sealant</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_labour" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">50</field><field name="product_id" ref="p_labour"/><field name="uom_id" ref="uom.product_uom_hour"/><field name="dimension_family">time</field><field name="basis">fixed</field><field name="fixed_qty">8</field><field name="activity_id" ref="aa_ins"/><field name="execution_mode">labour</field><field name="customer_label_fa">نصب</field><field name="customer_label_en">Installation</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_crane" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">60</field><field name="product_id" ref="p_crane"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="dimension_family">count</field><field name="basis">fixed</field><field name="fixed_qty">1</field><field name="activity_id" ref="aa_eqp"/><field name="execution_mode">equipment_service</field><field name="customer_label_fa">جرثقیل</field><field name="customer_label_en">Crane</field><field name="customer_eligible" eval="True"/></record>
+        <record id="rl_allowance" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">70</field><field name="product_id" ref="p_screw"/><field name="uom_id" ref="uom.product_uom_unit"/><field name="dimension_family">count</field><field name="basis">percent_of_quantity</field><field name="percent">5</field><field name="base_line_ids" eval="[(6, 0, [ref('rl_screw')])]"/><field name="activity_id" ref="aa_ins"/><field name="execution_mode">stock_issue</field><field name="disclosure">internal_only</field><field name="internal_description">Quantity allowance screw</field></record>
+        <record id="rl_contingency" model="sipanel.scope.recipe.line"><field name="version_id" ref="version_v1"/><field name="sequence">80</field><field name="product_id" ref="p_gutter"/><field name="uom_id" ref="uom.product_uom_meter"/><field name="dimension_family">length</field><field name="basis">percent_of_cost</field><field name="percent">2</field><field name="base_line_ids" eval="[(6, 0, [ref('rl_gutter'), ref('rl_bracket')])]"/><field name="cost_policy">derived</field><field name="activity_id" ref="aa_gen"/><field name="execution_mode">no_action</field><field name="no_action_reason">allowance</field><field name="disclosure">internal_only</field><field name="internal_description">Internal contingency</field></record>
+
+        <function model="sipanel.scope.version" name="action_release" eval="[[ref('version_v1')]]"/>
+        <function model="ir.config_parameter" name="set_param" eval="['sipanel_scope.system_plan_id', ref('plan_system')]"/>
+        <function model="ir.config_parameter" name="set_param" eval="['sipanel_scope.activity_plan_id', ref('plan_activity')]"/>
+        <function model="ir.config_parameter" name="set_param" eval="['sipanel_scope.default_project_id', ref('project_site')]"/>
+    </data>
+</odoo>

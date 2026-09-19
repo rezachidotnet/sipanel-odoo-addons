@@ -1,0 +1,26 @@
+# -*- coding: utf-8 -*-
+{
+    'name': 'SIPANEL Commercial Scope Core',
+    'summary': 'Scope identity, versions, recipe lines, release gate, audit, role groups (Slice A)',
+    'version': '19.0.1.0.0',
+    'category': 'Sales/Sales',
+    'author': 'SIPANEL',
+    'license': 'LGPL-3',
+    'depends': ['base', 'mail', 'product', 'uom', 'analytic'],
+    'data': [
+        'security/sipanel_security.xml',
+        'security/ir.model.access.csv',
+        'security/sipanel_record_rules.xml',
+        'data/ir_config_parameter.xml',
+        'views/scope_views.xml',
+        'views/scope_version_views.xml',
+        'views/recipe_line_views.xml',
+        'views/audit_event_views.xml',
+        'views/uom_family_views.xml',
+        'views/res_config_settings_views.xml',
+        'views/menus.xml',
+    ],
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+}

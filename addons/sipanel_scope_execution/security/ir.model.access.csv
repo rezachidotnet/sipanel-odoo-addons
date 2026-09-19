@@ -1,0 +1,13 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_owner_rule_user,owner rule user,model_sipanel_execution_owner_rule,base.group_user,1,0,0,0
+access_owner_rule_admin,owner rule admin,model_sipanel_execution_owner_rule,base.group_system,1,1,1,1
+access_owner_rule_exec,owner rule exec owner,model_sipanel_execution_owner_rule,group_scope_execution_owner,1,1,1,0
+access_batch_user,batch user,model_sipanel_execution_batch,base.group_user,1,0,0,0
+access_batch_exec,batch exec owner,model_sipanel_execution_batch,group_scope_execution_owner,1,1,1,0
+access_demand_user,demand user,model_sipanel_execution_demand,base.group_user,1,0,0,0
+access_demand_exec,demand exec owner,model_sipanel_execution_demand,group_scope_execution_owner,1,1,1,0
+access_target_exec,target exec owner,model_sipanel_execution_target,group_scope_execution_owner,1,1,1,0
+access_target_steward,target steward,model_sipanel_execution_target,sipanel_commercial_scope_core.group_scope_steward,1,0,0,0
+access_target_estimator,target estimator,model_sipanel_execution_target,sipanel_commercial_scope_core.group_scope_estimator,1,0,0,0
+access_target_auditor,target auditor,model_sipanel_execution_target,sipanel_commercial_scope_core.group_scope_auditor,1,0,0,0
+access_target_cost_viewer,target cost viewer,model_sipanel_execution_target,sipanel_commercial_scope_core.group_scope_cost_viewer,1,0,0,0

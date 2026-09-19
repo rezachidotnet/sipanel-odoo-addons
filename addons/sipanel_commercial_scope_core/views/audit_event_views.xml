@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sipanel_audit_event_list" model="ir.ui.view">
+        <field name="name">sipanel.scope.audit.event.list</field>
+        <field name="model">sipanel.scope.audit.event</field>
+        <field name="arch" type="xml">
+            <list create="0" edit="0" delete="0">
+                <field name="event_date"/>
+                <field name="action"/>
+                <field name="res_model"/>
+                <field name="res_id"/>
+                <field name="actor_user_id"/>
+                <field name="revision_ref"/>
+                <field name="summary"/>
+                <field name="correlation_uid" optional="hide"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_sipanel_audit_event_form" model="ir.ui.view">
+        <field name="name">sipanel.scope.audit.event.form</field>
+        <field name="model">sipanel.scope.audit.event</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <sheet>
+                    <group>
+                        <field name="event_date"/>
+                        <field name="action"/>
+                        <field name="res_model"/>
+                        <field name="res_id"/>
+                        <field name="actor_user_id"/>
+                        <field name="reason"/>
+                        <field name="revision_ref"/>
+                        <field name="correlation_uid"/>
+                        <field name="summary"/>
+                        <field name="before_json" widget="json" groups="sipanel_commercial_scope_core.group_scope_cost_viewer,sipanel_commercial_scope_core.group_scope_auditor"/>
+                        <field name="after_json" widget="json" groups="sipanel_commercial_scope_core.group_scope_cost_viewer,sipanel_commercial_scope_core.group_scope_auditor"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_sipanel_audit_event" model="ir.actions.act_window">
+        <field name="name">SIPANEL Audit Events</field>
+        <field name="res_model">sipanel.scope.audit.event</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>
