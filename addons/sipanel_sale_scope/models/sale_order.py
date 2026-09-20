@@ -88,13 +88,23 @@ class SaleOrder(models.Model):
             o.write({'sipanel_current_seal_hash': sha256_of(sorted(hashes))})
         return True
 
+    def _sipanel_acceptance_reference(self, reference=None):
+        """Explicit reference wins; otherwise a customer portal signature (signed_by/signed_on) is the acceptance evidence (D-03)."""
+        self.ensure_one()
+        if reference:
+            return reference
+        if self.signed_by and self.signed_on:
+            return f"portal_signature:{self.signed_by}:{fields.Datetime.to_string(self.signed_on)}"
+        return None
+
     def _sipanel_accept_current_revisions(self, reference=None):
         for o in self.filtered('sipanel_has_scopes'):
+            ref = o._sipanel_acceptance_reference(reference)
             for s in o.sipanel_quote_scope_ids.filtered('active'):
                 rev = s.current_revision_id
                 if rev.state == 'working':
                     raise UserError(self.env._("Scope %s was never sent: send the quotation before confirming (C3-D03).", s.display_name))
-                rev.action_accept(reference=reference)
+                rev.action_accept(reference=ref)
         return True
 
     # ---------------------------------------------------------- native hooks (SV-14)

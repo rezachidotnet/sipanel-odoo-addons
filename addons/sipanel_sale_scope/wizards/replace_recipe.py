@@ -49,7 +49,7 @@ class SipanelWizardReplaceRecipe(models.TransientModel):
                 'revision_id': rev.id, 'source_occurrence_key': l.occurrence_key, 'source_line_id': l.id, 'origin': 'master',
                 'sequence': l.sequence, 'kind': l.kind, 'product_id': l.product_id.id, 'description': l.internal_description,
                 'customer_label_fa': l.customer_label_fa, 'customer_label_en': l.customer_label_en, 'spec_json': l.spec_json,
-                'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.name, 'dimension_family': l.dimension_family,
+                'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.with_context(lang=rev.language or 'en_US').name, 'dimension_family': l.dimension_family,
                 'basis': l.basis, 'rate': l.rate, 'fixed_qty': l.fixed_qty, 'percent': l.percent,
                 'manual_qty': l.manual_qty_default, 'manual_qty_set': bool(l.basis == 'manual' and l.manual_qty_default),
                 'rounding_increment': l.rounding_increment, 'rounding_mode': l.rounding_mode,

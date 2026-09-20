@@ -380,7 +380,7 @@ class SipanelQuoteScopeComponent(models.Model):
         payload = {'label': label}
         if self.placement != 'no_customer_line' and self.qty_kind == 'physical':
             payload['qty'] = self.final_qty
-            payload['uom'] = self.uom_name_snapshot or self.uom_id.name
+            payload['uom'] = self.uom_name_snapshot or self.uom_id.with_context(lang=language or 'en_US').name
         if self.certainty == 'provisional':
             payload['provisional_basis'] = self.provisional_basis
         return payload

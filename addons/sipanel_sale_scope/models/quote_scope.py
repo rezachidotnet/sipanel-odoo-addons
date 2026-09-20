@@ -242,13 +242,15 @@ class SipanelQuoteScope(models.Model):
         elif section_line:
             line_vals['sequence'] = section_line.sequence + 1
         line = self.env['sale.order.line'].with_context(**guard_ctx('sipanel_anchor_create')).create(line_vals)
+        # quotation language: customer note and unit-name snapshots are rendered in this language (D-02, BQ-01)
+        lang = order.partner_id.lang or self.env.user.lang or 'en_US'
         scope = self.create({
             'order_id': order.id, 'source_scope_id': version.scope_id.id, 'source_version_id': version.id,
             'anchor_line_id': line.id, 'is_optional': optional, 'optional_section_line_id': section_line.id if section_line else False,
             'acceptance_state': 'offered' if optional else 'base', 'system_id': system.id if system else False,
         })
         rev = self.env['sipanel.quote.scope.revision'].create({
-            'quote_scope_id': scope.id, 'revision': 1, 'language': order.partner_id.lang or self.env.user.lang or 'en_US',
+            'quote_scope_id': scope.id, 'revision': 1, 'language': lang,
             'quote_uom_id': quote_uom.id, 'base_uom_id': version.base_uom_id.id,
             'uom_factor': Family.convert(1.0, quote_uom, version.base_uom_id),
             'label_fa': version.label_fa, 'label_en': version.label_en,
@@ -267,7 +269,7 @@ class SipanelQuoteScope(models.Model):
                 'revision_id': rev.id, 'source_occurrence_key': l.occurrence_key, 'source_line_id': l.id, 'origin': 'master',
                 'sequence': l.sequence, 'kind': l.kind, 'product_id': l.product_id.id, 'description': l.internal_description,
                 'customer_label_fa': l.customer_label_fa, 'customer_label_en': l.customer_label_en, 'spec_json': l.spec_json,
-                'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.name, 'dimension_family': l.dimension_family,
+                'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.with_context(lang=lang).name, 'dimension_family': l.dimension_family,
                 'basis': l.basis, 'rate': l.rate, 'fixed_qty': l.fixed_qty, 'percent': l.percent,
                 'manual_qty': l.manual_qty_default, 'manual_qty_set': bool(l.basis == 'manual' and l.manual_qty_default),
                 'rounding_increment': l.rounding_increment, 'rounding_mode': l.rounding_mode,

@@ -8,6 +8,25 @@ from odoo.addons.sale_management.controllers import portal as sale_management_po
 
 class CustomerPortal(sale_management_portal.CustomerPortal):
 
+    @route(['/my/orders/<int:order_id>/accept'], type='jsonrpc', auth="public", website=True)
+    def portal_quote_accept(self, order_id, access_token=None, name=None, signature=None):
+        """Customer signature on a Scope-carrying quotation (D-03).
+
+        The seal verification at confirm (C3-D03) may refuse the signature when the sealed content changed after
+        sending (e.g. a governed optional-scope acceptance changed the quantity and totals). Native Odoo would surface
+        the internal UserError (revision names, hash prefixes) to the customer and keep a half-written signature;
+        here the transaction is rolled back and a customer-safe message is returned instead.
+        """
+        try:
+            return super().portal_quote_accept(order_id, access_token=access_token, name=name, signature=signature)
+        except UserError:
+            order_sudo = request.env['sale.order'].sudo().browse(order_id).exists()
+            if not order_sudo or not order_sudo.sipanel_has_scopes:
+                raise
+            request.env.cr.rollback()
+            return {'error': request.env._("This quotation has been updated since it was sent. "
+                                           "Please ask your sales contact to re-send it before signing.")}
+
     @route(['/my/orders/<int:order_id>/update_line_dict'], type='jsonrpc', auth="public", website=True)
     def portal_quote_option_update(self, order_id, line_id, access_token=None, remove=False, input_quantity=False, **kwargs):
         try:

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Shared synthetic fixture for Slice A tests. All records are prefixed SIPANEL-PT (test discipline)."""
+import uuid
+
 from odoo.tests import TransactionCase, new_test_user
 
 TEST_BATCH = 'SIPANEL-PT-CORE'
@@ -55,7 +57,8 @@ class SipanelCoreCase(TransactionCase):
     def _make_master(cls, code='SIPANEL-PT-GUTTER', release=True):
         """C9 'متعلقات آبرو' synthetic master V1 (8 occurrences)."""
         env = cls.env
-        scope = env['sipanel.scope'].create({'code': code, 'name': f'{TEST_BATCH} Gutter accessories', 'owner_user_id': cls.steward.id})
+        # unique per run: an archived leftover with the same code (unique per company, archived included) must not break the suite
+        scope = env['sipanel.scope'].create({'code': f'{code}-{uuid.uuid4().hex[:8]}', 'name': f'{TEST_BATCH} Gutter accessories', 'owner_user_id': cls.steward.id})
         v1 = env['sipanel.scope.version'].create({
             'scope_id': scope.id, 'label_fa': 'متعلقات آبرو', 'label_en': 'Gutter accessories',
             'base_uom_id': cls.uom_m.id, 'dimension_family': 'length',
