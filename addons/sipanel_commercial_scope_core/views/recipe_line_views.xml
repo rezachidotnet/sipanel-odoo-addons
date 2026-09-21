@@ -35,8 +35,7 @@
                             <field name="currency_id" invisible="1"/>
                         </group>
                         <group>
-                            <field name="customer_label_fa"/>
-                            <field name="customer_label_en"/>
+                            <field name="customer_label"/>
                             <field name="customer_eligible"/>
                             <field name="responsibility"/>
                             <field name="placement"/>

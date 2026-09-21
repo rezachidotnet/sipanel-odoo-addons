@@ -10,6 +10,7 @@
     'data': [
         'data/fixture_master.xml',
     ],
+    'post_init_hook': 'post_init_hook',
     'installable': True,
     'auto_install': False,
     'application': False,

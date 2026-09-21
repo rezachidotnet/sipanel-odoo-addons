@@ -39,10 +39,25 @@ class SipanelQuoteScopeRevision(models.Model):
     quote_uom_id = fields.Many2one('uom.uom', readonly=True, ondelete='restrict')
     base_uom_id = fields.Many2one('uom.uom', readonly=True, ondelete='restrict')
     uom_factor = fields.Float(digits=(16, 6), default=1.0, readonly=True)
+    # Immutable snapshot of the master customer text. These stay plain columns on
+    # purpose: a snapshot must never follow later master edits, so it is copied,
+    # never translated. They now hold ONLY terms that were really stored for that
+    # language - an English term is never written into the Persian column.
     label_fa = fields.Char()
     label_en = fields.Char()
     customer_description_fa = fields.Text()
     customer_description_en = fields.Text()
+    # STEP 2A: the text actually resolved for `language`, plus its provenance.
+    # Empty on revisions created before STEP 2A, and every reader falls back to
+    # the pair above in that case, so sealed content does not move.
+    label_resolved = fields.Char(readonly=True)
+    customer_description_resolved = fields.Text(readonly=True)
+    resolved_language = fields.Char(readonly=True,
+                                    help="Language the customer text was resolved in when this revision was created.")
+    source_version_checksum = fields.Char(readonly=True,
+                                          help="Release checksum of the master version this snapshot came from.")
+    translation_provenance = fields.Json(readonly=True,
+                                         help="Which language each customer-facing term came from, and whether it was a fallback.")
     spec_json = fields.Json()
     commercial_projection_json = fields.Json(compute='_compute_commercial', store=True, readonly=True)
     net_revenue_projection = fields.Monetary(currency_field='currency_id', compute='_compute_commercial', store=True, groups=COST_GROUP)
@@ -155,6 +170,7 @@ class SipanelQuoteScopeRevision(models.Model):
                 r.margin_percent_na = False
 
     @api.depends('component_ids.final_qty', 'component_ids.customer_label_fa', 'component_ids.customer_label_en',
+                 'component_ids.customer_label_resolved',
                  'component_ids.disclosure', 'component_ids.active_state', 'component_ids.placement', 'component_ids.certainty',
                  'component_ids.provisional_basis', 'component_ids.sequence', 'note_fingerprint', 'language')
     def _compute_note_stale(self):
@@ -212,8 +228,12 @@ class SipanelQuoteScopeRevision(models.Model):
     def _build_generated_note(self):
         self.ensure_one()
         lang_fa = (self.language or '').startswith('fa')
-        head = (self.label_fa if lang_fa else self.label_en) or self.label_fa or self.label_en or ''
-        desc = (self.customer_description_fa if lang_fa else self.customer_description_en) or ''
+        # Prefer the term resolved when the snapshot was taken. Revisions created
+        # before STEP 2A have none, and keep the historical language-pair lookup,
+        # so their regenerated note is unchanged.
+        head = self.label_resolved or (self.label_fa if lang_fa else self.label_en) or self.label_fa or self.label_en or ''
+        desc = self.customer_description_resolved or (
+            self.customer_description_fa if lang_fa else self.customer_description_en) or ''
         lines = [head] if head else []
         if desc:
             lines.append(desc)
@@ -248,6 +268,40 @@ class SipanelQuoteScopeRevision(models.Model):
             self.env['sipanel.scope.audit.event'].log(r, 'note_reviewed', revision_ref=r.display_name)
         return True
 
+    # ---------------------------------------------------------- language readiness (STEP 2A)
+    def _missing_translation_keys(self, provenance=None):
+        """Customer-facing terms with no translation in this quotation's language.
+
+        Empty list means the quotation can be sent. A revision created before
+        STEP 2A carries no provenance, so it is judged by the historical rule on
+        its snapshot columns and its behaviour does not change.
+        """
+        self.ensure_one()
+        prov = provenance if provenance is not None else (self.translation_provenance or None)
+        if not prov:
+            lang_fa = (self.language or '').startswith('fa')
+            if lang_fa and not self.label_fa:
+                return ['customer_label']
+            if not lang_fa and not self.label_en:
+                return ['customer_label']
+            return []
+        missing = []
+        version = prov.get('version') or {}
+        label = version.get('customer_label') or {}
+        if label.get('fallback'):
+            # a quotation always needs a label in its own language
+            missing.append('customer_label')
+        desc = version.get('customer_description') or {}
+        if desc.get('fallback') and desc.get('available'):
+            # the master has a description, just not in this language
+            missing.append('customer_description')
+        for key, cprov in sorted((prov.get('components') or {}).items()):
+            if cprov.get('exempt'):
+                continue          # internal-only lines never reach the customer
+            if cprov.get('fallback') and cprov.get('available'):
+                missing.append(f'component:{key}')
+        return missing
+
     # ---------------------------------------------------------- seal / accept (C3-D03, C7-D04)
     def _seal_payload(self):
         self.ensure_one()
@@ -272,6 +326,13 @@ class SipanelQuoteScopeRevision(models.Model):
         for r in self:
             if r.state != 'working':
                 continue
+            # Fail closed: never send a customer a fallback in the wrong language.
+            missing = r._missing_translation_keys()
+            if missing:
+                raise UserError(self.env._(
+                    "Cannot send %(rev)s: the customer text has no %(lang)s translation for "
+                    "%(items)s. Complete the master translations, then create a new revision.",
+                    rev=r.display_name, lang=r.language or '?', items=', '.join(missing)))
             payload = r._seal_payload()
             h = sha256_of(payload)
             r.with_context(**guard_ctx('sipanel_seal_transaction')).write({

@@ -8,6 +8,7 @@ from odoo.tools import float_compare, float_is_zero
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import ACCEPTANCE
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import snapshot_customer_text
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
 
@@ -115,11 +116,10 @@ class SipanelQuoteScope(models.Model):
         Config = self.env['sipanel.config']
         if Config.company_currency_only() and order.currency_id != order.company_id.currency_id:
             add('CURRENCY', _("Foreign-currency quotations are blocked in MVP (BQ-09)."))
-        lang_fa = (rev.language or '').startswith('fa')
-        if lang_fa and not rev.label_fa:
-            add('LABEL_LANG', _("Persian customer label missing for a Persian quotation (BQ-01)."))
-        if not lang_fa and not rev.label_en:
-            add('LABEL_LANG', _("English customer label missing for a non-Persian quotation (BQ-01)."))
+        missing = rev._missing_translation_keys()
+        if missing:
+            add('LABEL_LANG', _("Customer text has no %(lang)s translation for: %(items)s (BQ-01).",
+                                lang=rev.language or '?', items=', '.join(missing)))
         if rev.state != 'working':
             return issues
         comps = rev.component_ids.sudo().filtered(lambda c: c.active_state == 'active')
@@ -130,7 +130,8 @@ class SipanelQuoteScope(models.Model):
                 add('OVERRIDE_STALE', _("Stale override on %s: confirm or clear it.", c.display_name))
             if c.kind == 'estimate_only' and c.resolution_state == 'open':
                 add('ESTIMATE_ONLY', _("%s needs resolution.", c.display_name), 'warn')
-            if c.disclosure == 'customer_eligible' and not (c.customer_label_fa or c.customer_label_en):
+            if c.disclosure == 'customer_eligible' and not (
+                    c.customer_label_resolved or c.customer_label_fa or c.customer_label_en):
                 add('LABEL', _("%s has no customer label; it is skipped in the note.", c.display_name), 'warn')
         approved = rev.waiver_ids.filtered(lambda w: w.state == 'approved').mapped('waiver_type')
         if rev.waiver_ids.filtered(lambda w: w.state == 'pending'):
@@ -232,18 +233,22 @@ class SipanelQuoteScope(models.Model):
         quote_uom = quote_uom or version.base_uom_id
         Family.check_compatible(quote_uom, version.base_uom_id)
         qty_base = Family.convert(scope_qty, quote_uom, version.base_uom_id)
+        # quotation language: customer note and unit-name snapshots are rendered in this language (D-02, BQ-01)
+        lang = order.partner_id.lang or self.env.user.lang or 'en_US'
+        label_terms, label_resolved, label_prov = snapshot_customer_text(version, 'customer_label', lang)
+        desc_terms, desc_resolved, desc_prov = snapshot_customer_text(version, 'customer_description', lang)
         line_vals = {
             'order_id': order.id, 'product_id': version.anchor_product_id.id,
             'product_uom_qty': 0.0 if optional else qty_base, 'product_uom_id': version.base_uom_id.id,
-            'name': (version.label_fa if (order.partner_id.lang or '').startswith('fa') else version.label_en) or version.label_fa or version.label_en,
+            # a draft may fall back so the operator still sees a usable line; the
+            # fallback is recorded and blocks the seal (BQ-01, STEP 2A)
+            'name': label_resolved or label_terms.get('en_US') or label_terms.get('fa_IR') or '',
         }
         if sequence is not None:
             line_vals['sequence'] = sequence
         elif section_line:
             line_vals['sequence'] = section_line.sequence + 1
         line = self.env['sale.order.line'].with_context(**guard_ctx('sipanel_anchor_create')).create(line_vals)
-        # quotation language: customer note and unit-name snapshots are rendered in this language (D-02, BQ-01)
-        lang = order.partner_id.lang or self.env.user.lang or 'en_US'
         scope = self.create({
             'order_id': order.id, 'source_scope_id': version.scope_id.id, 'source_version_id': version.id,
             'anchor_line_id': line.id, 'is_optional': optional, 'optional_section_line_id': section_line.id if section_line else False,
@@ -253,8 +258,10 @@ class SipanelQuoteScope(models.Model):
             'quote_scope_id': scope.id, 'revision': 1, 'language': lang,
             'quote_uom_id': quote_uom.id, 'base_uom_id': version.base_uom_id.id,
             'uom_factor': Family.convert(1.0, quote_uom, version.base_uom_id),
-            'label_fa': version.label_fa, 'label_en': version.label_en,
-            'customer_description_fa': version.customer_description_fa, 'customer_description_en': version.customer_description_en,
+            'label_fa': label_terms.get('fa_IR', False), 'label_en': label_terms.get('en_US', False),
+            'customer_description_fa': desc_terms.get('fa_IR', False), 'customer_description_en': desc_terms.get('en_US', False),
+            'label_resolved': label_resolved, 'customer_description_resolved': desc_resolved,
+            'resolved_language': lang, 'source_version_checksum': version.release_checksum,
             'system_id': system.id if system else False,
             'fx_source_currency_id': order.currency_id.id, 'fx_rate': 1.0, 'fx_date': fields.Date.today(), 'fx_source': 'company_currency',
         })
@@ -264,11 +271,18 @@ class SipanelQuoteScope(models.Model):
             rev.with_context(**guard_ctx('sipanel_seal_transaction')).write({'offered_scope_qty': qty_base})
         Comp = self.env['sipanel.quote.scope.component'].sudo()
         id_map = {}
+        comp_prov = {}
         for l in version.recipe_line_ids.sorted(lambda l: (l.sequence, l.id)):
+            c_terms, c_resolved, c_prov = snapshot_customer_text(l, 'customer_label', lang)
+            # an internal-only line is never shown to the customer, so a missing
+            # customer translation is not a defect for it
+            c_prov['exempt'] = (l.disclosure == 'internal_only') or not l.customer_eligible
+            comp_prov[l.occurrence_key] = c_prov
             cvals = {
                 'revision_id': rev.id, 'source_occurrence_key': l.occurrence_key, 'source_line_id': l.id, 'origin': 'master',
                 'sequence': l.sequence, 'kind': l.kind, 'product_id': l.product_id.id, 'description': l.internal_description,
-                'customer_label_fa': l.customer_label_fa, 'customer_label_en': l.customer_label_en, 'spec_json': l.spec_json,
+                'customer_label_fa': c_terms.get('fa_IR', False), 'customer_label_en': c_terms.get('en_US', False),
+                'customer_label_resolved': c_resolved, 'label_provenance': c_prov, 'spec_json': l.spec_json,
                 'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.with_context(lang=lang).name, 'dimension_family': l.dimension_family,
                 'basis': l.basis, 'rate': l.rate, 'fixed_qty': l.fixed_qty, 'percent': l.percent,
                 'manual_qty': l.manual_qty_default, 'manual_qty_set': bool(l.basis == 'manual' and l.manual_qty_default),
@@ -295,7 +309,23 @@ class SipanelQuoteScope(models.Model):
         for l in version.recipe_line_ids:
             if l.base_line_ids:
                 Comp.browse(id_map[l.id]).write({'base_component_ids': [(6, 0, [id_map[b.id] for b in l.base_line_ids if b.id in id_map])]})
+        provenance = {'language': lang, 'version': {'customer_label': label_prov,
+                                                    'customer_description': desc_prov},
+                      'components': comp_prov}
+        provenance['missing'] = rev._missing_translation_keys(provenance)
+        rev.with_context(**guard_ctx('sipanel_seal_transaction')).write({'translation_provenance': provenance})
         rev.action_generate_note(accept=True)
+        if provenance['missing']:
+            # draft may proceed on the fallback, but the gap must be visible now
+            # and it will block the seal (STEP 2A language readiness)
+            scope.message_post(body=self.env._(
+                "Customer text is missing a %(lang)s translation for: %(items)s. "
+                "The draft uses a fallback; this quotation cannot be sent until the "
+                "master translations are completed.",
+                lang=lang, items=', '.join(provenance['missing'])))
         self.env['sipanel.scope.audit.event'].log(scope, 'add_scope', after={'version_id': version.id, 'scope_qty': qty_base,
-                                                                              'optional': optional}, revision_ref=rev.display_name)
+                                                                              'optional': optional,
+                                                                              'resolved_language': lang,
+                                                                              'missing_translations': provenance['missing']},
+                                                  revision_ref=rev.display_name)
         return scope

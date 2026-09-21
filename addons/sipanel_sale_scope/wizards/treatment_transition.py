@@ -38,6 +38,7 @@ class SipanelWizardTreatmentTransition(models.TransientModel):
             if vals.get('responsibility') == 'customer':
                 vals.update({'cost_source': 'not_applicable', 'execution_mode': 'no_action', 'no_action_reason': 'customer_responsibility'})
             if vals.get('disclosure') == 'internal_only':
+                # keep the frozen label; an internal-only line is simply not published
                 vals['customer_label_fa'] = c.customer_label_fa
             c.write(vals)
             self.env['sipanel.scope.audit.event'].log(c, 'preset_change', before=before,

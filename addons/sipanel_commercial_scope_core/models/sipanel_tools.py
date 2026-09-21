@@ -141,3 +141,102 @@ def guard_ctx(*names):
 def guard(env, name):
     """True only when the flag was set by internal code (token matches)."""
     return bool(env.context.get(name)) and env.context.get('sipanel_guard_token') == GUARD_TOKEN
+
+
+# ---------------------------------------------------------------------------
+# Native translation helpers (STEP 2A).
+#
+# Odoo 19 stores a `translate=True` field in a jsonb column keyed by language,
+# with `en_US` as the source term. Reading the field in a language context
+# silently falls back to `en_US` when that language has no stored term, and so
+# does `Model.get_field_translations` — verified against the installed source:
+# `Text._insert_cache` fills every installed language with `val['en_US']` when
+# `prefetch_langs` is set, which is exactly what `get_field_translations` uses.
+# A customer-facing quotation must never ship that fallback silently, so we need
+# to know whether a term is really stored.
+#
+# `Text._get_stored_translations` is the only accessor in the installed ORM that
+# returns the raw jsonb map without applying the fallback
+# (odoo/orm/fields_textual.py). It is module-private but it is an ORM accessor,
+# not hand-written translation SQL: it flushes the record and reads back the
+# column Odoo itself wrote. We keep the dependency in this one place and fall
+# back to a conservative comparison if a future version removes it.
+
+def stored_translations(record, field_name):
+    """Raw {lang: term} actually stored for a translatable field, no fallback.
+
+    Returns {} when nothing is stored. Empty and whitespace-only terms are
+    dropped, so callers can treat the result as "these languages are ready".
+    """
+    record.ensure_one()
+    field = record._fields[field_name]
+    if not field.translate:
+        raise ValueError(f"{record._name}.{field_name} is not translatable")
+    if not record.id:
+        return {}
+    getter = getattr(field, '_get_stored_translations', None)
+    if getter is None:  # pragma: no cover - guard for a future ORM change
+        raw = {}
+        for code, _name in record.env['res.lang'].get_installed():
+            value = record.with_context(lang=code)[field_name]
+            if value:
+                raw[code] = value
+    else:
+        raw = getter(record) or {}
+    return {lang: term.strip() for lang, term in raw.items()
+            if isinstance(term, str) and term.strip()}
+
+
+def has_translation(record, field_name, lang):
+    """True only when `lang` really has a stored, non-empty term."""
+    return bool(stored_translations(record, field_name).get(lang))
+
+
+def resolve_customer_text(record, field_name, lang, fallback_lang='en_US'):
+    """Resolve customer-facing text for `lang`.
+
+    Returns (value, used_lang, is_fallback). `is_fallback` is True whenever the
+    requested language had no stored term, including when the value returned is
+    the source term. Callers decide whether a fallback is acceptable: it is for
+    a draft (with a warning), never for sealing a customer quotation.
+    """
+    terms = stored_translations(record, field_name)
+    if lang and terms.get(lang):
+        return terms[lang], lang, False
+    if terms.get(fallback_lang):
+        return terms[fallback_lang], fallback_lang, True
+    if terms:
+        used = sorted(terms)[0]
+        return terms[used], used, True
+    return '', None, True
+
+
+def translation_map(record, field_name):
+    """Deterministic {lang: term} for checksums: sorted by language code."""
+    terms = stored_translations(record, field_name)
+    return {lang: terms[lang] for lang in sorted(terms)}
+
+
+SNAPSHOT_LANGS = ('fa_IR', 'en_US')
+
+
+def snapshot_customer_text(master, field_name, lang, snapshot_langs=SNAPSHOT_LANGS):
+    """Freeze one customer-facing master term into a quotation snapshot.
+
+    Returns (terms, resolved, provenance):
+      terms      {lang: term} limited to `snapshot_langs`, containing only terms
+                 that are really stored - an English term is never written into
+                 the Persian snapshot column, and vice versa;
+      resolved   the term for `lang`, or '' when that language has none. Callers
+                 may fall back for a draft, but the fallback is always visible in
+                 the provenance so sealing can refuse it;
+      provenance {'lang': used or None, 'fallback': bool, 'available': [langs]}.
+    """
+    terms = stored_translations(master, field_name)
+    resolved = terms.get(lang, '')
+    return (
+        {code: terms[code] for code in snapshot_langs if terms.get(code)},
+        resolved,
+        {'lang': lang if resolved else None, 'fallback': not resolved,
+         'available': sorted(terms)},
+    )

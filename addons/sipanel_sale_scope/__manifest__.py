@@ -2,7 +2,7 @@
 {
     'name': 'SIPANEL Sale Scope',
     'summary': 'Quote Scope, revisions, component snapshots, quantity/cost engine, pricing & margin, notes, seal, optional/provisional governance, portal guard (Slices B + C)',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.1.0',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
     'license': 'LGPL-3',

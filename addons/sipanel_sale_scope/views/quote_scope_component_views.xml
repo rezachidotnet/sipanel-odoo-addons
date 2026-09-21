@@ -58,8 +58,9 @@
                             <field name="provisional_basis"/>
                             <field name="disclosure"/>
                             <field name="treatment_preset"/>
-                            <field name="customer_label_fa"/>
-                            <field name="customer_label_en"/>
+                            <field name="customer_label_resolved"/>
+                            <field name="customer_label_fa" optional="hide"/>
+                            <field name="customer_label_en" optional="hide"/>
                         </group>
                         <group string="Execution intent">
                             <field name="activity_id"/>

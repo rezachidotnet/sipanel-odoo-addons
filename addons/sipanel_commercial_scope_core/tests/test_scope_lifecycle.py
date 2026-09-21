@@ -38,9 +38,9 @@ class TestScopeLifecycle(SipanelCoreCase):
         """PT-24: released content cannot be changed through write (UI, RPC and import all reach write)."""
         scope, v1 = self._make_master()
         with self.assertRaises(UserError):
-            v1.write({'label_fa': 'x'})
+            v1.write({'customer_label': 'x'})
         with self.assertRaises(UserError):
-            v1.with_user(self.steward).write({'label_en': 'y'})
+            v1.with_user(self.steward).write({'customer_label': 'y'})
         with self.assertRaises(UserError):
             v1.recipe_line_ids[0].write({'rate': 9})
         with self.assertRaises(UserError):
@@ -53,7 +53,7 @@ class TestScopeLifecycle(SipanelCoreCase):
             v1.write({'state': 'draft'})
         # sudo does not bypass Python guards
         with self.assertRaises(UserError):
-            v1.sudo().write({'label_fa': 'z'})
+            v1.sudo().write({'customer_label': 'z'})
         # base_import path: load() -> write()
         xid = f'__export__.sipanel_scope_recipe_line_{v1.recipe_line_ids[0].id}_pt'
         self.env['ir.model.data']._update_xmlids([{'xml_id': xid, 'record': v1.recipe_line_ids[0]}])

@@ -56,11 +56,19 @@
                             <field name="fx_source"/>
                             <field name="currency_id" invisible="1"/>
                         </group>
-                        <group string="Customer labels">
-                            <field name="label_fa"/>
-                            <field name="label_en"/>
-                            <field name="customer_description_fa"/>
-                            <field name="customer_description_en"/>
+                        <group string="Customer text (frozen snapshot)">
+                            <!-- Snapshot of the master text at the moment this revision was
+                                 created. It never follows later master edits, which is why
+                                 these are plain columns and not translatable fields. -->
+                            <field name="resolved_language"/>
+                            <field name="label_resolved"/>
+                            <field name="customer_description_resolved"/>
+                            <field name="source_version_checksum"/>
+                            <field name="translation_provenance" widget="json" optional="hide"/>
+                            <field name="label_fa" optional="hide"/>
+                            <field name="label_en" optional="hide"/>
+                            <field name="customer_description_fa" optional="hide"/>
+                            <field name="customer_description_en" optional="hide"/>
                         </group>
                         <group string="Seal">
                             <field name="sealed_hash"/>

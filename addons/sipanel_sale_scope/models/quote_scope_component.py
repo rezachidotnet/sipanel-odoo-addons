@@ -49,8 +49,12 @@ class SipanelQuoteScopeComponent(models.Model):
     kind = fields.Selection(KIND, required=True, default='product')
     product_id = fields.Many2one('product.product', ondelete='restrict')
     description = fields.Text()
+    # Immutable snapshot of the master recipe line's customer label (see the
+    # revision model). Only really-stored terms are copied into each column.
     customer_label_fa = fields.Char()
     customer_label_en = fields.Char()
+    customer_label_resolved = fields.Char(readonly=True)
+    label_provenance = fields.Json(readonly=True)
     spec_json = fields.Json()
     uom_id = fields.Many2one('uom.uom', required=True, ondelete='restrict')
     uom_name_snapshot = fields.Char(readonly=True)
@@ -117,10 +121,11 @@ class SipanelQuoteScopeComponent(models.Model):
     _occurrence_uid_unique = models.Constraint('UNIQUE(revision_id, occurrence_uid)', 'Occurrence uid must be unique within a revision (stable across amendments).')
 
     # ------------------------------------------------------------ computes
-    @api.depends('product_id', 'description', 'customer_label_en', 'customer_label_fa')
+    @api.depends('product_id', 'description', 'customer_label_en', 'customer_label_fa', 'customer_label_resolved')
     def _compute_name(self):
         for c in self:
-            c.name = c.product_id.display_name or c.customer_label_en or c.customer_label_fa or (c.description or '')[:64]
+            c.name = (c.product_id.display_name or c.customer_label_resolved or c.customer_label_en
+                      or c.customer_label_fa or (c.description or '')[:64])
 
     @api.depends('basis', 'rate', 'fixed_qty', 'manual_qty', 'manual_qty_set', 'percent', 'base_component_ids.final_qty',
                  'base_component_ids.uom_id', 'rounding_increment', 'rounding_mode', 'qty_override', 'override_qty',
@@ -373,8 +378,13 @@ class SipanelQuoteScopeComponent(models.Model):
         self.ensure_one()
         if self.disclosure != 'customer_eligible' or self.active_state != 'active':
             return None
-        label = self.customer_label_fa if (language or '').startswith('fa') else self.customer_label_en
-        label = label or (self.customer_label_fa or self.customer_label_en)
+        # Prefer the term resolved when the snapshot was taken. Revisions created
+        # before STEP 2A have no resolved term, so they keep the historical
+        # language-pair lookup and their sealed artifacts stay byte-identical.
+        label = self.customer_label_resolved
+        if not label:
+            label = self.customer_label_fa if (language or '').startswith('fa') else self.customer_label_en
+            label = label or (self.customer_label_fa or self.customer_label_en)
         if not label:
             return None
         payload = {'label': label}

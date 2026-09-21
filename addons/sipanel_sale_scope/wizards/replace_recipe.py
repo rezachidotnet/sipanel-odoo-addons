@@ -45,10 +45,13 @@ class SipanelWizardReplaceRecipe(models.TransientModel):
         Comp = self.env['sipanel.quote.scope.component'].sudo()
         id_map = {}
         for l in self.version_id.recipe_line_ids.sorted(lambda l: (l.sequence, l.id)):
+            c_terms, c_resolved, c_prov = snapshot_customer_text(l, 'customer_label', rev.language or 'en_US')
+            c_prov['exempt'] = (l.disclosure == 'internal_only') or not l.customer_eligible
             cvals = {
                 'revision_id': rev.id, 'source_occurrence_key': l.occurrence_key, 'source_line_id': l.id, 'origin': 'master',
                 'sequence': l.sequence, 'kind': l.kind, 'product_id': l.product_id.id, 'description': l.internal_description,
-                'customer_label_fa': l.customer_label_fa, 'customer_label_en': l.customer_label_en, 'spec_json': l.spec_json,
+                'customer_label_fa': c_terms.get('fa_IR', False), 'customer_label_en': c_terms.get('en_US', False),
+                'customer_label_resolved': c_resolved, 'label_provenance': c_prov, 'spec_json': l.spec_json,
                 'uom_id': l.uom_id.id, 'uom_name_snapshot': l.uom_id.with_context(lang=rev.language or 'en_US').name, 'dimension_family': l.dimension_family,
                 'basis': l.basis, 'rate': l.rate, 'fixed_qty': l.fixed_qty, 'percent': l.percent,
                 'manual_qty': l.manual_qty_default, 'manual_qty_set': bool(l.basis == 'manual' and l.manual_qty_default),

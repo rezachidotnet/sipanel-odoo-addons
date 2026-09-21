@@ -8,7 +8,7 @@ from .sipanel_tools import guard, guard_ctx
 
 from .sipanel_tools import (BASIS, CERTAINTY, DIMENSION_FAMILY, DISCLOSURE, EXECUTION_MODE, KIND,
                             NO_ACTION_REASON, PERCENT_BASES, PLACEMENT, RESPONSIBILITY, ROUNDING_MODE,
-                            find_cycle)
+                            find_cycle, translation_map)
 
 
 class SipanelScopeRecipeLine(models.Model):
@@ -25,8 +25,8 @@ class SipanelScopeRecipeLine(models.Model):
     kind = fields.Selection(KIND, required=True, default='product')
     product_id = fields.Many2one('product.product', ondelete='restrict')
     internal_description = fields.Text()
-    customer_label_fa = fields.Char()
-    customer_label_en = fields.Char()
+    # STEP 2A: one native translatable customer label (see scope_version.py).
+    customer_label = fields.Char(string='Customer label', translate=True)
     customer_eligible = fields.Boolean(default=False)
     spec_json = fields.Json()
     uom_id = fields.Many2one('uom.uom', required=True, ondelete='restrict')
@@ -138,6 +138,14 @@ class SipanelScopeRecipeLine(models.Model):
         self._check_version_draft('modify')
         return super().write(vals)
 
+    def update_field_translations(self, field_name, translations, *args, **kwargs):
+        """Translations of a released recipe follow the same immutability as its
+        other content. Odoo's translation dialog writes the jsonb column without
+        going through `write`, so the draft check is repeated here."""
+        if self._fields[field_name].translate:
+            self._check_version_draft('translate')
+        return super().update_field_translations(field_name, translations, *args, **kwargs)
+
     @api.ondelete(at_uninstall=False)
     def _unlink_except_draft(self):
         self._check_version_draft('delete')
@@ -146,12 +154,26 @@ class SipanelScopeRecipeLine(models.Model):
             if dependents:
                 raise UserError(self.env._("Line %s is a base of a percent line; remove that reference first.", l.display_name))
 
+    def _content_payload_v1(self):
+        """Historical line payload, only for verifying pre-STEP-2A release checksums.
+
+        Reconstructed from the migrated translation map - see
+        SipanelScopeVersion._compute_content_checksum_v1 for why that is exact.
+        """
+        self.ensure_one()
+        terms = translation_map(self, 'customer_label')
+        payload = self._content_payload()
+        payload.pop('customer_label', None)
+        payload['label_fa'] = terms.get('fa_IR') or False
+        payload['label_en'] = terms.get('en_US') or False
+        return payload
+
     def _content_payload(self):
         self.ensure_one()
         return {
             'key': self.occurrence_key, 'seq': self.sequence, 'kind': self.kind,
             'product': self.product_id.id, 'desc': self.internal_description,
-            'label_fa': self.customer_label_fa, 'label_en': self.customer_label_en,
+            'customer_label': translation_map(self, 'customer_label'),
             'eligible': self.customer_eligible, 'spec': self.spec_json,
             'uom': self.uom_id.id, 'family': self.dimension_family, 'basis': self.basis,
             'rate': self.rate, 'fixed': self.fixed_qty, 'manual': self.manual_qty_default, 'percent': self.percent,

@@ -160,6 +160,11 @@ class SaleOrder(models.Model):
                 'quote_scope_id': scope.id, 'revision': 1, 'language': rev.language, 'quote_uom_id': rev.quote_uom_id.id,
                 'base_uom_id': rev.base_uom_id.id, 'uom_factor': rev.uom_factor, 'label_fa': rev.label_fa, 'label_en': rev.label_en,
                 'customer_description_fa': rev.customer_description_fa, 'customer_description_en': rev.customer_description_en,
+                # the duplicate keeps the ORIGINAL snapshot and its provenance: it is a
+                # copy of this quotation, not a fresh resolution against today's master
+                'label_resolved': rev.label_resolved, 'customer_description_resolved': rev.customer_description_resolved,
+                'resolved_language': rev.resolved_language, 'source_version_checksum': rev.source_version_checksum,
+                'translation_provenance': rev.translation_provenance,
                 'spec_json': rev.spec_json, 'final_note': rev.final_note, 'generated_note': rev.generated_note,
                 'note_manually_edited': rev.note_manually_edited, 'system_id': rev.system_id.id,
                 'fx_source_currency_id': new_order.currency_id.id, 'fx_rate': 1.0, 'fx_date': fields.Date.today(), 'fx_source': 'company_currency',

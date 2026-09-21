@@ -153,7 +153,7 @@ class TestGovernance(SipanelSaleCase):
         self.assertTrue(text_art)
         # live master translation change never touches the sealed artifact
         v2 = self.env['sipanel.scope.version'].browse(self.v1.action_new_version()['res_id'])
-        v2.write({'label_en': 'RENAMED'})
+        v2.write({'customer_label': 'RENAMED'})
         v2.action_release()
         self.assertNotIn('RENAMED', text_art.content_text)
         self.assertIn('Gutter accessories', text_art.content_text)

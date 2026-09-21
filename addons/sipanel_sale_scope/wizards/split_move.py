@@ -158,6 +158,10 @@ class SipanelWizardSplitMove(models.TransientModel):
             'quote_scope_id': dest.id, 'revision': 1, 'language': src_rev.language, 'quote_uom_id': src_rev.quote_uom_id.id,
             'base_uom_id': src_rev.base_uom_id.id, 'uom_factor': src_rev.uom_factor,
             'label_fa': self.new_label or src_rev.label_fa, 'label_en': self.new_label or src_rev.label_en,
+            'label_resolved': self.new_label or src_rev.label_resolved,
+            'customer_description_resolved': src_rev.customer_description_resolved,
+            'resolved_language': src_rev.resolved_language, 'source_version_checksum': src_rev.source_version_checksum,
+            'translation_provenance': src_rev.translation_provenance,
             'fx_source_currency_id': order.currency_id.id, 'fx_rate': 1.0, 'fx_date': fields.Date.today(), 'fx_source': 'company_currency',
         })
         dest.write({'current_revision_id': rev.id})

@@ -52,7 +52,7 @@
                                 <list>
                                     <field name="revision"/>
                                     <field name="state" widget="badge"/>
-                                    <field name="label_fa"/>
+                                    <field name="customer_label"/>
                                     <field name="anchor_product_id"/>
                                     <field name="released_date"/>
                                 </list>

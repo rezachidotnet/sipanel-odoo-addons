@@ -2,7 +2,7 @@
 {
     'name': 'SIPANEL Commercial Scope Core',
     'summary': 'Scope identity, versions, recipe lines, release gate, audit, role groups (Slice A)',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.1.0',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
     'license': 'LGPL-3',

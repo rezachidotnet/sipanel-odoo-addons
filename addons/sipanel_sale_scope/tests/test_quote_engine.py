@@ -54,14 +54,14 @@ class TestQuoteEngine(SipanelSaleCase):
         v2 = self.env['sipanel.scope.version'].browse(self.v1.action_new_version()['res_id'])
         self.env['sipanel.scope.recipe.line'].create({'version_id': v2.id, 'product_id': self.p_bracket.id, 'uom_id': self.uom_unit.id,
                                                       'dimension_family': 'count', 'basis': 'fixed', 'fixed_qty': 1, 'activity_id': self.act_ins.id,
-                                                      'execution_mode': 'stock_issue', 'customer_label_en': 'Outlet', 'customer_eligible': True})
-        v2.write({'label_en': 'Gutter accessories V2'})
+                                                      'execution_mode': 'stock_issue', 'customer_label': 'Outlet', 'customer_eligible': True})
+        v2.write({'customer_label': 'Gutter accessories V2'})
         v2.action_release()
         self.p_gutter.write({'standard_price': 999.0})
         rev.invalidate_recordset()
         after = [c._snapshot_payload() for c in rev.component_ids.sorted('id')]
         self.assertEqual(before, after)
-        self.assertEqual(rev.label_en, 'Gutter accessories')
+        self.assertEqual(rev.label_en, 'Gutter accessories')  # frozen snapshot, not the renamed master
         self.assertAlmostEqual(rev.eligible_cost_total, 10734.0, places=4)
         self.assertEqual(scope.source_version_id, self.v1)
 
@@ -169,7 +169,8 @@ class TestQuoteEngine(SipanelSaleCase):
         self.assertEqual(scope.anchor_line_id.name, 'Manually edited customer note')
         self.assertFalse(rev.note_stale)
         bracket = self._comp(scope, self.p_bracket)
-        bracket.write({'customer_label_en': 'Heavy bracket'})
+        # snapshot component: the note is built from the resolved snapshot label
+        bracket.write({'customer_label_resolved': 'Heavy bracket'})
         self.assertTrue(rev.note_stale)
         self.assertEqual(rev.final_note, 'Manually edited customer note')
         rev.write({'note_reviewed': False}) if rev.note_reviewed else None

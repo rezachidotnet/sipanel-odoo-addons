@@ -2,6 +2,16 @@
 """Shared synthetic fixture for Slice A tests. All records are prefixed SIPANEL-PT (test discipline)."""
 import uuid
 
+
+def set_translation(record, field_name, en='', fa=None):
+    """Store customer text natively. en_US is ALWAYS passed: Odoo copies a
+    lone non-English term into the English source, which would silently send
+    Persian to an English customer."""
+    terms = {'en_US': en or ''}
+    if fa is not None:
+        terms['fa_IR'] = fa
+    record.update_field_translations(field_name, terms)
+
 from odoo.tests import TransactionCase, new_test_user
 
 TEST_BATCH = 'SIPANEL-PT-CORE'
@@ -60,7 +70,8 @@ class SipanelCoreCase(TransactionCase):
         # unique per run: an archived leftover with the same code (unique per company, archived included) must not break the suite
         scope = env['sipanel.scope'].create({'code': f'{code}-{uuid.uuid4().hex[:8]}', 'name': f'{TEST_BATCH} Gutter accessories', 'owner_user_id': cls.steward.id})
         v1 = env['sipanel.scope.version'].create({
-            'scope_id': scope.id, 'label_fa': 'متعلقات آبرو', 'label_en': 'Gutter accessories',
+            'scope_id': scope.id, 'customer_label': 'Gutter accessories',
+            'customer_description': 'Supply and installation of gutter accessories.',
             'base_uom_id': cls.uom_m.id, 'dimension_family': 'length',
             'anchor_product_id': cls.p_anchor.id, 'anchor_owner_mode': 'component_bridge_owner',
             'all_systems': True,
@@ -71,26 +82,35 @@ class SipanelCoreCase(TransactionCase):
         cls_ = holder
         cls_.l_gutter = L.create(dict(common, sequence=10, product_id=cls.p_gutter.id, uom_id=cls.uom_m.id, dimension_family='length',
                                      basis='per_scope_qty', rate=1.0, activity_id=cls.act_mfg.id, execution_mode='manufacture',
-                                     customer_label_fa='ناودان', customer_label_en='Gutter'))
+                                     customer_label='Gutter'))
         cls_.l_bracket = L.create(dict(common, sequence=20, product_id=cls.p_bracket.id, uom_id=cls.uom_unit.id, dimension_family='count',
                                       basis='per_scope_qty', rate=2.0, activity_id=cls.act_ins.id, execution_mode='stock_issue',
-                                      customer_label_fa='بست', customer_label_en='Bracket'))
+                                      customer_label='Bracket'))
         cls_.l_screw = L.create(dict(common, sequence=30, product_id=cls.p_screw.id, uom_id=cls.uom_unit.id, dimension_family='count',
                                     basis='per_scope_qty', rate=4.0, activity_id=cls.act_ins.id, execution_mode='stock_issue',
-                                    customer_label_fa='پیچ', customer_label_en='Screw'))
+                                    customer_label='Screw'))
         cls_.l_sealant = L.create(dict(common, sequence=40, product_id=cls.p_sealant.id, uom_id=cls.uom_unit.id, dimension_family='count',
                                       basis='manual', manual_qty_default=10.0, activity_id=cls.act_ins.id, execution_mode='stock_issue',
-                                      customer_label_fa='درزگیر', customer_label_en='Sealant'))
+                                      customer_label='Sealant'))
         cls_.l_labour = L.create(dict(common, sequence=50, product_id=cls.p_labour.id, uom_id=cls.uom_hour.id, dimension_family='time',
                                      basis='fixed', fixed_qty=8.0, activity_id=cls.act_ins.id, execution_mode='labour',
-                                     customer_label_fa='نصب', customer_label_en='Installation'))
+                                     customer_label='Installation'))
         cls_.l_crane = L.create(dict(common, sequence=60, product_id=cls.p_crane.id, uom_id=cls.uom_unit.id, dimension_family='count',
                                     basis='fixed', fixed_qty=1.0, activity_id=cls.act_eqp.id, execution_mode='equipment_service',
-                                    customer_label_fa='جرثقیل', customer_label_en='Crane'))
+                                    customer_label='Crane'))
         cls_.l_allow = L.create(dict(common, sequence=70, product_id=cls.p_screw.id, uom_id=cls.uom_unit.id, dimension_family='count',
                                     basis='percent_of_quantity', percent=5.0, base_line_ids=[(6, 0, [cls_.l_screw.id])],
                                     activity_id=cls.act_ins.id, execution_mode='stock_issue', customer_eligible=False,
                                     disclosure='internal_only'))
+        # native translations: the English term is the source, Persian is a stored
+        # translation. `set_translation` always passes en_US explicitly - omitting it
+        # makes Odoo copy the Persian term into the English source.
+        for line, fa in ((cls_.l_gutter, 'ناودان'), (cls_.l_bracket, 'بست'), (cls_.l_screw, 'پیچ'),
+                         (cls_.l_sealant, 'درزگیر'), (cls_.l_labour, 'نصب'), (cls_.l_crane, 'جرثقیل')):
+            set_translation(line, 'customer_label', en=line.customer_label, fa=fa)
+        set_translation(v1, 'customer_label', en='Gutter accessories', fa='متعلقات آبرو')
+        set_translation(v1, 'customer_description', en='Supply and installation of gutter accessories.',
+                        fa='تأمین و نصب متعلقات آبرو.')
         cls_.l_cont = L.create(dict(common, sequence=80, kind='product', product_id=cls.p_gutter.id, uom_id=cls.uom_m.id, dimension_family='length',
                                    basis='percent_of_cost', percent=2.0, base_line_ids=[(6, 0, [cls_.l_gutter.id, cls_.l_bracket.id])],
                                    cost_policy='derived', activity_id=cls.act_gen.id, execution_mode='no_action',

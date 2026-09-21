@@ -9,7 +9,7 @@
                 <field name="scope_id"/>
                 <field name="revision"/>
                 <field name="state" widget="badge"/>
-                <field name="label_fa"/>
+                <field name="customer_label"/>
                 <field name="anchor_product_id"/>
                 <field name="released_date"/>
             </list>
@@ -41,11 +41,12 @@
                             <field name="base_uom_id"/>
                             <field name="dimension_family"/>
                         </group>
-                        <group string="Customer labels">
-                            <field name="label_fa"/>
-                            <field name="label_en"/>
-                            <field name="customer_description_fa"/>
-                            <field name="customer_description_en"/>
+                        <group string="Customer text">
+                            <!-- STEP 2A: one field per customer-facing text. Odoo renders its
+                                 standard translation control beside a translate=True field as
+                                 soon as more than one language is active. -->
+                            <field name="customer_label"/>
+                            <field name="customer_description"/>
                         </group>
                         <group string="Applicability">
                             <field name="all_systems"/>
@@ -88,7 +89,7 @@
                                     <field name="no_action_reason"/>
                                     <field name="cost_policy"/>
                                     <field name="manual_cost_default" groups="sipanel_commercial_scope_core.group_scope_cost_viewer"/>
-                                    <field name="customer_label_fa"/>
+                                    <field name="customer_label"/>
                                     <field name="customer_eligible"/>
                                     <field name="disclosure"/>
                                     <field name="responsibility" optional="hide"/>
