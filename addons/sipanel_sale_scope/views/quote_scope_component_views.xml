@@ -58,9 +58,21 @@
                             <field name="provisional_basis"/>
                             <field name="disclosure"/>
                             <field name="treatment_preset"/>
+                            <field name="separately_billable"/>
                             <field name="customer_label_resolved"/>
                             <field name="customer_label_fa" optional="hide"/>
                             <field name="customer_label_en" optional="hide"/>
+                        </group>
+                        <group string="Selling price (separately billable)"
+                               invisible="not separately_billable">
+                            <!-- Only an own-line component is priced on its own; an
+                                 included one is paid for through the anchor line. -->
+                            <field name="sell_price_unit"/>
+                            <field name="sell_price_source"/>
+                            <field name="sell_price_status"/>
+                            <field name="sell_known_zero_reason"
+                                   invisible="sell_price_status != 'known_zero'"/>
+                            <field name="sell_amount"/>
                         </group>
                         <group string="Execution intent">
                             <field name="activity_id"/>

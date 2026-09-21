@@ -148,6 +148,13 @@ class SipanelQuoteScope(models.Model):
             add('NOTE_STALE', _("Customer note is stale and not reviewed."))
         if not rev.final_note:
             add('NOTE_EMPTY', _("Customer note is empty; generate it."), 'warn')
+        # STEP 2B: a separately-billable component that cannot become a real,
+        # invoiceable customer line keeps the quotation working
+        for code, msg in rev._projection_blocking_issues():
+            add(code, msg)
+        recon = rev.reconciliation_json or {}
+        for problem in recon.get('problems', []):
+            add('SB_RECONCILIATION', _("Scope line reconciliation: %s", problem))
         return issues
 
     # ------------------------------------------------------------ governed acceptance transition (AM-01-R2, GAP-C02/C03)
@@ -179,9 +186,27 @@ class SipanelQuoteScope(models.Model):
             line.with_context(**guard_ctx('sipanel_governed_transition')).write({'product_uom_qty': qty})
         self.write({'acceptance_state': new_state,
                     'acceptance_reference': f"{actor}:{rev.id}:{uuid.uuid4().hex[:12]}" if new_state == 'accepted' else self.acceptance_reference})
+        # An optional scope's separately-billable lines follow the same decision:
+        # zero while the option is only offered, governed quantity once accepted.
+        # Repeating the transition is idempotent, so retries cannot duplicate or
+        # double-count anything.
+        self._sync_optional_projection(rev, accepted=new_state == 'accepted')
         self.env['sipanel.scope.audit.event'].log(
             self, 'acceptance_transition', before=before, after={'acceptance_state': new_state, 'qty': qty, 'actor': actor},
             reason=reason, revision_ref=rev.display_name)
+        return True
+
+    def _sync_optional_projection(self, rev, accepted):
+        """Propagate an optional acceptance to the projected lines of that scope."""
+        self.ensure_one()
+        lines = self.env['sale.order.line'].search([
+            ('sipanel_source_revision_id', '=', rev.id), ('sipanel_is_generated', '=', True)])
+        for line in lines:
+            comp = line.sipanel_source_component_id
+            qty = (comp.final_qty or 0.0) if accepted else 0.0
+            if abs((line.product_uom_qty or 0.0) - qty) > 1e-6:
+                with self.env.protecting([line._fields['discount'], line._fields['price_unit']], line):
+                    line.with_context(**guard_ctx('sipanel_projection')).write({'product_uom_qty': qty})
         return True
 
     # ------------------------------------------------------------ actions
@@ -293,6 +318,8 @@ class SipanelQuoteScope(models.Model):
                 'resolution_owner_id': l.resolution_owner_id.id, 'resolution_note': l.resolution_note,
                 'resolution_state': 'open' if l.kind == 'estimate_only' else 'not_required',
             }
+            # governed selling price snapshot: only an own-line component has one
+            cvals.update(Comp._sell_price_snapshot_vals(l.product_id, order, l.uom_id, l.placement))
             if l.responsibility == 'customer':
                 cvals['cost_source'] = 'not_applicable'
             elif l.cost_policy == 'derived':

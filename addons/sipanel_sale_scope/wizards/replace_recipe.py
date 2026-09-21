@@ -61,6 +61,7 @@ class SipanelWizardReplaceRecipe(models.TransientModel):
                 'certainty': l.certainty, 'disclosure': l.disclosure, 'resolution_owner_id': l.resolution_owner_id.id,
                 'resolution_note': l.resolution_note, 'resolution_state': 'open' if l.kind == 'estimate_only' else 'not_required',
             }
+            cvals.update(Comp._sell_price_snapshot_vals(l.product_id, rev.order_id, l.uom_id, l.placement))
             if l.responsibility == 'customer':
                 cvals['cost_source'] = 'not_applicable'
             elif l.cost_policy == 'derived':

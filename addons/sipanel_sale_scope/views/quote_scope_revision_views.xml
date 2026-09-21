@@ -70,6 +70,13 @@
                             <field name="customer_description_fa" optional="hide"/>
                             <field name="customer_description_en" optional="hide"/>
                         </group>
+                        <group string="Separately billable (STEP 2B)">
+                            <field name="projected_line_count"/>
+                            <field name="anchor_amount"/>
+                            <field name="separate_amount"/>
+                            <field name="reconciliation_ok"/>
+                            <field name="reconciliation_json" widget="json" groups="base.group_no_one"/>
+                        </group>
                         <group string="Seal">
                             <field name="sealed_hash"/>
                             <field name="sealed_date"/>

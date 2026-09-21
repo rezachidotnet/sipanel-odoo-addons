@@ -237,7 +237,14 @@ class SipanelQuoteScopeRevision(models.Model):
         lines = [head] if head else []
         if desc:
             lines.append(desc)
-        for row in self._eligible_rows():
+        for comp in self.component_ids.sorted(lambda c: (c.sequence, c.id)):
+            # a separately-billable component is now a real customer line; repeating
+            # it as a note bullet would show the customer the same thing twice
+            if comp.separately_billable:
+                continue
+            row = comp._customer_payload(self.language)
+            if not row:
+                continue
             txt = row['label']
             if 'qty' in row:
                 qty = row['qty']

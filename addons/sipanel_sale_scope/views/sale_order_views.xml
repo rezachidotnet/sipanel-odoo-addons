@@ -7,6 +7,11 @@
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
                 <button name="action_sipanel_add_scope" type="object" string="Add Scope" invisible="state not in ('draft', 'sent')" groups="sipanel_sale_scope.group_scope_sales,sipanel_commercial_scope_core.group_scope_estimator"/>
+                <!-- Synchronisation is automatic on every governed transition; this is a
+                     visible, repeatable fallback, not the primary mechanism. -->
+                <button name="action_sipanel_sync_scope_lines" type="object" string="Synchronise Scope Lines"
+                        invisible="state not in ('draft', 'sent') or not sipanel_has_scopes"
+                        groups="sipanel_sale_scope.group_scope_sales,sipanel_commercial_scope_core.group_scope_estimator"/>
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                 <button name="action_sipanel_open_scopes" type="object" class="oe_stat_button" icon="fa-cubes" invisible="not sipanel_has_scopes">
@@ -44,6 +49,14 @@
             <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_qty']" position="before">
                 <field name="sipanel_is_anchor" column_invisible="1"/>
                 <field name="sipanel_guard_state" column_invisible="1"/>
+                <!-- STEP 2B: let the operator tell the line kinds apart at a glance.
+                     The origin key is technical and stays in developer mode. -->
+                <field name="sipanel_is_generated" column_invisible="1"/>
+                <field name="sipanel_placement_snapshot" string="Scope line" optional="show"
+                       widget="badge"/>
+                <field name="sipanel_certainty_snapshot" string="Certainty" optional="hide"/>
+                <field name="sipanel_invoice_gate" string="Invoice hold" optional="show"/>
+                <field name="sipanel_origin_key" optional="hide" groups="base.group_no_one"/>
             </xpath>
         </field>
     </record>

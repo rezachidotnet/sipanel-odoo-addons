@@ -4,12 +4,15 @@
 These tests drive the ORM the way an operator, an import, an RPC client and the
 translation dialog do. They never assert on template or view source.
 """
+from unittest.mock import patch
+
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from ..models.legacy_translation_backfill import backfill, plan_record
-from ..models.sipanel_tools import (has_translation, resolve_customer_text,
-                                    stored_translations, translation_map)
+from ..models.sipanel_tools import (MissingTranslationAccessor, has_translation,
+                                    resolve_customer_text, stored_translations,
+                                    translation_map)
 from .common import SipanelCoreCase, set_translation
 
 
@@ -66,6 +69,30 @@ class TestNativeMasterTranslation(SipanelCoreCase):
         self.assertTrue(is_fallback)
         self.assertEqual(used, 'en_US')
         self.assertEqual(value, 'Gutter accessories')
+
+    def test_accessor_unavailability_fails_closed(self):
+        """P1: if a future Odoo drops the raw accessor we must raise, never guess.
+
+        The tempting fallback - read the field under each language and treat a
+        non-empty value as a stored term - reports the en_US fallback as a
+        translation, so every language would look ready and a Persian customer
+        could be sent English silently. Simulate the accessor being gone and
+        assert we refuse rather than degrade.
+        """
+        version = self._draft_version()
+        set_translation(version, 'customer_label', en='Gutter accessories')
+        field = version._fields['customer_label']
+        self.assertTrue(hasattr(field, '_get_stored_translations'),
+                        'installed Odoo 19 must still expose the accessor')
+        # patch the class, not the instance: Field objects may use __slots__
+        with patch.object(type(field), '_get_stored_translations', None):
+            with self.assertRaises(MissingTranslationAccessor):
+                stored_translations(version, 'customer_label')
+            with self.assertRaises(MissingTranslationAccessor):
+                has_translation(version, 'customer_label', 'fa_IR')
+        # and no behaviour change once it is back
+        self.assertEqual(stored_translations(version, 'customer_label'),
+                         {'en_US': 'Gutter accessories'})
 
     def test_persian_only_master_does_not_leak_into_the_english_source(self):
         version = self._draft_version()

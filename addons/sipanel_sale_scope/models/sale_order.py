@@ -130,6 +130,37 @@ class SaleOrder(models.Model):
         self._sipanel_accept_current_revisions(reference=guard(self.env, 'sipanel_acceptance_reference'))
         return super().action_confirm()
 
+    # ---------------------------------------------------------- STEP 2B invoice gate
+    def _sipanel_check_seal_integrity_for_invoice(self):
+        """Refuse to invoice governed Scope content that no longer matches what the
+        customer accepted.
+
+        The acceptance and confirmation gates already refuse drift
+        (quote_scope_revision.action_accept and, through it, action_confirm);
+        this is the third and last gate, because an order can still be edited
+        between confirmation and invoicing.
+        """
+        for o in self.filtered('sipanel_has_scopes'):
+            drifted = []
+            for s in o.sipanel_quote_scope_ids.filtered('active'):
+                rev = s.accepted_revision_id or s.current_revision_id
+                if not rev or rev.state == 'working' or not rev.sealed_hash:
+                    continue
+                if rev._current_seal_hash() != rev.sealed_hash:
+                    drifted.append(f"{s.display_name} (sealed {rev.sealed_hash[:12]}…)")
+            if drifted:
+                raise UserError(self.env._(
+                    "Order %(o)s cannot be invoiced: the governed Scope content changed after "
+                    "acceptance:\n%(l)s\nCreate an amendment revision and reseal, then invoice.",
+                    o=o.name, l='\n'.join('- ' + d for d in drifted)))
+
+    def _create_invoices(self, grouped=False, final=False, date=None):
+        self._sipanel_check_seal_integrity_for_invoice()
+        # let the account.move.line provenance guard know this is the governed
+        # Quotation -> Confirmation -> Create Invoice path
+        return super(SaleOrder, self.with_context(sipanel_from_sale_invoice=True))._create_invoices(
+            grouped=grouped, final=final, date=date)
+
     def _action_cancel(self):
         for o in self.filtered('sipanel_has_scopes'):
             self.env['sipanel.scope.audit.event'].log(o, 'order_cancel', summary='Scope revisions retained; nothing deleted.')

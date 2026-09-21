@@ -159,8 +159,23 @@ def guard(env, name):
 # returns the raw jsonb map without applying the fallback
 # (odoo/orm/fields_textual.py). It is module-private but it is an ORM accessor,
 # not hand-written translation SQL: it flushes the record and reads back the
-# column Odoo itself wrote. We keep the dependency in this one place and fall
-# back to a conservative comparison if a future version removes it.
+# column Odoo itself wrote. The dependency is kept in this one place.
+#
+# If a future Odoo removes it we FAIL CLOSED rather than degrade. The obvious
+# degradation - reading the field under each language context and treating a
+# non-empty value as a stored term - is exactly wrong: that read returns the
+# en_US fallback, so every language would look translated and a Persian
+# customer could be sent English text with no warning. A hard error is
+# recoverable by a developer; a silent mistranslation on a sent quotation is
+# not.
+
+class MissingTranslationAccessor(RuntimeError):
+    """The ORM no longer exposes a raw stored-translation accessor.
+
+    Deliberately a technical error, not a UserError: it means the code must be
+    ported, and no business decision can be taken while it is raised.
+    """
+
 
 def stored_translations(record, field_name):
     """Raw {lang: term} actually stored for a translatable field, no fallback.
@@ -175,14 +190,15 @@ def stored_translations(record, field_name):
     if not record.id:
         return {}
     getter = getattr(field, '_get_stored_translations', None)
-    if getter is None:  # pragma: no cover - guard for a future ORM change
-        raw = {}
-        for code, _name in record.env['res.lang'].get_installed():
-            value = record.with_context(lang=code)[field_name]
-            if value:
-                raw[code] = value
-    else:
-        raw = getter(record) or {}
+    if getter is None:
+        raise MissingTranslationAccessor(
+            f"This Odoo build has no {type(field).__name__}._get_stored_translations, "
+            f"so a stored translation of {record._name}.{field_name} cannot be told "
+            f"apart from the en_US fallback. SIPANEL refuses to guess: customer-facing "
+            f"language readiness depends on this distinction. Port "
+            f"sipanel_tools.stored_translations() to the new ORM accessor."
+        )
+    raw = getter(record) or {}
     return {lang: term.strip() for lang, term in raw.items()
             if isinstance(term, str) and term.strip()}
 

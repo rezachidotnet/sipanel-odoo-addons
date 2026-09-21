@@ -21,6 +21,13 @@ ORIGIN = [('master', 'Master'), ('added', 'Added'), ('overridden', 'Overridden')
 COST_SOURCE = [('product_cost', 'Product cost'), ('manual_estimate', 'Manual estimate'), ('derived', 'Derived'),
                ('not_applicable', 'Not applicable')]
 COST_STATUS = [('known', 'Known'), ('known_zero', 'Known zero'), ('missing', 'Missing'), ('not_applicable', 'Not applicable')]
+# Revenue side (STEP 2B). Deliberately mirrors COST_STATUS: a zero selling price
+# with a recorded reason is a commercial decision, a zero with no reason is
+# missing evidence and must never be sent to a customer as if it were free.
+SELL_PRICE_SOURCE = [('product_list', 'Product sales price'), ('manual', 'Manual'),
+                     ('not_applicable', 'Not applicable')]
+SELL_PRICE_STATUS = [('known', 'Known'), ('known_zero', 'Known zero'), ('missing', 'Missing'),
+                     ('not_applicable', 'Not applicable')]
 RESOLUTION = [('open', 'Open'), ('resolved_product', 'Resolved to product'), ('approved_new_product', 'Approved new product'),
               ('allowance', 'Allowance'), ('customer', 'Customer'), ('deferred', 'Deferred'), ('not_required', 'Not required')]
 DRIVER_FIELDS = ('basis', 'rate', 'fixed_qty', 'manual_qty', 'percent', 'base_component_ids', 'uom_id', 'rounding_increment', 'rounding_mode')
@@ -99,6 +106,22 @@ class SipanelQuoteScopeComponent(models.Model):
                                   recursive=True, groups=COST_GROUP)
     eligible_for_rollup = fields.Boolean(compute='_compute_eligible', store=True)
     stale_cost = fields.Boolean(compute='_compute_stale_cost', groups=COST_GROUP)
+    # ---- governed selling price (STEP 2B). Visible to Sales: this is customer-facing
+    # revenue, not cost, so it is NOT behind COST_GROUP.
+    sell_price_unit = fields.Monetary(currency_field='currency_id',
+                                      help="Governed selling price per component unit, in the quotation currency.")
+    sell_price_source = fields.Selection(SELL_PRICE_SOURCE, required=True, default='product_list')
+    sell_price_status = fields.Selection(SELL_PRICE_STATUS, compute='_compute_sell_price_status', store=True)
+    sell_known_zero_reason = fields.Text(groups=REASON_GROUPS,
+                                         help="Why this component is deliberately sold at zero.")
+    sell_price_user_id = fields.Many2one('res.users', readonly=True)
+    sell_price_date = fields.Datetime(readonly=True)
+    sell_price_snapshot_date = fields.Datetime(readonly=True,
+                                               help="When the selling price was frozen from the product.")
+    separately_billable = fields.Boolean(compute='_compute_separately_billable', store=True,
+                                         help="Derived from the treatment axes; placement=own_line is the authority.")
+    sell_amount = fields.Monetary(currency_field='currency_id', compute='_compute_sell_amount', store=True,
+                                  help="Governed selling amount of this component's own customer line.")
     # treatment axes (AM-02)
     responsibility = fields.Selection(RESPONSIBILITY, required=True, default='sipanel')
     placement = fields.Selection(PLACEMENT, required=True, default='included_parent')
@@ -201,6 +224,43 @@ class SipanelQuoteScopeComponent(models.Model):
             else:
                 c.cost_amount = (c.final_qty or 0.0) * (c.unit_cost or 0.0) * (c.cost_uom_factor or 1.0)
 
+    # ------------------------------------------------------------ separately billable (STEP 2B)
+    @api.depends('responsibility', 'placement', 'disclosure', 'active_state')
+    def _compute_separately_billable(self):
+        """placement == 'own_line' is the installed representation of
+        "billed separately"; no second enum is introduced. The other axes are
+        applied orthogonally: a customer-supplied or internal-only component is
+        never a customer revenue line, whatever its placement says."""
+        for c in self:
+            c.separately_billable = (
+                c.placement == 'own_line'
+                and c.responsibility == 'sipanel'
+                and c.disclosure == 'customer_eligible'
+                and c.active_state == 'active'
+            )
+
+    @api.depends('separately_billable', 'sell_price_unit', 'sell_known_zero_reason',
+                 'sell_price_source', 'kind', 'product_id')
+    def _compute_sell_price_status(self):
+        for c in self:
+            if not c.separately_billable or c.sell_price_source == 'not_applicable':
+                c.sell_price_status = 'not_applicable'
+            elif c.kind == 'estimate_only' and not c.product_id:
+                # an unresolved estimate has no governed price by definition
+                c.sell_price_status = 'missing'
+            elif float_is_zero(c.sell_price_unit or 0.0, precision_digits=6):
+                c.sell_price_status = 'known_zero' if c.sell_known_zero_reason else 'missing'
+            else:
+                c.sell_price_status = 'known'
+
+    @api.depends('separately_billable', 'final_qty', 'sell_price_unit', 'sell_price_status')
+    def _compute_sell_amount(self):
+        for c in self:
+            if not c.separately_billable or c.sell_price_status in ('missing', 'not_applicable'):
+                c.sell_amount = 0.0
+            else:
+                c.sell_amount = (c.final_qty or 0.0) * (c.sell_price_unit or 0.0)
+
     @api.depends('responsibility', 'active_state', 'origin', 'acceptance', 'placement')
     def _compute_eligible(self):
         for c in self:
@@ -279,6 +339,7 @@ class SipanelQuoteScopeComponent(models.Model):
         recs = super().create(vals_list)
         recs.mapped('revision_id')._check_working('add components to')
         recs.mapped('revision_id')._reset_review_if_stale()
+        recs._sipanel_resync_projection()
         return recs
 
     def write(self, vals):
@@ -295,10 +356,34 @@ class SipanelQuoteScopeComponent(models.Model):
                         c, 'override_qty', before={'final_qty': before}, after={'final_qty': c.final_qty},
                         reason=c.sudo().override_reason, revision_ref=c.revision_id.display_name)
             self.mapped('revision_id')._reset_review_if_stale()
+            self._sipanel_resync_projection()
             return True
         res = super().write(vals)
         if not guard(self.env, 'sipanel_seal_transaction'):
             self.mapped('revision_id')._reset_review_if_stale()
+        self._sipanel_resync_projection()
+        return res
+
+    def _sipanel_resync_projection(self):
+        """Keep the separately-billable Sale Lines in step, automatically.
+
+        Every governed transition - add scope, refresh, replace recipe, split,
+        move, treatment change, tombstone - ends in a component create or write,
+        so hooking here covers them all without each wizard remembering to call
+        the projection. The upsert is idempotent, so being called several times
+        in one transaction is harmless.
+        """
+        if guard(self.env, 'sipanel_projection'):
+            return False
+        revisions = self.mapped('revision_id').filtered(lambda r: r.state == 'working')
+        if revisions:
+            revisions._sync_separately_billable_lines()
+        return True
+
+    def unlink(self):
+        revisions = self.mapped('revision_id')
+        res = super().unlink()
+        revisions.exists().filtered(lambda r: r.state == 'working')._sync_separately_billable_lines()
         return res
 
     @api.ondelete(at_uninstall=False)
@@ -353,6 +438,54 @@ class SipanelQuoteScopeComponent(models.Model):
             'cost_uom_factor': factor, 'cost_source_date': fields.Datetime.now(),
             'cost_source_company_id': company.id, 'product_value_id': pv.id or False,
         }
+
+    @api.model
+    def _sell_price_snapshot_vals(self, product, order, target_uom, placement):
+        """Freeze the governed selling price for a component, with provenance.
+
+        Uses the order's own pricelist through Odoo's native price computation,
+        so currency and any customer pricing stay native - no hardcoded rate and
+        no tax arithmetic here; taxes are applied by the generated Sale Line.
+
+        Only an own-line component has a governed selling price: an INCLUDED
+        component is paid for through the anchor line, so giving it a price of
+        its own is what would create double counting.
+        """
+        if placement != 'own_line' or not product:
+            return {'sell_price_source': 'not_applicable', 'sell_price_unit': 0.0}
+        price = 0.0
+        try:
+            pricelist = order.pricelist_id
+            if pricelist:
+                price = pricelist._get_product_price(
+                    product, 1.0, uom=target_uom, date=order.date_order,
+                    currency=order.currency_id)
+            else:
+                price = product.with_company(order.company_id).list_price
+        except Exception:                      # noqa: BLE001 - pricing must never break the snapshot
+            price = product.with_company(order.company_id).list_price
+        return {
+            'sell_price_source': 'product_list',
+            'sell_price_unit': price or 0.0,
+            'sell_price_snapshot_date': fields.Datetime.now(),
+        }
+
+    def action_set_manual_sell_price(self, price, reason=None):
+        """Governed manual selling price. A zero price needs a recorded reason,
+        otherwise it stays 'missing' and keeps blocking the seal."""
+        for c in self:
+            c.revision_id._check_working('set the selling price of')
+            before = c.sell_price_unit
+            vals = {'sell_price_source': 'manual', 'sell_price_unit': price or 0.0,
+                    'sell_price_user_id': self.env.uid, 'sell_price_date': fields.Datetime.now()}
+            if reason:
+                vals['sell_known_zero_reason'] = reason
+            c.write(vals)
+            self.env['sipanel.scope.audit.event'].log(
+                c, 'sell_price', before={'sell_price_unit': before},
+                after={'sell_price_unit': c.sell_price_unit, 'status': c.sell_price_status},
+                reason=reason, revision_ref=c.revision_id.display_name)
+        return True
 
     def action_refresh_product_cost(self):
         for c in self.filtered(lambda c: c.cost_source == 'product_cost' and c.product_id):
