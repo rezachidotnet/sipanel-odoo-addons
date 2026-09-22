@@ -156,9 +156,10 @@ class SaleOrder(models.Model):
 
     def _create_invoices(self, grouped=False, final=False, date=None):
         self._sipanel_check_seal_integrity_for_invoice()
-        # let the account.move.line provenance guard know this is the governed
-        # Quotation -> Confirmation -> Create Invoice path
-        return super(SaleOrder, self.with_context(sipanel_from_sale_invoice=True))._create_invoices(
+        # Open the invoice-provenance guard for exactly this call. guard_ctx()
+        # carries a process-local token, so being inside this method - not merely
+        # claiming to be - is what lets account.move.line accept Scope provenance.
+        return super(SaleOrder, self.with_context(**guard_ctx('sipanel_invoice_trace')))._create_invoices(
             grouped=grouped, final=final, date=date)
 
     def _action_cancel(self):

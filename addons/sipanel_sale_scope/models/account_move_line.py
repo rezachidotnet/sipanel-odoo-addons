@@ -33,18 +33,29 @@ class AccountMoveLine(models.Model):
 
     @api.model
     def _sipanel_trace_guarded(self):
-        return guard(self.env, 'sipanel_projection') or guard(self.env, 'sipanel_invoice_trace')
+        """True only inside the genuine Sale -> Invoice execution path.
+
+        `guard()` checks a process-local token alongside the flag, so a context
+        key sent by an RPC client, an import or `sudo()` cannot satisfy it: the
+        caller would have to know a uuid4 generated in this Odoo process.
+        """
+        return guard(self.env, 'sipanel_invoice_trace')
 
     @api.model_create_multi
     def create(self, vals_list):
-        # The native Sale->Invoice flow fills these through _prepare_invoice_line,
-        # which runs inside Odoo's own create. Anything else - a hand-made invoice,
-        # an import, an RPC payload - must not be able to claim Scope provenance it
-        # does not have.
-        if not self.env.context.get('sipanel_from_sale_invoice'):
+        # Scope provenance is the audit trail that ties invoice revenue back to a
+        # governed component, so it is writable only by the code that actually
+        # performed the projection - never by anything a caller can assert.
+        #
+        # Earlier this trusted a plain `sipanel_from_sale_invoice` context key and
+        # additionally exempted any payload that supplied `sale_line_ids`. Both
+        # were forgeable: a context key can simply be sent, and `sale_line_ids`
+        # is ordinary user-writable data, so an RPC or import caller could point
+        # at any sale line and claim its Scope. Neither is consulted any more.
+        if not self._sipanel_trace_guarded():
             for vals in vals_list:
                 supplied = TRACE_FIELDS & set(vals)
-                if supplied and not vals.get('sale_line_ids'):
+                if supplied:
                     raise UserError(self.env._(
                         "Fields %s trace an invoice line back to a governed Scope and are set "
                         "only by the Quotation -> Confirmation -> Create Invoice flow.",

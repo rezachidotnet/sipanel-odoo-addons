@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Component snapshot + quantity/cost engine (GAP-B03..B07, C0-D07, C0-D08, C2-D03, C5-D01, AM-02, AM-04)."""
+import logging
 import uuid
 
 from odoo import api, fields, models
@@ -30,6 +31,8 @@ SELL_PRICE_STATUS = [('known', 'Known'), ('known_zero', 'Known zero'), ('missing
                      ('not_applicable', 'Not applicable')]
 RESOLUTION = [('open', 'Open'), ('resolved_product', 'Resolved to product'), ('approved_new_product', 'Approved new product'),
               ('allowance', 'Allowance'), ('customer', 'Customer'), ('deferred', 'Deferred'), ('not_required', 'Not required')]
+_logger = logging.getLogger(__name__)
+
 DRIVER_FIELDS = ('basis', 'rate', 'fixed_qty', 'manual_qty', 'percent', 'base_component_ids', 'uom_id', 'rounding_increment', 'rounding_mode')
 
 
@@ -118,6 +121,10 @@ class SipanelQuoteScopeComponent(models.Model):
     sell_price_date = fields.Datetime(readonly=True)
     sell_price_snapshot_date = fields.Datetime(readonly=True,
                                                help="When the selling price was frozen from the product.")
+    sell_price_error = fields.Char(readonly=True,
+                                   help="Why the customer pricelist could not produce a price. "
+                                        "While this is set the component has no governed price and "
+                                        "the quotation cannot be sent.")
     separately_billable = fields.Boolean(compute='_compute_separately_billable', store=True,
                                          help="Derived from the treatment axes; placement=own_line is the authority.")
     sell_amount = fields.Monetary(currency_field='currency_id', compute='_compute_sell_amount', store=True,
@@ -240,11 +247,15 @@ class SipanelQuoteScopeComponent(models.Model):
             )
 
     @api.depends('separately_billable', 'sell_price_unit', 'sell_known_zero_reason',
-                 'sell_price_source', 'kind', 'product_id')
+                 'sell_price_source', 'kind', 'product_id', 'sell_price_error')
     def _compute_sell_price_status(self):
         for c in self:
             if not c.separately_billable or c.sell_price_source == 'not_applicable':
                 c.sell_price_status = 'not_applicable'
+            elif c.sell_price_error and c.sell_price_source != 'manual':
+                # a failed pricelist calculation is missing evidence, not a
+                # deliberate zero: a "known zero" reason must not mask it
+                c.sell_price_status = 'missing'
             elif c.kind == 'estimate_only' and not c.product_id:
                 # an unresolved estimate has no governed price by definition
                 c.sell_price_status = 'missing'
@@ -453,21 +464,39 @@ class SipanelQuoteScopeComponent(models.Model):
         """
         if placement != 'own_line' or not product:
             return {'sell_price_source': 'not_applicable', 'sell_price_unit': 0.0}
-        price = 0.0
+        stamp = fields.Datetime.now()
+        pricelist = order.pricelist_id
+        if not pricelist:
+            # No pricelist is not a failed calculation - there is simply no
+            # customer price list to consult - so the product's own sales price
+            # is the governed price, and the provenance says so.
+            return {'sell_price_source': 'product_list',
+                    'sell_price_unit': product.with_company(order.company_id).list_price or 0.0,
+                    'sell_price_snapshot_date': stamp, 'sell_price_error': False}
         try:
-            pricelist = order.pricelist_id
-            if pricelist:
-                price = pricelist._get_product_price(
-                    product, 1.0, uom=target_uom, date=order.date_order,
-                    currency=order.currency_id)
-            else:
-                price = product.with_company(order.company_id).list_price
-        except Exception:                      # noqa: BLE001 - pricing must never break the snapshot
-            price = product.with_company(order.company_id).list_price
+            price = pricelist._get_product_price(
+                product, 1.0, uom=target_uom, date=order.date_order,
+                currency=order.currency_id)
+        except Exception as exc:               # noqa: BLE001
+            # FAIL CLOSED. Pricing can fail for reasons that matter commercially -
+            # a missing currency rate, a broken pricelist rule, an incompatible
+            # unit. Substituting product.list_price here would quietly invent a
+            # price in the wrong currency and send it to a customer. Instead the
+            # component keeps NO price, which makes sell_price_status 'missing'
+            # and blocks readiness and the seal until somebody decides.
+            _logger.warning(
+                "SIPANEL: pricelist %s could not price %s for order %s (%s: %s); "
+                "the component is left without a governed price.",
+                pricelist.display_name, product.display_name, order.display_name,
+                type(exc).__name__, exc)
+            return {'sell_price_source': 'product_list', 'sell_price_unit': 0.0,
+                    'sell_price_snapshot_date': stamp,
+                    'sell_price_error': f"{type(exc).__name__}: {exc}"[:200]}
         return {
             'sell_price_source': 'product_list',
             'sell_price_unit': price or 0.0,
-            'sell_price_snapshot_date': fields.Datetime.now(),
+            'sell_price_snapshot_date': stamp,
+            'sell_price_error': False,
         }
 
     def action_set_manual_sell_price(self, price, reason=None):
@@ -477,7 +506,8 @@ class SipanelQuoteScopeComponent(models.Model):
             c.revision_id._check_working('set the selling price of')
             before = c.sell_price_unit
             vals = {'sell_price_source': 'manual', 'sell_price_unit': price or 0.0,
-                    'sell_price_user_id': self.env.uid, 'sell_price_date': fields.Datetime.now()}
+                    'sell_price_user_id': self.env.uid, 'sell_price_date': fields.Datetime.now(),
+                    'sell_price_error': False}
             if reason:
                 vals['sell_known_zero_reason'] = reason
             c.write(vals)

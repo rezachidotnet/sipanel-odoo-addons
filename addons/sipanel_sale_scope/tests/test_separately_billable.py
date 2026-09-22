@@ -6,6 +6,7 @@ separately". These tests exercise it through the orthogonal axes, never through
 a product category and never through a new enum.
 """
 import uuid
+from unittest.mock import patch
 
 from odoo.exceptions import UserError
 from odoo.tests import tagged
@@ -645,3 +646,168 @@ class TestOperationalOwnership(SeparatelyBillableCase):
         moves = self.env['stock.move'].search([
             ('sale_line_id', 'in', self._lines_of(scope.current_revision_id).ids)])
         self.assertFalse(moves, 'a bridge-owned generated line must not create its own stock move')
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_sepbill', 'sipanel_hardening')
+class TestInvoiceProvenanceAuthorization(SeparatelyBillableCase):
+    """STEP 2B-HARDENING: Scope provenance on an invoice line is writable only by
+    the genuine Sale -> Invoice execution path.
+
+    The previous implementation trusted a plain `sipanel_from_sale_invoice`
+    context key and additionally exempted any payload carrying `sale_line_ids`.
+    A context key can simply be sent by an RPC client, and `sale_line_ids` is
+    ordinary user-writable data, so either was enough to forge provenance.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.move = self.env['account.move'].create({
+            'move_type': 'out_invoice', 'partner_id': self.partner.id})
+
+    def _line_vals(self, **extra):
+        vals = {'move_id': self.move.id, 'name': 'forged', 'quantity': 1.0,
+                'price_unit': 1.0, 'sipanel_origin_key': 'forged-key'}
+        vals.update(extra)
+        return vals
+
+    def test_plain_create_with_provenance_is_refused(self):
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].create(self._line_vals())
+
+    def test_raw_sipanel_invoice_trace_context_is_refused(self):
+        """A bare context flag, without the process-local token, proves nothing."""
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].with_context(
+                sipanel_invoice_trace=True).create(self._line_vals())
+
+    def test_raw_sipanel_from_sale_invoice_context_is_refused(self):
+        """The old escape hatch is gone and must stay gone."""
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].with_context(
+                sipanel_from_sale_invoice=True).create(self._line_vals())
+
+    def test_forged_sale_line_ids_no_longer_exempts_the_payload(self):
+        """Pointing at a real generated sale line must not confer its Scope."""
+        rev = self._add_scope().current_revision_id
+        real_line = self._lines_of(rev)[:1]
+        self.assertTrue(real_line)
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].create(self._line_vals(
+                sale_line_ids=[(6, 0, real_line.ids)],
+                sipanel_source_component_id=real_line.sipanel_source_component_id.id,
+                sipanel_source_revision_id=rev.id))
+
+    def test_sudo_is_refused(self):
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].sudo().create(self._line_vals())
+
+    def test_import_context_is_refused(self):
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].with_context(
+                import_file=True).create(self._line_vals())
+
+    def test_guessed_token_is_refused(self):
+        with self.assertRaises(UserError):
+            self.env['account.move.line'].with_context(
+                sipanel_invoice_trace=True,
+                sipanel_guard_token='guessed').create(self._line_vals())
+
+    def test_direct_write_of_provenance_remains_refused(self):
+        line = self.env['account.move.line'].create({
+            'move_id': self.move.id, 'name': 'ordinary', 'quantity': 1.0, 'price_unit': 1.0})
+        for env_ in (line, line.sudo(), line.with_context(sipanel_invoice_trace=True),
+                     line.with_context(import_file=True)):
+            with self.assertRaises(UserError):
+                env_.write({'sipanel_origin_key': 'forged-key'})
+        self.assertFalse(line.sipanel_origin_key)
+
+    def test_genuine_invoice_creation_still_carries_full_provenance(self):
+        """The guard must not break the flow it exists to protect."""
+        scope = self._add_scope()
+        rev = self._make_sendable(scope.current_revision_id)
+        scope.anchor_line_id.write({'price_unit': 1000.0})
+        scope.order_id._sipanel_seal_current_revisions(actor='test')
+        scope.order_id.action_confirm()
+        rev = scope.current_revision_id
+        invoice = scope.order_id._create_invoices()
+        comp = self._comp_of(rev, self.l_sep)
+        line = invoice.invoice_line_ids.filtered(lambda l: l.sipanel_source_component_id == comp)
+        self.assertEqual(len(line), 1)
+        for field_name in ('sipanel_source_revision_id', 'sipanel_source_quote_scope_id',
+                           'sipanel_source_scope_id', 'sipanel_origin_key',
+                           'sipanel_source_line_id'):
+            self.assertTrue(line[field_name], f'{field_name} must survive the guarded flow')
+        self.assertEqual(invoice.state, 'draft')
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_sepbill', 'sipanel_hardening')
+class TestPricelistFailsClosed(SeparatelyBillableCase):
+    """STEP 2B-HARDENING: a failed pricelist calculation must never be replaced
+    by product.list_price. That would invent a price - possibly in the wrong
+    currency - and send it to a customer."""
+
+    def _break_pricing(self):
+        """Simulate a genuine pricing failure (a missing currency rate is the
+        realistic one). Patch the registry class so the target does not depend on
+        where Odoo happens to define it."""
+        return patch.object(
+            type(self.env['product.pricelist']), '_get_product_price',
+            side_effect=UserError('no exchange rate for this currency'))
+
+    def test_failed_pricing_leaves_no_governed_price(self):
+        with self._break_pricing():
+            scope = self._add_scope()
+        rev = scope.current_revision_id
+        comp = self._comp_of(rev, self.l_sep)
+        self.assertTrue(comp.sell_price_error, 'the failure must be recorded, not swallowed')
+        self.assertEqual(comp.sell_price_unit, 0.0,
+                         'no price may be invented from the product list price')
+        self.assertEqual(comp.sell_price_status, 'missing')
+
+    def test_failed_pricing_blocks_readiness_and_the_seal(self):
+        with self._break_pricing():
+            scope = self._add_scope()
+        rev = scope.current_revision_id
+        codes = {c for c, _m in rev._projection_blocking_issues()}
+        self.assertIn('SB_PRICE_FAILED', codes)
+        blocking = {i['code'] for i in scope._readiness_issues() if i['level'] == 'block'}
+        self.assertIn('SB_PRICE_FAILED', blocking)
+        with self.assertRaises(UserError):
+            scope.order_id._sipanel_check_readiness()
+
+    def test_a_known_zero_reason_cannot_mask_a_pricing_failure(self):
+        with self._break_pricing():
+            scope = self._add_scope()
+        comp = self._comp_of(scope.current_revision_id, self.l_sep)
+        comp.write({'sell_known_zero_reason': 'looks deliberate but the pricelist failed'})
+        self.assertEqual(comp.sell_price_status, 'missing',
+                         'missing evidence must not be dressed up as a deliberate zero')
+
+    def test_a_governed_manual_price_clears_the_failure(self):
+        """Clearing one component clears exactly that component.
+
+        Every separately-billable component of the fixture fails pricing while
+        the pricelist is broken, so the issue list only empties once each one has
+        a governed price - which is the fail-closed behaviour working, not a
+        leftover.
+        """
+        with self._break_pricing():
+            scope = self._add_scope()
+        rev = scope.current_revision_id
+        comp = self._comp_of(rev, self.l_sep)
+        label = comp.customer_label_resolved or comp.name
+        comp.action_set_manual_sell_price(500.0)
+        self.assertFalse(comp.sell_price_error)
+        self.assertEqual(comp.sell_price_status, 'known')
+        still_failing = [m for c, m in rev._projection_blocking_issues() if c == 'SB_PRICE_FAILED']
+        self.assertFalse([m for m in still_failing if label in m],
+                         'this component must no longer be reported as unpriced')
+        # once every failed component is priced, the block is gone entirely
+        for other in rev.component_ids.filtered(lambda c: c.sell_price_error):
+            other.action_set_manual_sell_price(500.0)
+        self.assertNotIn('SB_PRICE_FAILED', {c for c, _m in rev._projection_blocking_issues()})
+
+    def test_successful_pricing_records_no_error(self):
+        comp = self._comp_of(self._add_scope().current_revision_id, self.l_sep)
+        self.assertFalse(comp.sell_price_error)
+        self.assertEqual(comp.sell_price_status, 'known')

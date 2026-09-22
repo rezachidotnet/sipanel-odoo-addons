@@ -128,7 +128,12 @@ class SipanelQuoteScopeRevision(models.Model):
                 else:
                     issues.append(('SB_NO_PRODUCT', _(
                         "%s is separately billable but has no invoiceable product.", label)))
-            if comp.sell_price_status == 'missing':
+            if comp.sell_price_error:
+                issues.append(('SB_PRICE_FAILED', _(
+                    "%(label)s could not be priced by the customer pricelist (%(err)s). No price "
+                    "was invented; set a governed price manually, or fix the pricelist.",
+                    label=label, err=comp.sell_price_error)))
+            elif comp.sell_price_status == 'missing':
                 issues.append(('SB_PRICE_MISSING', _(
                     "%s is separately billable but its selling price is missing. Set a governed "
                     "price, or record a reason if it is deliberately zero.", label)))

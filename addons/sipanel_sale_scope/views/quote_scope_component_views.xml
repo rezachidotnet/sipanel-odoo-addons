@@ -70,6 +70,7 @@
                             <field name="sell_price_unit"/>
                             <field name="sell_price_source"/>
                             <field name="sell_price_status"/>
+                            <field name="sell_price_error" invisible="not sell_price_error"/>
                             <field name="sell_known_zero_reason"
                                    invisible="sell_price_status != 'known_zero'"/>
                             <field name="sell_amount"/>
