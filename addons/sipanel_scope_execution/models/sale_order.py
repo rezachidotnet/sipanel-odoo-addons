@@ -42,7 +42,7 @@ class SaleOrder(models.Model):
                 batch = Batch.search([('order_id', '=', self.id), ('revision_set_hash', '=', d_uid)], limit=1) or Batch.create({
                     'order_id': self.id, 'accepted_revision_ids': [(6, 0, rev.ids)], 'revision_set_hash': d_uid, 'state': 'validated'})
                 vals = Demand._prepare_from_component(batch, c, scope, d_uid, qty=delta)
-                if Demand.search([('demand_key', '=', vals['demand_key'])]):
+                if Demand._live_by_key(vals['demand_key']):
                     continue
                 d = Demand.create(vals)
                 if delta > 0:

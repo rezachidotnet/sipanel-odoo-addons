@@ -108,8 +108,8 @@ class SipanelExecutionBatch(models.Model):
                         continue
                     d_uid = delta_uid or rev.acceptance_reference or f"rev:{rev.id}"
                     vals = Demand._prepare_from_component(batch, c, scope, d_uid)
-                    if Demand.search([('demand_key', '=', vals['demand_key'])], limit=1):
-                        continue  # already demanded (idempotent by key)
+                    if Demand._live_by_key(vals['demand_key']):
+                        continue  # already demanded by a live batch (idempotent by key; failed demands do not count, CD-2C-01)
                     demands |= Demand.create(vals)
             self.env.flush_all()  # unique keys are checked here (IntegrityError => caller retries / returns existing)
         if issues:

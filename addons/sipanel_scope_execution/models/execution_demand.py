@@ -36,7 +36,17 @@ class SipanelExecutionDemand(models.Model):
     target_count = fields.Integer(compute='_compute_target_count')
     signed_qty = fields.Float(digits=(16, 6), readonly=True, help="Negative for cancel deltas.")
 
-    _demand_key_unique = models.Constraint('UNIQUE(demand_key)', 'One demand per (occurrence, delta, mode, owner) (C8-D02).')
+    # One LIVE demand per (occurrence, delta, mode, owner) (C8-D02). A demand that
+    # belongs to a FAILED batch is retained as evidence but must not occupy the key:
+    # otherwise the retry after the cause is fixed skips every component as "already
+    # demanded" and produces a released batch with no demand and no document
+    # (STEP 2C defect CD-2C-01).
+    _demand_key_live_unique = models.UniqueIndex("(demand_key) WHERE state <> 'failed'")
+
+    @api.model
+    def _live_by_key(self, demand_key):
+        """The live demand holding this key, if any (failed demands never count)."""
+        return self.search([('demand_key', '=', demand_key), ('state', '!=', 'failed')], limit=1)
 
     @api.depends('component_id.name', 'execution_mode')
     def _compute_name(self):

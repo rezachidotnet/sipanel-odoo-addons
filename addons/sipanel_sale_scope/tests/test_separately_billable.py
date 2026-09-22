@@ -811,3 +811,50 @@ class TestPricelistFailsClosed(SeparatelyBillableCase):
         comp = self._comp_of(self._add_scope().current_revision_id, self.l_sep)
         self.assertFalse(comp.sell_price_error)
         self.assertEqual(comp.sell_price_status, 'known')
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_sepbill', 'sipanel_step2c')
+class TestAmendmentAfterConfirmation(SeparatelyBillableCase):
+    """STEP 2C defect CD-2C-03: Odoo refuses to delete a line of a confirmed order,
+    so an amendment after confirmation used to be refused outright. The superseded
+    projection is now neutralised (quantity 0) the way Odoo prescribes; consumed
+    lines are still left alone and flagged."""
+
+    def _confirmed(self):
+        scope = self._add_scope()
+        rev = self._make_sendable(scope.current_revision_id)
+        scope.anchor_line_id.write({'price_unit': 1000.0})
+        scope.order_id._sipanel_seal_current_revisions(actor='test')
+        scope.order_id.action_confirm()
+        return scope, scope.current_revision_id
+
+    def test_amendment_after_confirmation_neutralises_the_superseded_line(self):
+        scope, rev = self._confirmed()
+        order = scope.order_id
+        old_lines = self._lines_of(rev)
+        total_before = order.amount_untaxed
+        new_rev = rev.action_amend()
+        self.assertEqual(new_rev.state, 'working')
+        self.assertEqual(new_rev.prior_revision_id, rev)
+        self.assertTrue(all(l.exists() for l in old_lines), 'superseded lines of a confirmed order are never deleted')
+        self.assertTrue(all(l.product_uom_qty == 0.0 for l in old_lines), 'they are neutralised, as Odoo prescribes')
+        new_lines = self._lines_of(new_rev)
+        self.assertEqual(len(new_lines), len(old_lines))
+        self.assertTrue(all(l.product_uom_qty > 0 for l in new_lines))
+        self.assertAlmostEqual(order.amount_untaxed, total_before, 2, 'the amendment alone does not change the total')
+        live = self.env['sale.order.line'].search([('order_id', '=', order.id), ('sipanel_is_generated', '=', True), ('product_uom_qty', '>', 0)])
+        self.assertEqual(set(live.mapped('sipanel_source_revision_id').ids), {new_rev.id}, 'exactly one live line per component, on the new revision')
+        self.assertFalse(new_rev.reconciliation_json.get('problems'))
+
+    def test_invoiced_superseded_line_is_left_alone_and_flagged(self):
+        scope, rev = self._confirmed()
+        order = scope.order_id
+        invoice = order._create_invoices()
+        self.assertEqual(invoice.state, 'draft')
+        sep_line = self._lines_of(rev).filtered(lambda l: l.sipanel_source_component_id == self._comp_of(rev, self.l_sep))
+        self.assertTrue(sep_line.invoice_lines)
+        qty = sep_line.product_uom_qty
+        new_rev = rev.action_amend()
+        self.assertEqual(sep_line.product_uom_qty, qty, 'invoiced history is not rewritten')
+        problems = new_rev.reconciliation_json.get('problems') or []
+        self.assertTrue(any('superseded revision is already invoiced' in p for p in problems), problems)

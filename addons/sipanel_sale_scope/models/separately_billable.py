@@ -264,7 +264,7 @@ class SipanelQuoteScopeRevision(models.Model):
         for line in superseded:
             if line.invoice_lines or line.qty_delivered:
                 continue          # consumed: keep it, and flag it in the reconciliation
-            line.with_context(**guard_ctx('sipanel_projection')).unlink()
+            self._retire_projected_line(line)
         return True
 
     @api.model
@@ -282,6 +282,16 @@ class SipanelQuoteScopeRevision(models.Model):
         already carries operational history."""
         ctx = guard_ctx('sipanel_projection')
         if line.invoice_lines or line.qty_delivered:
+            if line.product_uom_qty:
+                line.with_context(**ctx).write({'product_uom_qty': 0.0})
+            return False
+        if line._check_line_unlink():
+            # Odoo refuses to delete a line of a confirmed order ("set the quantity
+            # to 0 instead"), so an amendment after confirmation used to be refused
+            # outright (STEP 2C defect CD-2C-03). The line is neutralised the way
+            # Odoo prescribes; native follow-ups (a delivery move of a
+            # NATIVE_LINE_OWNER line) shrink with the quantity, nothing is deleted,
+            # and the new revision's line carries the accepted baseline.
             if line.product_uom_qty:
                 line.with_context(**ctx).write({'product_uom_qty': 0.0})
             return False

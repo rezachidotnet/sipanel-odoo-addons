@@ -176,8 +176,24 @@ class SipanelExecutionAdapter(models.AbstractModel):
         return self._adapt_buy_direct(demand)
 
     @api.model
+    def _native_line_of(self, demand):
+        """The native Sale line that owns this demand's operational documents.
+
+        Since STEP 2B a separately-billable component is projected onto its own
+        generated Sale line, and under NATIVE_LINE_OWNER that line - not the
+        anchor - is what launches the native stock/purchase/task demand. Linking
+        the anchor's documents instead would attach the wrong operational record
+        (STEP 2C defect CD-2C-02). Components without an own line stay covered by
+        the anchor.
+        """
+        own = self.env['sale.order.line'].search([
+            ('sipanel_is_generated', '=', True), ('sipanel_source_component_id', '=', demand.component_id.id),
+            ('order_id', '=', demand.order_id.id)], limit=1)
+        return own or demand.quote_scope_id.anchor_line_id
+
+    @api.model
     def _adapt_native_anchor_covered(self, demand):
-        anchor = demand.quote_scope_id.anchor_line_id
+        anchor = self._native_line_of(demand)
         linked = False
         if 'move_ids' in anchor._fields:
             for mv in anchor.move_ids.filtered(lambda m: m.state != 'cancel'):
