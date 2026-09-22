@@ -3,6 +3,76 @@
 # Scope: database `sipanel` + filestore + custom addons + container config refs + installed module list + checksums.
 # Never touches other tenants. Stores OUTSIDE the git repository. Requires sudo (filestore/config are root-only).
 set -euo pipefail
+
+# ---------------------------------------------------------------------------------------------
+# Safe restore REHEARSAL procedure (printed, never executed by this script).
+# Rules: unique rehearsal database + filestore names; dump restored only into the rehearsal
+# database; archive layout inspected before extraction; extraction into a temporary directory;
+# installation only as /opt/odoo/data/filestore/<rehearsal name>; the live filestore
+# /opt/odoo/data/filestore/sipanel is never a target; integrations neutralised before any Odoo
+# process opens the rehearsal database; cleanup commands validate their exact resolved target.
+# Usage of this mode alone:  scripts/sipanel_recovery_point.sh restore-instructions <point-dir>
+# ---------------------------------------------------------------------------------------------
+print_restore_instructions() {
+  local point="$1"
+  cat <<EOF_RESTORE
+
+== RESTORE REHEARSAL PROCEDURE for $point (not executed) ==
+# 0. Fix and validate the targets ONCE; every later command uses these exact values
+TS=\$(date -u +%Y%m%dT%H%M%SZ)
+POINT=\$(sudo realpath -e "$point")
+RDB="sipanel_restore_rehearsal_\${TS}"
+RFS="/opt/odoo/data/filestore/\${RDB}"
+[ "\$RDB" != "sipanel" ] && [ "\$RFS" != "/opt/odoo/data/filestore/sipanel" ] || { echo REFUSED; exit 1; }
+(cd "\$POINT" && sudo sha256sum -c SHA256SUMS)                       # every artefact must print OK
+
+# 1. Database: restore ONLY into the rehearsal database (never into sipanel)
+docker exec -i odoo-db psql -U odoo -d postgres -tAc "select 1 from pg_database where datname='\${RDB}'" | grep -q 1 && { echo "exists"; exit 1; }
+docker exec -i odoo-db psql -U odoo -d postgres -c "CREATE DATABASE \\"\${RDB}\\" OWNER odoo"
+docker exec -i odoo-db pg_restore -U odoo -d "\${RDB}" --no-owner --role=odoo < "\$POINT/sipanel.dump"
+docker exec -i odoo-db psql -U odoo -d "\${RDB}" -tAc "select count(*) from ir_module_module where state='installed'"
+
+# 2. Filestore: inspect the archive layout BEFORE extracting anything (expect exactly one top-level dir: sipanel)
+sudo tar -tzf "\$POINT/filestore-sipanel.tar.gz" | awk -F/ '{print \$1}' | sort -u
+
+# 3. Extract into a temporary directory first - NEVER with -C /opt/odoo/data/filestore
+TMP=\$(sudo mktemp -d "/opt/odoo/restore_rehearsal_\${TS}.XXXX")
+sudo tar -C "\$TMP" -xzf "\$POINT/filestore-sipanel.tar.gz"
+sudo test -d "\$TMP/sipanel" || { echo "unexpected layout"; exit 1; }
+
+# 4. Install ONLY under the rehearsal name, with the live owner and permissions
+OWNER=\$(sudo stat -c '%u:%g' /opt/odoo/data/filestore/sipanel)
+sudo test ! -e "\$RFS" || { echo "target exists"; exit 1; }
+sudo mv "\$TMP/sipanel" "\$RFS" && sudo chown -R "\$OWNER" "\$RFS" && sudo chmod -R u+rwX,go-rwx "\$RFS" && sudo rmdir "\$TMP"
+
+# 5. Neutralise integrations BEFORE any Odoo process opens the rehearsal database
+docker exec -i odoo-db psql -U odoo -d "\${RDB}" <<'SQL'
+UPDATE ir_mail_server SET active = false;
+UPDATE ir_cron SET active = false;
+UPDATE ir_config_parameter SET value = 'http://127.0.0.1:8072' WHERE key = 'report.url';
+UPDATE ir_config_parameter SET value = 'http://localhost' WHERE key = 'web.base.url';
+DELETE FROM ir_config_parameter WHERE key = 'web.base.url.freeze';
+SQL
+# (fetchmail_server / payment providers: disable likewise if those tables exist)
+
+# 6. Optional: a THROW-AWAY process against the rehearsal DB only (never the production service, --no-http)
+#    docker run --rm --network container:odoo-db -v /opt/odoo/addons:/mnt/extra-addons:ro -v /opt/odoo/data:/var/lib/odoo <odoo-sipanel image> \\
+#      odoo -d "\${RDB}" --db_host=db --db_user=odoo --db_password=<from config> --no-http --stop-after-init --list-db=false
+
+# 7. Cleanup - DESTRUCTIVE, exact rehearsal targets only, each validated first
+[ "\$RDB" != "sipanel" ] && [ -n "\$TS" ] || exit 1
+docker exec -i odoo-db psql -U odoo -d postgres -c "DROP DATABASE \\"\${RDB}\\""                         # DESTRUCTIVE: rehearsal DB only
+[ "\$(sudo realpath -e "\$RFS")" = "/opt/odoo/data/filestore/\${RDB}" ] || exit 1
+sudo rm -rf --one-file-system -- "/opt/odoo/data/filestore/\${RDB}"                                       # DESTRUCTIVE: rehearsal filestore only
+== END OF RESTORE REHEARSAL PROCEDURE ==
+EOF_RESTORE
+}
+if [ "${1:-}" = "restore-instructions" ]; then
+  P=${2:?recovery point directory required}
+  [ -d "$P" ] || sudo test -d "$P" || { echo "not a directory: $P" >&2; exit 2; }
+  print_restore_instructions "$(sudo realpath -e "$P")"
+  exit 0
+fi
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 DEST=${DEST:-/opt/odoo/backups/sipanel-pre-scope-${TS}}
 DB=sipanel
@@ -40,4 +110,4 @@ sudo tar -tzf "$DEST/addons.tar.gz" > /dev/null
 (cd "$DEST" && sudo sha256sum ${DB}.dump filestore-${DB}.tar.gz addons.tar.gz installed_modules.txt container-inspect.json odoo-${DB}.conf.redacted | sudo tee SHA256SUMS)
 sudo chmod -R go-rwx "$DEST"
 echo "RECOVERY_POINT_OK $DEST"
-echo "Restore: docker exec -i $PGC psql -U odoo -d postgres -c \"CREATE DATABASE ${DB}_restore\" && docker exec -i $PGC pg_restore -U odoo -d ${DB}_restore < $DEST/${DB}.dump ; sudo tar -C /opt/odoo/data/filestore -xzf $DEST/filestore-${DB}.tar.gz"
+print_restore_instructions "$DEST"

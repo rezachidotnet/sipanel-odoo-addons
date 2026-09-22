@@ -41,3 +41,54 @@ class SipanelExecutionCase(SipanelSaleCase):
         order.action_quotation_sent()
         order.action_confirm()
         return order, scope
+
+    # ------------------------------------------------------------ STEP 2C fixtures (own-line components)
+    def _bridge_order_with_own_line(self, qty=85.0, user=None):
+        """PT master (bridge owner) whose bracket component is billed on its own line."""
+        order, scope = self._make_order(qty, user=user)
+        scope.write({'project_id': self.project.id, 'system_id': self.system_a.id})
+        bracket = self._comp(scope, self.p_bracket)
+        bracket.write({'placement': 'own_line'})
+        bracket.action_set_manual_sell_price(5.0)
+        scope.current_revision_id.action_generate_note(accept=True)
+        scope.anchor_line_id.write({'price_unit': 12000.0 / qty, 'tax_ids': [(5, 0, 0)]})
+        order.action_quotation_sent()
+        order.action_confirm()
+        return order, scope, bracket
+
+    def _native_order_with_own_line(self, qty=85.0):
+        """Anchor creates a task natively (NATIVE_LINE_OWNER); the bracket is billed on its own line."""
+        self.p_anchor.write({'service_tracking': 'task_global_project', 'project_id': self.project.id})
+        v2 = self.env['sipanel.scope.version'].browse(self.v1.action_new_version()['res_id'])
+        v2.write({'anchor_owner_mode': 'native_line_owner'})
+        for l in v2.recipe_line_ids.filtered(lambda l: l.execution_mode != 'no_action'):
+            l.write({'execution_mode': 'native_anchor_covered'})
+        v2.action_release()
+        order = self.env['sale.order'].create({'partner_id': self.partner.id})
+        scope = self.env['sipanel.quote.scope']._create_from_version(order, v2, qty, self.uom_m)
+        scope.write({'project_id': self.project.id, 'system_id': self.system_a.id})
+        bracket = self._comp(scope, self.p_bracket)
+        bracket.write({'placement': 'own_line'})
+        bracket.action_set_manual_sell_price(5.0)
+        scope.current_revision_id.action_generate_note(accept=True)
+        scope.anchor_line_id.write({'price_unit': 200, 'tax_ids': [(5, 0, 0)]})
+        order.action_quotation_sent()
+        order.action_confirm()
+        return order, scope, bracket
+
+    def _generated_line(self, comp):
+        return self.env['sale.order.line'].search([('sipanel_is_generated', '=', True), ('sipanel_source_component_id', '=', comp.id)])
+
+    def _release(self, order):
+        res = order.with_user(self.exec_owner).action_sipanel_release_execution()
+        return self.env['sipanel.execution.batch'].browse(res['res_id'])
+
+    def _docs(self, order):
+        return {
+            'pickings': self.env['stock.picking'].search_count([('origin', '=', order.name)]),
+            'moves': self.env['stock.move'].search_count([('origin', '=', order.name)]),
+            'po_lines': self.env['purchase.order.line'].search_count([('order_id.origin', '=', order.name)]),
+            'mos': self.env['mrp.production'].search_count([('origin', '=', order.name)]),
+            'tasks': self.env['project.task'].search_count([('sale_line_id', 'in', order.order_line.ids)]),
+            'targets': self.env['sipanel.execution.target'].search_count([('demand_id.order_id', '=', order.id)]),
+        }

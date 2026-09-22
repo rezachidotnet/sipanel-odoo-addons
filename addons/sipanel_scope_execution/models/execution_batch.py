@@ -8,7 +8,9 @@ import psycopg2
 from odoo import api, fields, models
 from odoo.exceptions import LockError, UserError
 
-from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import sha256_of
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard_ctx, sha256_of
+
+from .execution_demand import DEMAND_ENGINE_GUARD
 
 
 class SipanelExecutionBatch(models.Model):
@@ -88,6 +90,9 @@ class SipanelExecutionBatch(models.Model):
         return self.search([('order_id', '=', order.id), ('revision_set_hash', '=', h), ('state', 'in', ('released', 'planned', 'validated'))], limit=1)
 
     def _release_locked(self, order, delta_uid=None):
+        # the engine token: every demand created or transitioned below carries it
+        self = self.with_context(**guard_ctx(DEMAND_ENGINE_GUARD))
+        order = order.with_env(self.env)
         _ = self.env._
         if order.state != 'sale':
             raise UserError(_("Order %s must be confirmed before Release Execution.", order.name))
@@ -142,8 +147,21 @@ class SipanelExecutionBatch(models.Model):
         return text[:2000]
 
     def action_cancel_planned(self):
-        for b in self:
-            for d in b.demand_ids:
-                self.env['sipanel.execution.adapter'].cancel_delta(d)
+        """Governed cancellation of planned execution. Idempotent: cancelled batches and
+        demands are skipped, so a repeated cancellation performs no second document action.
+        Opens the engine token for the demand transitions; the caller's own access to the
+        batch and demands still applies unless the order-cancel service (sale.order._action_cancel)
+        has established the native permission to cancel the order and runs it as sudo."""
+        eng = self.with_context(**guard_ctx(DEMAND_ENGINE_GUARD))
+        Adapter = eng.env['sipanel.execution.adapter']
+        for b in eng:
+            if b.state == 'cancelled':
+                continue
+            demands = b.demand_ids.filtered(lambda d: d.state not in ('cancelled', 'failed'))
+            for d in demands:
+                Adapter.cancel_delta(d)
             b.write({'state': 'cancelled'})
+            eng.env['sipanel.scope.audit.event'].log(
+                b, 'execution_cancel', after={'demands': len(demands), 'initiator_login': eng.env.user.login},
+                correlation_uid=b.action_uid, summary=eng.env._("Planned execution cancelled by %s", eng.env.user.login))
         return True

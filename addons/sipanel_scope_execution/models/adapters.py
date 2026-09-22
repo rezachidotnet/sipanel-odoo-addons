@@ -19,31 +19,83 @@ class SipanelExecutionAdapter(models.AbstractModel):
             return self._adapt_native_anchor_covered(demand)
         return handler(demand)
 
+    # ------------------------------------------------------------------ ownership boundary
+    # Targets SIPANEL only LINKS (native owner's documents, or an existing project) are
+    # observed, never cancelled, reduced, rewritten or deleted by SIPANEL (C8-D01;
+    # STEP 2C-HARDENING finding 2). Only targets SIPANEL CREATED are under its control.
+    NATIVE_LINK_KINDS = ('native_anchor_covered', 'linked_existing')
+
+    @api.model
+    def _target_executed(self, target, rec):
+        """True when the target document is done / posted / consumed, i.e. cannot be
+        withdrawn any more and needs a governed reversal or change order."""
+        model = target.target_model
+        if model in ('stock.move', 'stock.picking'):
+            return rec.state == 'done'
+        if model == 'mrp.production':
+            return rec.state == 'done' or bool(rec.qty_produced)
+        if model == 'purchase.order.line':
+            return rec.order_id.state in ('purchase', 'done') or bool(rec.qty_received) or bool(rec.qty_invoiced)
+        if model == 'account.analytic.line':
+            return True
+        if model == 'hr.expense':
+            return rec.state in ('approved', 'done')
+        # project.project / project.task / stock.reference: links without a reversible SIPANEL transaction
+        return False
+
     @api.model
     def cancel_delta(self, demand):
-        """Reduce unreserved planned demand; done documents are never deleted (PT-19)."""
+        """Cancel planned demand. Bridge-created draft documents are withdrawn by SIPANEL;
+        executed documents are protected (reversal_required); native-owned targets are
+        observed only. Idempotent: a cancelled demand is left untouched (PT-19)."""
+        if demand.state == 'cancelled':
+            return True
+        reversal = False
         for t in demand.target_ids:
             rec = t.target_record().exists()
             if not rec:
                 continue
+            executed = self._target_executed(t, rec)
+            if t.link_kind in self.NATIVE_LINK_KINDS:
+                # the native Sale line (or the linked project) owns this document
+                reversal = reversal or executed
+                continue
+            if executed:
+                reversal = True
+                continue
             if t.target_model == 'purchase.order.line' and rec.order_id.state in ('draft', 'sent'):
                 rec.write({'product_qty': 0.0})
-            elif t.target_model == 'mrp.production' and rec.state in ('draft', 'confirmed') and not rec.qty_produced:
+            elif t.target_model == 'purchase.order.line':
+                reversal = True          # e.g. a cancelled PO whose line SIPANEL cannot touch: nothing planned remains
+            elif t.target_model == 'mrp.production' and rec.state not in ('done', 'cancel'):
                 rec.action_cancel()
             elif t.target_model == 'stock.move' and rec.state not in ('done', 'cancel'):
                 rec._action_cancel()
-            else:
-                demand.write({'reversal_required': True})
-        demand.write({'state': 'cancelled'})
+            elif t.target_model == 'stock.picking' and rec.state not in ('done', 'cancel'):
+                rec.action_cancel()
+        demand.write({'state': 'cancelled', 'reversal_required': reversal})
         return True
 
     @api.model
     def reduce_planned(self, demand, qty):
-        """Reduce unreserved planned quantity on the demand's draft targets by `qty`; cancel when nothing remains; never delete."""
+        """Reduce unreserved planned quantity on the demand's draft targets by `qty`; cancel when nothing remains; never delete.
+        Native-owned targets are never reduced by SIPANEL: the native Sale line already carries the new quantity,
+        so only the demand lineage is updated."""
+        if demand.state == 'cancelled':
+            return True
+        if demand.target_ids and all(t.link_kind in self.NATIVE_LINK_KINDS for t in demand.target_ids):
+            executed = any(self._target_executed(t, t.target_record().exists()) for t in demand.target_ids if t.target_record().exists())
+            vals = {'reversal_required': executed}
+            if demand.normalized_qty - qty <= 1e-6:
+                vals['state'] = 'cancelled'
+            demand.write(vals)
+            return True
         remaining = qty
         for t in demand.target_ids:
             rec = t.target_record().exists()
             if not rec or remaining <= 0:
+                continue
+            if t.link_kind in self.NATIVE_LINK_KINDS or self._target_executed(t, rec):
                 continue
             if t.target_model == 'stock.move' and rec.state not in ('done', 'cancel'):
                 cut = min(rec.product_uom_qty, remaining)

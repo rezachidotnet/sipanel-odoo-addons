@@ -3,6 +3,10 @@
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard_ctx
+
+from .execution_demand import DEMAND_ENGINE_GUARD
+
 
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
@@ -25,8 +29,9 @@ class SaleOrder(models.Model):
     def action_sipanel_release_amendment_delta(self):
         """Compute per-occurrence deltas between the last released quantities and the new accepted revision (PT-22)."""
         self.ensure_one()
-        Demand = self.env['sipanel.execution.demand']
-        Batch = self.env['sipanel.execution.batch']
+        eng = self.with_context(**guard_ctx(DEMAND_ENGINE_GUARD))
+        Demand = eng.env['sipanel.execution.demand']
+        Batch = eng.env['sipanel.execution.batch']
         created = Demand
         for scope in self.sipanel_quote_scope_ids.filtered('active'):
             rev = scope.accepted_revision_id
@@ -44,25 +49,42 @@ class SaleOrder(models.Model):
                 vals = Demand._prepare_from_component(batch, c, scope, d_uid, qty=delta)
                 if Demand._live_by_key(vals['demand_key']):
                     continue
-                d = Demand.create(vals)
-                if delta > 0:
-                    self.env['sipanel.execution.adapter'].create_or_link(d)
-                else:
+                prior = Demand
+                if delta < 0:
                     prior = Demand.search([('component_id.occurrence_uid', '=', c.occurrence_uid), ('quote_scope_id', '=', scope.id), ('signed_qty', '>', 0),
                                            ('state', 'not in', ('cancelled', 'failed'))], order='id desc', limit=1)
-                    d.write({'reversal_of_id': prior.id, 'cancelled_by_delta_uid': d_uid, 'state': 'planned'})
-                    if prior:
-                        self.env['sipanel.execution.adapter'].reduce_planned(prior, -delta)
+                    # lineage is provenance: fixed at creation, never written afterwards
+                    vals.update({'reversal_of_id': prior.id or False, 'cancelled_by_delta_uid': d_uid})
+                d = Demand.create(vals)
+                if delta > 0:
+                    eng.env['sipanel.execution.adapter'].create_or_link(d)
+                elif prior:
+                    eng.env['sipanel.execution.adapter'].reduce_planned(prior, -delta)
                 created |= d
                 batch.write({'state': 'released', 'released_by_id': self.env.uid, 'released_date': fields.Datetime.now()})
         return created
 
     def _action_cancel(self):
+        """Governed order cancellation (STEP 2C-HARDENING finding 4).
+
+        The user must hold the native permission to cancel this order (ACL and
+        record rules on sale.order, checked here before anything else). Only
+        then does the internal service transition the demands of exactly this
+        order, as sudo with the engine token; the initiating user stays the
+        actor of the audit event because sudo() keeps env.uid. Sales users get
+        no general access to execution demands.
+        """
+        Adapter = self.env['sipanel.execution.adapter']
         for o in self:
-            done = self.env['sipanel.execution.target'].search([('demand_id.order_id', '=', o.id)]).filtered(
-                lambda t: t.target_model in ('stock.move', 'mrp.production') and getattr(t.target_record().exists(), 'state', '') == 'done')
+            o.check_access('write')
+            targets = self.env['sipanel.execution.target'].sudo().search([('demand_id.order_id', '=', o.id)])
+            # executed documents SIPANEL created itself block a plain order cancel; native-owned
+            # documents are the native line's responsibility and are only observed
+            done = targets.filtered(lambda t: t.link_kind == 'created' and t.target_record().exists()
+                                    and Adapter._target_executed(t, t.target_record()))
             if done:
                 raise UserError(self.env._("Order %s has executed (done) targets; cancel through native returns/reversals, not order cancel.", o.name))
-            for b in o.sipanel_execution_batch_ids.filtered(lambda b: b.state in ('released', 'validated', 'planned')):
-                b.action_cancel_planned()
+            batches = o.sipanel_execution_batch_ids.filtered(lambda b: b.state in ('released', 'validated', 'planned'))
+            if batches:
+                batches.sudo().action_cancel_planned()
         return super()._action_cancel()

@@ -1,8 +1,22 @@
 # -*- coding: utf-8 -*-
 """Execution demand (GAP-D03, D07, D08; C8-D02, C8-D04)."""
 from odoo import api, fields, models
+from odoo.exceptions import AccessError
 
-from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import EXECUTION_MODE, sha256_of
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import EXECUTION_MODE, guard, sha256_of
+
+# Process-local guard opened only by the genuine execution engine (release,
+# amendment delta, governed cancellation). A raw context flag, a guessed token,
+# sudo() or an import context never opens it (STEP 2C-HARDENING, finding 1).
+DEMAND_ENGINE_GUARD = 'sipanel_demand_engine'
+
+# Provenance and ownership: fixed at creation, never writable afterwards - not
+# even by the engine. A change of any of these is a new demand (a delta).
+DEMAND_IMMUTABLE_FIELDS = (
+    'batch_id', 'quote_scope_id', 'component_id', 'delta_uid', 'execution_mode', 'owner', 'demand_key',
+    'normalized_qty', 'signed_qty', 'uom_id', 'product_id', 'project_id', 'system_id', 'activity_id',
+    'reversal_of_id', 'cancelled_by_delta_uid',
+)
 
 
 class SipanelExecutionDemand(models.Model):
@@ -57,6 +71,33 @@ class SipanelExecutionDemand(models.Model):
     def _compute_target_count(self):
         for d in self:
             d.target_count = len(d.target_ids)
+
+    # ------------------------------------------------------------- behavioural immutability
+    def _sipanel_engine_guarded(self):
+        return guard(self.env, DEMAND_ENGINE_GUARD)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not self._sipanel_engine_guarded():
+            raise AccessError(self.env._(
+                "Execution demands are created only by Release Execution or an amendment delta; "
+                "direct creation (including sudo, import or a context flag) is refused."))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        frozen = sorted(f for f in vals if f in DEMAND_IMMUTABLE_FIELDS)
+        if frozen:
+            raise AccessError(self.env._(
+                "Execution demand provenance is immutable after creation (%s). A change of scope, "
+                "quantity or owner is a new delta demand.", ', '.join(frozen)))
+        if not self._sipanel_engine_guarded():
+            raise AccessError(self.env._(
+                "Execution demand state changes only through governed execution actions "
+                "(release, failure, cancellation, amendment); direct writes are refused."))
+        return super().write(vals)
+
+    def unlink(self):
+        raise AccessError(self.env._("Execution demands are lineage evidence and are never deleted."))
 
     @api.model
     def _make_key(self, occurrence_uid, delta_uid, mode, owner):

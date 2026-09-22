@@ -2,7 +2,7 @@
 {
     'name': 'SIPANEL Scope Execution',
     'summary': 'Owner registry, Release Execution, batches/demands/targets, adapters, LockError retry, amendment/cancel lineage (Slice D)',
-    'version': '19.0.1.0.1',
+    'version': '19.0.1.0.2',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
     'license': 'LGPL-3',
