@@ -45,15 +45,53 @@ OWNER=\$(sudo stat -c '%u:%g' /opt/odoo/data/filestore/sipanel)
 sudo test ! -e "\$RFS" || { echo "target exists"; exit 1; }
 sudo mv "\$TMP/sipanel" "\$RFS" && sudo chown -R "\$OWNER" "\$RFS" && sudo chmod -R u+rwX,go-rwx "\$RFS" && sudo rmdir "\$TMP"
 
-# 5. Neutralise integrations BEFORE any Odoo process opens the rehearsal database
-docker exec -i odoo-db psql -U odoo -d "\${RDB}" <<'SQL'
-UPDATE ir_mail_server SET active = false;
-UPDATE ir_cron SET active = false;
-UPDATE ir_config_parameter SET value = 'http://127.0.0.1:8072' WHERE key = 'report.url';
-UPDATE ir_config_parameter SET value = 'http://localhost' WHERE key = 'web.base.url';
-DELETE FROM ir_config_parameter WHERE key = 'web.base.url.freeze';
+# 5. Neutralise integrations BEFORE any Odoo process opens the rehearsal database.
+#    Every optional table is detected with to_regclass() first, so an absent module never fails the block;
+#    all statements run inside ONE transaction against the REHEARSAL database only (\${RDB}, never sipanel).
+docker exec -i odoo-db psql -U odoo -d "\${RDB}" -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+DO \$\$
+BEGIN
+  -- outgoing mail and scheduled jobs (always present)
+  UPDATE ir_mail_server SET active = false;
+  UPDATE ir_cron SET active = false;
+  UPDATE ir_config_parameter SET value = 'http://127.0.0.1:8072' WHERE key = 'report.url';
+  UPDATE ir_config_parameter SET value = 'http://localhost' WHERE key = 'web.base.url';
+  DELETE FROM ir_config_parameter WHERE key = 'web.base.url.freeze';
+  -- incoming mail (fetchmail module)
+  IF to_regclass('public.fetchmail_server') IS NOT NULL THEN
+    UPDATE fetchmail_server SET active = false;
+  END IF;
+  -- payment providers (Odoo 16+) / acquirers (older)
+  IF to_regclass('public.payment_provider') IS NOT NULL THEN
+    UPDATE payment_provider SET state = 'disabled' WHERE state <> 'disabled';
+  END IF;
+  IF to_regclass('public.payment_acquirer') IS NOT NULL THEN
+    UPDATE payment_acquirer SET state = 'disabled' WHERE state <> 'disabled';
+  END IF;
+  -- automation rules and outgoing webhook server actions (Odoo 17+: ir.actions.server state 'webhook')
+  IF to_regclass('public.base_automation') IS NOT NULL THEN
+    UPDATE base_automation SET active = false;
+  END IF;
+  IF to_regclass('public.ir_act_server') IS NOT NULL AND EXISTS (
+       SELECT 1 FROM information_schema.columns WHERE table_name = 'ir_act_server' AND column_name = 'webhook_url') THEN
+    UPDATE ir_act_server SET webhook_url = NULL WHERE state = 'webhook';
+  END IF;
+  -- IAP services (SMS, partner autocomplete, OCR ...): remove the account tokens so no paid call can leave
+  IF to_regclass('public.iap_account') IS NOT NULL AND EXISTS (
+       SELECT 1 FROM information_schema.columns WHERE table_name = 'iap_account' AND column_name = 'account_token') THEN
+    UPDATE iap_account SET account_token = NULL;
+  END IF;
+  -- incoming aliases must not route into the rehearsal
+  IF to_regclass('public.mail_alias') IS NOT NULL THEN
+    UPDATE mail_alias SET alias_name = NULL WHERE alias_name IS NOT NULL;
+  END IF;
+END
+\$\$;
+COMMIT;
 SQL
-# (fetchmail_server / payment providers: disable likewise if those tables exist)
+# verify (read-only) that nothing outgoing is left enabled in the rehearsal database
+docker exec -i odoo-db psql -U odoo -d "\${RDB}" -tAc "select 'mail_servers_active='||count(*) from ir_mail_server where active; select 'crons_active='||count(*) from ir_cron where active;"
 
 # 6. Optional: a THROW-AWAY process against the rehearsal DB only (never the production service, --no-http)
 #    docker run --rm --network container:odoo-db -v /opt/odoo/addons:/mnt/extra-addons:ro -v /opt/odoo/data:/var/lib/odoo <odoo-sipanel image> \\

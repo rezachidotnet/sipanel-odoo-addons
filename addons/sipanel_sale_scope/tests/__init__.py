@@ -5,3 +5,4 @@ from . import test_security
 from . import test_customer_output
 from . import test_translation_snapshot
 from . import test_separately_billable
+from . import test_sales_seal

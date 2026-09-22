@@ -1,13 +1,22 @@
 # -*- coding: utf-8 -*-
 """Scope revision snapshot: WORKING -> SENT_SEALED -> ACCEPTED_SEALED (GAP-B02, B09, B12, B16, B17; C3-D01, C3-D03, C5-D02, C7-D01)."""
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_is_zero
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import sha256_of
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
 COST_GROUP = 'sipanel_commercial_scope_core.group_scope_cost_viewer'
+# OBS-2CH-01 (STEP 2C-CLOSEOUT): the internally computed commercial projection is
+# written only by the seal service, inside the current Seal/Send transaction, after the
+# initiating user's native permission on the exact quotation has been established.
+# The token is process-local (guard()); a raw context flag, a guessed token, sudo() by
+# unrelated code, an import context or a direct write never open it.
+SEAL_SERVICE_GUARD = 'sipanel_seal_projection_service'
+SEAL_PROJECTION_FIELDS = ('commercial_projection_json', 'net_revenue_projection',
+                          'fx_source_currency_id', 'fx_rate', 'fx_date', 'fx_source')
+
 REVISION_MUTABLE_AFTER_SEAL = {
     'note_reviewed', 'review_user_id', 'review_date', 'state', 'sealed_hash', 'sealed_date', 'sealed_by_id',
     'artifact_ids', 'accepted_date', 'accepted_by_id', 'acceptance_reference', 'change_order_ref',
@@ -191,6 +200,10 @@ class SipanelQuoteScopeRevision(models.Model):
                                        a=action, r=sealed[0].display_name, s=sealed[0].state))
 
     def write(self, vals):
+        if any(f in vals for f in SEAL_PROJECTION_FIELDS) and not guard(self.env, SEAL_SERVICE_GUARD):
+            raise AccessError(self.env._(
+                "The commercial projection of a Scope revision is computed and written only by the "
+                "Seal/Send service; direct writes (including sudo, import or a context flag) are refused."))
         if not guard(self.env, 'sipanel_seal_transaction'):
             content = set(vals) - REVISION_MUTABLE_AFTER_SEAL
             sealed = self.filtered(lambda r: r.state != 'working')
@@ -329,6 +342,17 @@ class SipanelQuoteScopeRevision(models.Model):
         payload['anchor'] = self._anchor_projection()
         return sha256_of(payload)
 
+    def _check_seal_permission(self):
+        """The initiating user must hold native write access on this revision AND on the exact
+        sale.order (ACL + record rules, e.g. a salesperson's own documents) before the seal
+        service elevates anything. Evaluated as the real user, never as sudo."""
+        self.ensure_one()
+        if self.env.su and self.env.uid == self.env.ref('base.user_root').id:
+            return True
+        self.check_access('write')
+        self.order_id.check_access('write')
+        return True
+
     def action_seal(self, actor='operator'):
         for r in self:
             if r.state != 'working':
@@ -340,9 +364,12 @@ class SipanelQuoteScopeRevision(models.Model):
                     "Cannot send %(rev)s: the customer text has no %(lang)s translation for "
                     "%(items)s. Complete the master translations, then create a new revision.",
                     rev=r.display_name, lang=r.language or '?', items=', '.join(missing)))
+            r._check_seal_permission()
             payload = r._seal_payload()
             h = sha256_of(payload)
-            r.with_context(**guard_ctx('sipanel_seal_transaction')).write({
+            # The seal service: elevated only for this revision, these computed fields and this
+            # transaction. sudo() keeps env.uid, so sealed_by_id and the audit actor stay the real user.
+            r.sudo().with_context(**guard_ctx('sipanel_seal_transaction', SEAL_SERVICE_GUARD)).write({
                 'state': 'sent_sealed', 'sealed_hash': h, 'sealed_date': fields.Datetime.now(), 'sealed_by_id': self.env.uid,
                 'commercial_projection_json': payload['anchor'], 'net_revenue_projection': payload['anchor'].get('price_subtotal', 0.0),
                 'scope_qty': r.scope_qty,
