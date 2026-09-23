@@ -111,41 +111,110 @@ if [ "${1:-}" = "restore-instructions" ]; then
   print_restore_instructions "$(sudo realpath -e "$P")"
   exit 0
 fi
+# ---------------------------------------------------------------------------------------------
+# Concurrency-safe execution (STEP 2C-CLOSEOUT-HARDENING):
+#   * one non-blocking flock on RP_LOCK serialises recovery operations (second invocation exits 6, RECOVERY_POINT_BUSY);
+#   * DEST is reserved atomically with mkdir WITHOUT -p (an existing DEST exits 7, DEST_ALREADY_EXISTS, nothing written);
+#   * any failure after the reservation marks DEST with INVALID_DO_NOT_USE.txt, never prints RECOVERY_POINT_OK,
+#     never reuses or deletes anything.
+#   Test hooks (never set in production use): RP_SIMULATE=1 replaces docker/sudo work with small simulated artefacts
+#   under a caller-supplied DEST (RP_SIM_SRC = directory holding "sipanel/" and "addons/" trees), RP_SIMULATE_DELAY
+#   sleeps between steps, RP_FAIL_AT=<dump|filestore|addons|verify> injects a failure. See scripts/test_recovery_point_concurrency.py.
+# ---------------------------------------------------------------------------------------------
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 DEST=${DEST:-/opt/odoo/backups/sipanel-pre-scope-${TS}}
 DB=sipanel
 PGC=odoo-db
 APPC=odoo-sipanel
 MIN_FREE_MB=${MIN_FREE_MB:-1500}
+RP_LOCK=${RP_LOCK:-/run/lock/sipanel_recovery_point.lock}
+RP_SIMULATE=${RP_SIMULATE:-0}
+RP_FAIL_AT=${RP_FAIL_AT:-}
+RP_SIMULATE_DELAY=${RP_SIMULATE_DELAY:-0}
+SUDO=sudo
+[ "$RP_SIMULATE" = "1" ] && SUDO=""
+case "$DEST" in /*) ;; *) echo "DEST must be an absolute path: $DEST" >&2; exit 2;; esac
+
+echo "== 0. lock + reservation"
+exec 9>>"$RP_LOCK" || { echo "RECOVERY_POINT_BUSY: cannot open lock file $RP_LOCK" >&2; exit 6; }
+if ! flock -n 9; then
+  echo "RECOVERY_POINT_BUSY: another recovery operation holds $RP_LOCK (pid $(cat "$RP_LOCK" 2>/dev/null || echo ?)); nothing written" >&2
+  exit 6
+fi
+echo $$ >&9 2>/dev/null || true
+if $SUDO test -e "$DEST"; then
+  echo "DEST_ALREADY_EXISTS: $DEST exists; refusing to write into an existing recovery point" >&2
+  exit 7
+fi
+if ! $SUDO mkdir "$DEST" 2>/dev/null; then      # atomic reservation: no -p, fails if it appeared meanwhile
+  echo "DEST_ALREADY_EXISTS: atomic reservation of $DEST failed; nothing written" >&2
+  exit 7
+fi
+COMPLETED=0
+on_exit() {
+  rc=$?
+  if [ "$COMPLETED" != "1" ]; then
+    echo "RECOVERY_POINT_FAILED rc=$rc dest=$DEST (marked INVALID, not deleted, not reused)" >&2
+    printf 'INVALID RECOVERY POINT - DO NOT USE. Creation failed or was interrupted at %s (rc=%s). Nothing here is verified.\n' \
+      "$(date -u +%FT%TZ)" "$rc" | $SUDO tee "$DEST/INVALID_DO_NOT_USE.txt" >/dev/null 2>&1 || true
+  fi
+  exit $rc
+}
+trap on_exit EXIT
+step() {   # test hook: optional delay and injected failure
+  if [ "$RP_SIMULATE" = "1" ]; then
+    [ "$RP_SIMULATE_DELAY" != "0" ] && sleep "$RP_SIMULATE_DELAY"
+    if [ "$RP_FAIL_AT" = "$1" ]; then echo "SIMULATED FAILURE at step $1" >&2; return 1; fi
+  fi
+  return 0
+}
 
 echo "== 1. identity"
-docker inspect "$APPC" --format 'container={{.Name}} image={{.Image}} status={{.State.Status}}'
-DBSIZE=$(docker exec "$PGC" psql -U odoo -d postgres -tAc "select pg_database_size('${DB}')")
-FSSIZE=$(sudo du -sb /opt/odoo/data/filestore/${DB} | cut -f1)
-ADSIZE=$(du -sb /opt/odoo/addons | cut -f1)
-NEED=$(( (DBSIZE + FSSIZE + ADSIZE) / 1024 / 1024 ))
-FREE=$(df -Pm /opt | awk 'NR==2{print $4}')
-echo "db_bytes=$DBSIZE filestore_bytes=$FSSIZE addons_bytes=$ADSIZE need_mb~=$NEED free_mb=$FREE"
-if [ $((FREE - NEED)) -lt "$MIN_FREE_MB" ]; then
-  echo "BLOCKED_BACKUP_CAPACITY: need ~${NEED} MB plus ${MIN_FREE_MB} MB headroom, free ${FREE} MB" >&2
-  exit 3
+if [ "$RP_SIMULATE" = "1" ]; then
+  SRC=${RP_SIM_SRC:?RP_SIM_SRC required in simulate mode}
+  echo "simulate=1 src=$SRC dest=$DEST"
+else
+  docker inspect "$APPC" --format 'container={{.Name}} image={{.Image}} status={{.State.Status}}'
+  DBSIZE=$(docker exec "$PGC" psql -U odoo -d postgres -tAc "select pg_database_size('${DB}')")
+  FSSIZE=$(sudo du -sb /opt/odoo/data/filestore/${DB} | cut -f1)
+  ADSIZE=$(du -sb /opt/odoo/addons | cut -f1)
+  NEED=$(( (DBSIZE + FSSIZE + ADSIZE) / 1024 / 1024 ))
+  FREE=$(df -Pm /opt | awk 'NR==2{print $4}')
+  echo "db_bytes=$DBSIZE filestore_bytes=$FSSIZE addons_bytes=$ADSIZE need_mb~=$NEED free_mb=$FREE"
+  if [ $((FREE - NEED)) -lt "$MIN_FREE_MB" ]; then
+    echo "BLOCKED_BACKUP_CAPACITY: need ~${NEED} MB plus ${MIN_FREE_MB} MB headroom, free ${FREE} MB" >&2
+    exit 3
+  fi
 fi
 
 echo "== 2. create $DEST"
-sudo mkdir -p "$DEST"
-docker exec "$PGC" pg_dump -U odoo -Fc "$DB" | sudo tee "$DEST/${DB}.dump" > /dev/null
-sudo tar -C /opt/odoo/data/filestore -czf "$DEST/filestore-${DB}.tar.gz" "$DB"
-sudo tar -C /opt/odoo -czf "$DEST/addons.tar.gz" addons
-sudo cp /opt/odoo/odoo-${DB}.conf "$DEST/odoo-${DB}.conf.redacted" && sudo sed -i -E 's/(db_password|admin_passwd)\s*=.*/\1 = <redacted>/' "$DEST/odoo-${DB}.conf.redacted"
-docker inspect "$APPC" | sudo tee "$DEST/container-inspect.json" > /dev/null
-docker exec "$PGC" psql -U odoo -d "$DB" -tAc "select name||':'||coalesce(latest_version,'') from ir_module_module where state='installed' order by name" | sudo tee "$DEST/installed_modules.txt" > /dev/null
-echo "$TS" | sudo tee "$DEST/TIMESTAMP" > /dev/null
+if [ "$RP_SIMULATE" = "1" ]; then
+  step dump;      echo "simulated pg_dump ${TS} $$" > "$DEST/${DB}.dump"
+  step filestore; tar -C "$SRC" -czf "$DEST/filestore-${DB}.tar.gz" sipanel
+  step addons;    tar -C "$SRC" -czf "$DEST/addons.tar.gz" addons
+  printf 'db_password = <redacted>\nadmin_passwd = <redacted>\n' > "$DEST/odoo-${DB}.conf.redacted"
+  echo '{"simulated": true}' > "$DEST/container-inspect.json"
+  echo "base:19.0.1.3" > "$DEST/installed_modules.txt"
+else
+  docker exec "$PGC" pg_dump -U odoo -Fc "$DB" | sudo tee "$DEST/${DB}.dump" > /dev/null
+  sudo tar -C /opt/odoo/data/filestore -czf "$DEST/filestore-${DB}.tar.gz" "$DB"
+  sudo tar -C /opt/odoo -czf "$DEST/addons.tar.gz" addons
+  sudo cp /opt/odoo/odoo-${DB}.conf "$DEST/odoo-${DB}.conf.redacted" && sudo sed -i -E 's/(db_password|admin_passwd)\s*=.*/\1 = <redacted>/' "$DEST/odoo-${DB}.conf.redacted"
+  docker inspect "$APPC" | sudo tee "$DEST/container-inspect.json" > /dev/null
+  docker exec "$PGC" psql -U odoo -d "$DB" -tAc "select name||':'||coalesce(latest_version,'') from ir_module_module where state='installed' order by name" | sudo tee "$DEST/installed_modules.txt" > /dev/null
+fi
+echo "$TS" | $SUDO tee "$DEST/TIMESTAMP" > /dev/null
 
 echo "== 3. verify readability + checksums"
-sudo pg_restore --list "$DEST/${DB}.dump" > /dev/null 2>&1 || docker run --rm -v "$DEST":/rp postgres:15 pg_restore --list /rp/${DB}.dump > /dev/null
-sudo tar -tzf "$DEST/filestore-${DB}.tar.gz" > /dev/null
-sudo tar -tzf "$DEST/addons.tar.gz" > /dev/null
-(cd "$DEST" && sudo sha256sum ${DB}.dump filestore-${DB}.tar.gz addons.tar.gz installed_modules.txt container-inspect.json odoo-${DB}.conf.redacted | sudo tee SHA256SUMS)
-sudo chmod -R go-rwx "$DEST"
+step verify
+if [ "$RP_SIMULATE" != "1" ]; then
+  sudo pg_restore --list "$DEST/${DB}.dump" > /dev/null 2>&1 || docker run --rm -v "$DEST":/rp postgres:15 pg_restore --list /rp/${DB}.dump > /dev/null
+fi
+$SUDO tar -tzf "$DEST/filestore-${DB}.tar.gz" > /dev/null
+$SUDO tar -tzf "$DEST/addons.tar.gz" > /dev/null
+(cd "$DEST" && $SUDO sha256sum ${DB}.dump filestore-${DB}.tar.gz addons.tar.gz installed_modules.txt container-inspect.json odoo-${DB}.conf.redacted | $SUDO tee SHA256SUMS)
+(cd "$DEST" && $SUDO sha256sum -c SHA256SUMS > /dev/null)
+$SUDO chmod -R go-rwx "$DEST"
+COMPLETED=1
 echo "RECOVERY_POINT_OK $DEST"
 print_restore_instructions "$DEST"

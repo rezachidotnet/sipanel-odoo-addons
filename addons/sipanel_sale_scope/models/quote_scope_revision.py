@@ -343,14 +343,24 @@ class SipanelQuoteScopeRevision(models.Model):
         return sha256_of(payload)
 
     def _check_seal_permission(self):
-        """The initiating user must hold native write access on this revision AND on the exact
-        sale.order (ACL + record rules, e.g. a salesperson's own documents) before the seal
-        service elevates anything. Evaluated as the real user, never as sudo."""
+        """The initiating user must hold native write access on this revision, on its exact
+        sale.order and on its quotation Scope (ACL + record rules, e.g. a salesperson's own
+        documents) before the seal service elevates anything.
+
+        The check is made in a NON-sudo environment rebuilt for the initiating uid: Odoo's
+        check_access() is a no-op when env.su is True, so a pre-sudoed recordset
+        (rev.with_user(x).sudo().action_seal()) must not be trusted. Neither self.env.su, a
+        context flag, a token nor an import/server-action context is consulted here. The only
+        uid that cannot be checked non-sudo is SUPERUSER_ID (1): Odoo's Environment forces
+        su=True for it (orm/environments.py) - that is Odoo's design, not a SIPANEL bypass.
+        """
         self.ensure_one()
-        if self.env.su and self.env.uid == self.env.ref('base.user_root').id:
-            return True
-        self.check_access('write')
-        self.order_id.check_access('write')
+        initiating_uid = self.env.uid
+        plain_env = self.env(user=initiating_uid, su=False)
+        rev = self.with_env(plain_env)
+        rev.check_access('write')
+        rev.order_id.check_access('write')
+        rev.quote_scope_id.check_access('write')
         return True
 
     def action_seal(self, actor='operator'):
