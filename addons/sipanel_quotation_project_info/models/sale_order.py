@@ -12,11 +12,18 @@ distinct site. Because the Delivery Address drives fiscal-position resolution, c
 order is refused when it would change the fiscal position or the applicable taxes.
 
 Existing quotations are never backfilled (no hook, no migration).
+
+A legitimate Project Site change that does move the fiscal treatment goes through the Sales-Manager wizard
+sipanel.project.site.fiscal.change, which previews the native result, applies it with the native
+"Update Taxes" action and records the approval in the chatter. Only that wizard holds the guard token.
 """
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard
+
 FISCAL_BLOCK_CODE = 'PROJECT_SITE_CHANGE_BLOCKED_BY_FISCAL_POSITION_IMPACT'
+FISCAL_CHANGE_GUARD = 'sipanel_project_site_fiscal_change'
 
 
 class SaleOrder(models.Model):
@@ -109,19 +116,52 @@ class SaleOrder(models.Model):
         return res
 
     # ------------------------------------------------------------------ fiscal-position guard
-    def _sipanel_fiscal_state(self, fiscal_position):
-        """Fiscal position + the sale taxes it maps for every product line (the 'applicable taxes')."""
+    def _sipanel_line_taxes_under(self, fiscal_position):
+        """{line: taxes} each priced line would carry under ``fiscal_position``: the computation of the native
+        sale.order.line._compute_tax_ids (company-filtered product taxes mapped by the position). Read-only."""
         self.ensure_one()
-        taxes = {}
-        for line in self.order_line.filtered(lambda l: l.product_id and not l.display_type):
-            product_taxes = line.product_id.taxes_id._filter_taxes_by_company(self.company_id)
-            taxes[line.id] = tuple(sorted(fiscal_position.map_tax(product_taxes).ids))
-        return fiscal_position.id, taxes
+        Tax = self.env['account.tax']
+        result = {}
+        for line in self._get_priced_lines():
+            taxes = line.product_id.taxes_id._filter_taxes_by_company(line.company_id) if line.product_id else Tax
+            if line.product_type == 'combo' or not taxes:
+                result[line] = Tax
+            else:
+                result[line] = fiscal_position.with_company(line.company_id).map_tax(taxes)
+        return result
+
+    def _sipanel_amounts_with_taxes(self, line_taxes):
+        """(untaxed, tax, total) of the order if its lines carried ``line_taxes``: the native _compute_amounts
+        pipeline with the tax_ids override supported by _prepare_base_line_for_taxes_computation. Read-only."""
+        self.ensure_one()
+        AccountTax = self.env['account.tax']
+        base_lines = [line._prepare_base_line_for_taxes_computation(tax_ids=line_taxes.get(line, line.tax_ids))
+                      for line in self._get_priced_lines()]
+        base_lines += self._add_base_lines_for_early_payment_discount()
+        AccountTax._add_tax_details_in_base_lines(base_lines, self.company_id)
+        AccountTax._round_base_lines_tax_details(base_lines, self.company_id)
+        totals = AccountTax._get_tax_totals_summary(
+            base_lines=base_lines, currency=self.currency_id or self.company_id.currency_id, company=self.company_id)
+        return totals['base_amount_currency'], totals['tax_amount_currency'], totals['total_amount_currency']
+
+    def _sipanel_fiscal_state(self, fiscal_position):
+        """Fiscal position + the sale taxes it maps for every priced line (the 'applicable taxes')."""
+        self.ensure_one()
+        taxes = self._sipanel_line_taxes_under(fiscal_position)
+        return fiscal_position.id, {line.id: tuple(sorted(t.ids)) for line, t in taxes.items()}
+
+    def _sipanel_resolve_fiscal_position(self, shipping):
+        """Native resolution of the fiscal position for this order's customer with ``shipping`` as delivery."""
+        self.ensure_one()
+        return self.env['account.fiscal.position'].with_company(self.company_id)._get_fiscal_position(
+            self.partner_id, shipping)
 
     def _sipanel_check_shipping_fiscal_impact(self, vals):
         """Refuse a Delivery Address (Project Site) change on an existing order when it would change the
         fiscal position or the applicable taxes. A change of customer re-derives every address natively
         and is not a Project Site entry, so it is left to the native flow."""
+        if guard(self.env, FISCAL_CHANGE_GUARD):
+            return  # the approved Project Site fiscal change wizard (it verifies the native result itself)
         shipping = self.env['res.partner'].browse(vals.get('partner_shipping_id') or [])
         for order in self:
             if order.partner_shipping_id == shipping or not order.partner_id:
@@ -140,9 +180,19 @@ class SaleOrder(models.Model):
                 raise UserError(self.env._(
                     "%(code)s: changing the Delivery Address (Project Site) of %(order)s to \"%(site)s\" would "
                     "change its fiscal position from \"%(before)s\" to \"%(after)s\" and with it the sale taxes. "
-                    "Project Site entry must not change taxes; the address was not saved.",
+                    "Project Site entry must not change taxes; the address was not saved. A Sales Manager can apply "
+                    "it with \"Change Project Site (fiscal impact)\" after reviewing the new taxes.",
                     code=FISCAL_BLOCK_CODE, order=order.display_name, site=shipping.display_name or '-',
                     before=current.display_name or '-', after=proposed.display_name or '-'))
+
+    def action_sipanel_project_site_fiscal_change(self):
+        """Open the controlled Project Site change (Sales Manager only, draft quotations only)."""
+        self.ensure_one()
+        wizard = self.env['sipanel.project.site.fiscal.change'].create({'order_id': self.id})
+        return {
+            'type': 'ir.actions.act_window', 'res_model': wizard._name, 'res_id': wizard.id,
+            'view_mode': 'form', 'target': 'new', 'name': self.env._("Change Project Site (fiscal impact)"),
+        }
 
     # ------------------------------------------------------------------ Page 1 presentation
     def _sipanel_page1_parties(self):

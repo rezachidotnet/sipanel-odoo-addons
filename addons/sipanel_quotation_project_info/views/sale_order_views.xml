@@ -28,6 +28,12 @@
                 <attribute name="groups"/>
                 <attribute name="help">Delivery Address used as the job site. Printed on the quotation only when it differs from the customer; a change that would alter the fiscal position or taxes is refused.</attribute>
             </xpath>
+            <!-- the controlled override for a Project Site that legitimately changes taxes (Sales Manager, draft only) -->
+            <xpath expr="//group[@name='sipanel_project_site']/field[@name='partner_shipping_id']" position="after">
+                <button name="action_sipanel_project_site_fiscal_change" type="object" class="btn-link ps-0" colspan="2"
+                        string="Change Project Site (fiscal impact)" icon="fa-balance-scale"
+                        groups="sales_team.group_sale_manager" invisible="state != 'draft'"/>
+            </xpath>
         </field>
     </record>
 </odoo>

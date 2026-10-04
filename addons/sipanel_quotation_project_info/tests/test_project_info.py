@@ -7,10 +7,11 @@ import os
 
 from lxml import html as lxml_html
 
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import Form, TransactionCase, new_test_user, tagged
 
-from odoo.addons.sipanel_quotation_project_info.models.sale_order import FISCAL_BLOCK_CODE
+from odoo.addons.sipanel_quotation_project_info.models.sale_order import FISCAL_BLOCK_CODE, FISCAL_CHANGE_GUARD
+from odoo.addons.sipanel_sale_scope.tests.common import SipanelSaleCase
 from odoo.addons.sipanel_quotation_project_info.models.system_plan import SYSTEM_PLAN_XMLIDS
 
 PT = 'SIPANEL-PT-PAGE1'
@@ -164,9 +165,6 @@ class TestQuotationPage1(TransactionCase):
         """A normal Sales user sets Requested System on the Opportunity and creates the quotation through the form."""
         user = new_test_user(self.env, login='sipanel_pt_page1_sales', name=f'{PT} Sales',
                              groups='sales_team.group_sale_salesman')
-        self.assertTrue(user.has_group('analytic.group_analytic_accounting'),
-                        'F-01: Sales users cannot read System records (account.analytic.account) unless '
-                        'Analytic Accounting is enabled for internal users')
         lead = self.env['crm.lead'].with_user(user).create({'name': f'{PT} Sales Opportunity', 'type': 'opportunity',
                                                             'partner_id': self.customer_co.id, 'user_id': user.id})
         with Form(lead) as lead_form:
@@ -339,3 +337,138 @@ class TestQuotationPage1(TransactionCase):
         self.assertIn(f'{PT} پروژه طالقان', text)
         self.assertEqual(self._cell(block, 'o_sipanel_page1_project_site'), 'مشخص نشده')
         self.assertIn(order.date_order_shamsi, text, 'Persian documents keep the Shamsi date')
+
+    # ------------------------------------------------------------------ A — Requested System access (amendment)
+    def test_s01_sales_user_selects_system_without_analytic_group(self):
+        """A plain Sales user selects the System through the native Sales access (no new group, no ACL change)."""
+        user = new_test_user(self.env, login='sipanel_pt_page1_s01', name=f'{PT} Plain Sales',
+                             groups='sales_team.group_sale_salesman')
+        found = self.env['account.analytic.account'].with_user(user).name_search(
+            'PAGE1 Standing', domain=[('plan_id', '=', self.plan.id)])
+        self.assertIn(self.sys_seam.id, [r[0] for r in found])
+        lead = self.env['crm.lead'].with_user(user).create({
+            'name': f'{PT} S01', 'type': 'opportunity', 'user_id': user.id, 'sipanel_requested_system_id': self.sys_seam.id})
+        self.assertEqual(lead.sipanel_requested_system_id.name, f'{PT} Standing Seam')
+
+    def test_s02_native_access_tripwire(self):
+        """Evidence for the amendment decision (fail closed): native Odoo already grants Sales users read/write/create
+        on account.analytic.account (sale: group_sale_salesman 1,1,1,0; account: group_user 1,0,0,0), and quotation
+        send/confirm validate line distributions WITHOUT sudo. A restrictive "System Reader" record rule would therefore
+        neither remove those rights (ACLs are a union) nor be safe (it would break send/confirm of lines carrying
+        non-System analytic distributions). If this test fails, native access changed: revisit the decision."""
+        user = new_test_user(self.env, login='sipanel_pt_page1_s02', name=f'{PT} Plain Sales 2',
+                             groups='sales_team.group_sale_salesman')
+        Account = self.env['account.analytic.account'].with_user(user)
+        self.assertTrue(Account.has_access('read'))
+        self.assertTrue(Account.has_access('write'))
+        self.assertTrue(Account.has_access('create'))
+        self.assertFalse(Account.has_access('unlink'))
+        self.assertFalse(self.env['ir.model.access'].search([
+            ('model_id.model', '=', 'account.analytic.account'), ('group_id.name', 'ilike', 'System Reader')]),
+            'no SIPANEL reader group/ACL was added')
+        self.assertFalse(self.env['ir.rule'].search([
+            ('model_id.model', '=', 'account.analytic.account'), ('name', 'ilike', 'sipanel')]),
+            'no SIPANEL record rule narrows analytic accounts')
+
+    def test_s03_full_analytic_user_keeps_working(self):
+        user = new_test_user(self.env, login='sipanel_pt_page1_s03', name=f'{PT} Analytic Sales',
+                             groups='sales_team.group_sale_salesman,analytic.group_analytic_accounting')
+        self.assertTrue(self.env['account.analytic.account'].with_user(user).search([('id', '=', self.not_a_system.id)]))
+        order = self.env['sale.order'].with_user(user).create({'partner_id': self.individual.id,
+                                                               'sipanel_requested_system_id': self.sys_seam.id})
+        self.assertEqual(order.sipanel_requested_system_name_snapshot, f'{PT} Standing Seam')
+
+    # ------------------------------------------------------------------ B — controlled fiscal change (amendment)
+    def _foreign_site(self, customer, fp_foreign):
+        site = self._site(customer, name='Foreign Site', city=f'{PT}-Berlin', country_id=self.env.ref('base.de').id)
+        site.with_company(self.company).property_account_position_id = fp_foreign
+        return site
+
+    def _manager(self):
+        return new_test_user(self.env, login='sipanel_pt_page1_mgr', name=f'{PT} Sales Manager',
+                             groups='sales_team.group_sale_manager')
+
+    def test_w01_manager_applies_fiscal_change_natively_with_audit(self):
+        order, customer, tax_dom, tax_exp, fp_dom, fp_foreign = self._fiscal_fixture()
+        site = self._foreign_site(customer, fp_foreign)
+        manager = self._manager()
+        self.assertEqual((order.amount_untaxed, order.amount_tax, order.amount_total), (3000.0, 300.0, 3300.0))
+        wizard = self.env['sipanel.project.site.fiscal.change'].with_user(manager).create(
+            {'order_id': order.id, 'proposed_site_id': site.id})
+        # preview: nothing written yet
+        self.assertEqual(wizard.current_site_id, customer)
+        self.assertEqual(wizard.current_fiscal_position_id, fp_dom)
+        self.assertEqual(wizard.proposed_fiscal_position_id, fp_foreign)
+        self.assertTrue(wizard.fiscal_impact)
+        self.assertEqual((wizard.current_amount_untaxed, wizard.current_amount_tax, wizard.current_amount_total),
+                         (3000.0, 300.0, 3300.0))
+        self.assertEqual((wizard.projected_amount_untaxed, wizard.projected_amount_tax, wizard.projected_amount_total),
+                         (3000.0, 0.0, 3000.0))
+        self.assertIn(tax_dom.name, wizard.line_taxes_html)
+        self.assertIn(tax_exp.name, wizard.line_taxes_html)
+        self.assertEqual(order.partner_shipping_id, customer)
+        self.assertEqual(order.order_line.tax_ids, tax_dom)
+        # confirmation is mandatory
+        with self.assertRaises(UserError):
+            wizard.action_apply()
+        wizard.confirm = True
+        wizard.action_apply()
+        order.invalidate_recordset()
+        self.assertEqual(order.partner_shipping_id, site)
+        self.assertEqual(order.fiscal_position_id, fp_foreign, 'native fiscal-position resolution')
+        self.assertEqual(order.order_line.tax_ids, tax_exp, 'native Update Taxes remapped the line')
+        self.assertEqual((order.amount_untaxed, order.amount_tax, order.amount_total), (3000.0, 0.0, 3000.0))
+        self.assertFalse(order.show_update_fpos)
+        audit = order.message_ids.filtered(lambda m: 'Project Site change with fiscal impact approved' in (m.body or ''))
+        self.assertEqual(len(audit), 1)
+        self.assertEqual(audit.author_id, manager.partner_id)
+        for text in (manager.name, customer.name, site.name, fp_dom.name, fp_foreign.name):
+            self.assertIn(text, audit.body)
+        self.assertTrue(order.message_ids.filtered(lambda m: 'Product taxes have been recomputed' in (m.body or '')),
+                        'the native Update Taxes note is posted too')
+
+    def test_w02_normal_sales_user_cannot_bypass(self):
+        order, customer, _tax_dom, _tax_exp, fp_dom, fp_foreign = self._fiscal_fixture()
+        site = self._foreign_site(customer, fp_foreign)
+        sales = new_test_user(self.env, login='sipanel_pt_page1_w02', name=f'{PT} Plain Sales W02',
+                              groups='sales_team.group_sale_salesman_all_leads')
+        with self.assertRaises(AccessError):
+            self.env['sipanel.project.site.fiscal.change'].with_user(sales).create({'order_id': order.id, 'proposed_site_id': site.id})
+        with self.assertRaises(AccessError):
+            order.with_user(sales).action_sipanel_project_site_fiscal_change()
+        # a context flag without the internal token is not a bypass
+        with self.assertRaisesRegex(UserError, FISCAL_BLOCK_CODE):
+            order.with_user(sales).with_context(**{FISCAL_CHANGE_GUARD: True, 'sipanel_guard_token': 'forged'}).write(
+                {'partner_shipping_id': site.id})
+        self.assertEqual((order.partner_shipping_id, order.fiscal_position_id), (customer, fp_dom))
+
+    def test_w03_state_stale_preview_and_confirmed_orders_refused(self):
+        order, customer, _tax_dom, _tax_exp, fp_dom, fp_foreign = self._fiscal_fixture()
+        site = self._foreign_site(customer, fp_foreign)
+        manager = self._manager()
+        Wizard = self.env['sipanel.project.site.fiscal.change'].with_user(manager)
+        wizard = Wizard.create({'order_id': order.id, 'proposed_site_id': site.id, 'confirm': True})
+        order.write({'partner_shipping_id': self._site(customer, name='Same FP Site').id})   # allowed: same position
+        with self.assertRaisesRegex(UserError, 'changed after this preview'):
+            wizard.action_apply()
+        order.action_confirm()
+        with self.assertRaisesRegex(UserError, 'not in draft'):
+            Wizard.create({'order_id': order.id, 'proposed_site_id': site.id})
+        self.assertEqual(order.fiscal_position_id, fp_dom)
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_page1')
+class TestProjectSiteFiscalChangeSeal(SipanelSaleCase):
+    """A sealed SIPANEL Scope revision is historical customer content: the controlled change fails closed."""
+
+    def test_w04_sealed_scope_refused(self):
+        order, scope = self._make_order(85.0)
+        order.action_quotation_sent()
+        self.assertEqual(scope.current_revision_id.state, 'sent_sealed')
+        order.action_draft()
+        self.assertEqual(order.state, 'draft')
+        site = self.env['res.partner'].create({'name': f'{PT} Sealed Site', 'parent_id': self.partner.id, 'type': 'delivery',
+                                               'city': f'{PT}-SealCity'})
+        with self.assertRaisesRegex(UserError, 'sealed'):
+            self.env['sipanel.project.site.fiscal.change'].with_user(self.sales_mgr).create(
+                {'order_id': order.id, 'proposed_site_id': site.id})

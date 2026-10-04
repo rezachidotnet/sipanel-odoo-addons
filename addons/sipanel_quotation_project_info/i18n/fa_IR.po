@@ -10,6 +10,8 @@ msgstr ""
 
 #. module: sipanel_quotation_project_info
 #: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_crm_lead__sipanel_requested_system_id
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_id
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
 msgid "Requested System"
 msgstr "سیستم درخواستی"
 
@@ -20,6 +22,7 @@ msgstr "سیستم فنی که مشتری در ابتدا درخواست کرد�
 
 #. module: sipanel_quotation_project_info
 #: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_project_name
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
 msgid "Project Name"
 msgstr "نام پروژه"
 
@@ -27,11 +30,6 @@ msgstr "نام پروژه"
 #: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_project_name
 msgid "Printed on the quotation cover. Copied once from the Opportunity name while empty; later Opportunity renames do not change it."
 msgstr "روی جلد پیش‌فاکتور چاپ می‌شود. تا وقتی خالی است یک بار از نام فرصت فروش کپی می‌شود؛ تغییر نام بعدی فرصت آن را تغییر نمی‌دهد."
-
-#. module: sipanel_quotation_project_info
-#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_id
-msgid "Requested System"
-msgstr "سیستم درخواستی"
 
 #. module: sipanel_quotation_project_info
 #: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_id
@@ -47,6 +45,81 @@ msgstr "سیستم درخواستی (چاپ‌شده)"
 #: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_name_snapshot
 msgid "Name of the Requested System captured in the quotation language when the System was set. Renaming the System master later does not change it."
 msgstr "نام سیستم درخواستی که هنگام تعیین آن، به زبان پیش‌فاکتور ثبت شده است. تغییر نام بعدی سیستم در داده‌های پایه آن را تغییر نمی‌دهد."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__current_site_id
+msgid "Current Project Site"
+msgstr "محل پروژه فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__current_fiscal_position_id
+msgid "Current Fiscal Position"
+msgstr "موقعیت مالی فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__proposed_site_id
+msgid "Proposed Project Site"
+msgstr "محل پروژه پیشنهادی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__proposed_site_id
+msgid "The delivery / job-site contact to set as Delivery Address."
+msgstr "مخاطب تحویل / محل اجرای پروژه که به‌عنوان آدرس تحویل تنظیم می‌شود."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__proposed_fiscal_position_id
+msgid "Proposed Fiscal Position"
+msgstr "موقعیت مالی پیشنهادی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__proposed_fiscal_position_id
+msgid "Resolved by Odoo's own fiscal-position rules for the customer with this delivery address."
+msgstr "با قواعد موقعیت مالی خود Odoo برای مشتری با این آدرس تحویل تعیین می‌شود."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__current_amount_untaxed
+msgid "Current Untaxed Amount"
+msgstr "مبلغ بدون مالیات فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__current_amount_tax
+msgid "Current Tax"
+msgstr "مالیات فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__current_amount_total
+msgid "Current Total"
+msgstr "جمع کل فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__projected_amount_untaxed
+msgid "Projected Untaxed Amount"
+msgstr "مبلغ بدون مالیات پیش‌بینی‌شده"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__projected_amount_tax
+msgid "Projected Tax"
+msgstr "مالیات پیش‌بینی‌شده"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__projected_amount_total
+msgid "Projected Total"
+msgstr "جمع کل پیش‌بینی‌شده"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__line_taxes_html
+msgid "Line taxes"
+msgstr "مالیات سطرها"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sipanel_project_site_fiscal_change__confirm
+msgid "I confirm the fiscal position and tax change shown above"
+msgstr "تغییر موقعیت مالی و مالیات نمایش داده‌شده در بالا را تأیید می‌کنم"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model,name:sipanel_quotation_project_info.model_sipanel_project_site_fiscal_change
+msgid "Change Project Site with fiscal impact"
+msgstr "تغییر محل پروژه با اثر مالیاتی"
 
 #. module: sipanel_quotation_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
@@ -104,20 +177,11 @@ msgid "PROJECT INFORMATION"
 msgstr "اطلاعات پروژه"
 
 #. module: sipanel_quotation_project_info
-#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
-msgid "Project Name"
-msgstr "نام پروژه"
-
-#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
 msgid "Project Site"
 msgstr "محل پروژه"
-
-#. module: sipanel_quotation_project_info
-#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
-msgid "Requested System"
-msgstr "سیستم درخواستی"
 
 #. module: sipanel_quotation_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
@@ -135,14 +199,51 @@ msgid "e.g. Taleghan Project"
 msgstr "مثلاً پروژه طالقان"
 
 #. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "Delivery Address used as the job site. Printed on the quotation only when it differs from the customer; a change that would alter the fiscal position or taxes is refused."
+msgstr "آدرس تحویل که به‌عنوان محل اجرای پروژه استفاده می‌شود. فقط وقتی با مشتری متفاوت باشد روی پیش‌فاکتور چاپ می‌شود؛ تغییری که موقعیت مالی یا مالیات را عوض کند پذیرفته نمی‌شود."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/sale_order.py:0
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "Change Project Site (fiscal impact)"
+msgstr "تغییر محل پروژه (با اثر مالیاتی)"
+
+#. module: sipanel_quotation_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.crm_lead_view_form_sipanel_requested_system
 msgid "e.g. Standing Seam"
 msgstr "مثلاً استندینگ سیم"
 
 #. module: sipanel_quotation_project_info
-#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
-msgid "Delivery Address used as the job site. Printed on the quotation only when it differs from the customer; a change that would alter the fiscal position or taxes is refused."
-msgstr "آدرس تحویل که به‌عنوان محل اجرای پروژه استفاده می‌شود. فقط وقتی با مشتری متفاوت باشد روی پیش‌فاکتور چاپ می‌شود؛ تغییری که موقعیت مالی یا مالیات را عوض کند پذیرفته نمی‌شود."
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+msgid "This Project Site changes the fiscal position and/or the sale taxes of the quotation. The new treatment comes from the Finance-approved fiscal positions; review it before confirming."
+msgstr "این محل پروژه موقعیت مالی و/یا مالیات‌های فروش پیش‌فاکتور را تغییر می‌دهد. رفتار جدید از موقعیت‌های مالی تأییدشده توسط واحد مالی می‌آید؛ پیش از تأیید آن را بررسی کنید."
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+msgid "Current"
+msgstr "فعلی"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+msgid "Proposed"
+msgstr "پیشنهادی"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+msgid "Apply Project Site and Taxes"
+msgstr "اعمال محل پروژه و مالیات‌ها"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.sipanel_project_site_fiscal_change_view_form
+msgid "Cancel"
+msgstr "انصراف"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/sale_order.py:0
+msgid "%(code)s: changing the Delivery Address (Project Site) of %(order)s to \"%(site)s\" would change its fiscal position from \"%(before)s\" to \"%(after)s\" and with it the sale taxes. Project Site entry must not change taxes; the address was not saved. A Sales Manager can apply it with \"Change Project Site (fiscal impact)\" after reviewing the new taxes."
+msgstr "%(code)s: تغییر آدرس تحویل (محل پروژه) %(order)s به «%(site)s» موقعیت مالی آن را از «%(before)s» به «%(after)s» و همراه آن مالیات‌های فروش را تغییر می‌دهد. ثبت محل پروژه نباید مالیات را تغییر دهد؛ آدرس ذخیره نشد. مدیر فروش می‌تواند پس از بررسی مالیات‌های جدید، آن را با «تغییر محل پروژه (با اثر مالیاتی)» اعمال کند."
 
 #. module: sipanel_quotation_project_info
 #: code:addons/sipanel_quotation_project_info/models/system_plan.py:0
@@ -165,7 +266,102 @@ msgid "\"%(s)s\" is not a SIPANEL System: Requested System must be an analytic a
 msgstr "«%(s)s» یک سیستم SIPANEL نیست: سیستم درخواستی باید یک حساب تحلیلی از طرح «%(p)s» باشد."
 
 #. module: sipanel_quotation_project_info
-#: code:addons/sipanel_quotation_project_info/models/sale_order.py:0
-msgid "%(code)s: changing the Delivery Address (Project Site) of %(order)s to \"%(site)s\" would change its fiscal position from \"%(before)s\" to \"%(after)s\" and with it the sale taxes. Project Site entry must not change taxes; the address was not saved."
-msgstr "%(code)s: تغییر آدرس تحویل (محل پروژه) %(order)s به «%(site)s» موقعیت مالی آن را از «%(before)s» به «%(after)s» و همراه آن مالیات‌های فروش را تغییر می‌دهد. ثبت محل پروژه نباید مالیات را تغییر دهد؛ آدرس ذخیره نشد."
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Only a Sales Manager can apply a Project Site change that changes taxes."
+msgstr "فقط مدیر فروش می‌تواند تغییر محل پروژه‌ای را که مالیات را تغییر می‌دهد اعمال کند."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "the quotation is not in draft (sent quotations are sealed)"
+msgstr "پیش‌فاکتور در وضعیت پیش‌نویس نیست (پیش‌فاکتورهای ارسال‌شده مهر و موم شده‌اند)"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "the order is locked"
+msgstr "سفارش قفل است"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "invoices exist"
+msgstr "فاکتور صادر شده است"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "deliveries exist"
+msgstr "تحویل ثبت شده است"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Scope content is sealed (%s); create an amendment revision first"
+msgstr "محتوای اسکوپ مهر و موم شده است (%s)؛ ابتدا یک بازنگری اصلاحی ایجاد کنید"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Project Site fiscal change refused for %(o)s: %(r)s."
+msgstr "تغییر مالیاتی محل پروژه برای %(o)s رد شد: %(r)s."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Line"
+msgstr "سطر"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Taxes on the line now"
+msgstr "مالیات فعلی سطر"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Current position maps"
+msgstr "نگاشت موقعیت مالی فعلی"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Proposed position maps"
+msgstr "نگاشت موقعیت مالی پیشنهادی"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Select the proposed Project Site."
+msgstr "محل پروژه پیشنهادی را انتخاب کنید."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Tick the confirmation after reviewing the fiscal position and tax change."
+msgstr "پس از بررسی تغییر موقعیت مالی و مالیات، گزینه تأیید را علامت بزنید."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "The quotation changed after this preview was opened; open the change again."
+msgstr "پیش‌فاکتور پس از باز شدن این پیش‌نمایش تغییر کرده است؛ تغییر را دوباره باز کنید."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "The native result differs from the preview; nothing was changed. Review the fiscal position configuration with Finance."
+msgstr "نتیجه محاسبه Odoo با پیش‌نمایش متفاوت است؛ هیچ تغییری اعمال نشد. پیکربندی موقعیت مالی را با واحد مالی بررسی کنید."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Project Site change with fiscal impact approved"
+msgstr "تغییر محل پروژه با اثر مالیاتی تأیید شد"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Approved by"
+msgstr "تأییدکننده"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Approved on"
+msgstr "زمان تأیید"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Fiscal Position"
+msgstr "موقعیت مالی"
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/wizards/project_site_fiscal_change.py:0
+msgid "Untaxed / Tax / Total"
+msgstr "مبلغ بدون مالیات / مالیات / جمع کل"
 
