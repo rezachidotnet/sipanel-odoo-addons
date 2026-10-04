@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Requested System sits with the other opportunity request fields (salesperson, expected closing, tags). -->
+    <record id="crm_lead_view_form_sipanel_requested_system" model="ir.ui.view">
+        <field name="name">crm.lead.form.sipanel.requested.system</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_lead_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@invisible=&quot;type == 'lead'&quot;]/field[@name='tag_ids']" position="after">
+                <field name="sipanel_system_plan_id" invisible="1"/>
+                <field name="sipanel_requested_system_id"
+                       options="{'no_create': True, 'no_open': True}"
+                       placeholder="e.g. Standing Seam"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

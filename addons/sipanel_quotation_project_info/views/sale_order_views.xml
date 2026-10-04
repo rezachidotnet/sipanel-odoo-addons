@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Compact PROJECT INFORMATION group under the customer header. Project Site IS the native Delivery
+         Address selector (moved here, not duplicated) and is shown to every Sales user, not only to the
+         "Customer Addresses" group, because it is printed on Page 1. -->
+    <record id="view_order_form_sipanel_project_info" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.project.info</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='sale_header']" position="after">
+                <group name="sipanel_project_info" string="Project Information">
+                    <group>
+                        <field name="sipanel_project_name" readonly="state == 'cancel'" placeholder="e.g. Taleghan Project"/>
+                        <field name="sipanel_system_plan_id" invisible="1"/>
+                        <field name="sipanel_requested_system_id"
+                               options="{'no_create': True, 'no_open': True}"
+                               readonly="state in ['sale', 'cancel']"/>
+                    </group>
+                    <group name="sipanel_project_site"/>
+                </group>
+            </xpath>
+            <xpath expr="//group[@name='sipanel_project_site']" position="inside">
+                <xpath expr="//group[@name='partner_details']/field[@name='partner_shipping_id']" position="move"/>
+            </xpath>
+            <xpath expr="//group[@name='sipanel_project_site']/field[@name='partner_shipping_id']" position="attributes">
+                <attribute name="string">Project Site</attribute>
+                <attribute name="groups"/>
+                <attribute name="help">Delivery Address used as the job site. Printed on the quotation only when it differs from the customer; a change that would alter the fiscal position or taxes is refused.</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

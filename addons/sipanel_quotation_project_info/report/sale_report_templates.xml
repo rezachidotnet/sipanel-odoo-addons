@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Page 1 (cover) information block. The cover frame itself (20cm box, rule, page break, footer
+         mask) belongs to sale_shamsi_report and is kept as is; only its centred text block is replaced.
+         Labels are plain translatable terms (i18n/fa_IR.po): the document is rendered with
+         t-lang="doc.partner_id.lang", so it reads in one language, never "English / Persian".
+         Nothing internal is printed: no ids, no analytic code, no plan, no Scope or Recipe data. -->
+    <template id="report_saleorder_document_project_info" inherit_id="sale.report_saleorder_document">
+        <xpath expr="//div[hasclass('custom-full-page-cover')]/div[contains(@style, 'font-size: 26px')]" position="replace">
+            <t t-set="sipanel_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
+            <t t-set="sipanel_start" t-value="'right' if sipanel_rtl else 'left'"/>
+            <t t-set="sipanel_fa_dates" t-value="doc.partner_id.lang == 'fa_IR'"/>
+            <t t-set="sipanel_is_quotation" t-value="doc.state in ['draft', 'sent']"/>
+            <t t-set="sipanel_parties" t-value="doc._sipanel_page1_parties()"/>
+            <t t-set="sipanel_site" t-value="doc._sipanel_page1_project_site()"/>
+            <t t-set="sipanel_label_style" t-value="'width: 34%%; padding: 4px 8px; font-weight: bold; vertical-align: top; text-align: %s;' % sipanel_start"/>
+            <t t-set="sipanel_value_style" t-value="'padding: 4px 8px; vertical-align: top; text-align: %s;' % sipanel_start"/>
+            <t t-set="sipanel_section_style" t-value="'padding: 14px 8px 4px 8px; font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #555; border-bottom: 1px solid #999; text-align: %s;' % sipanel_start"/>
+            <div class="o_sipanel_page1" t-att-dir="'rtl' if sipanel_rtl else 'ltr'"
+                 style="width: 80%; margin: 0 auto; color: #000; font-size: 15px; line-height: 1.5;">
+                <div style="font-size: 34px; font-weight: bold; text-align: center; margin-bottom: 18px;">
+                    <span t-if="sipanel_is_quotation">COMMERCIAL QUOTATION</span>
+                    <span t-else="">SALES ORDER</span>
+                </div>
+                <table class="o_sipanel_page1_table" style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">
+                            <span t-if="sipanel_is_quotation">Quotation No.</span>
+                            <span t-else="">Order No.</span>
+                        </td>
+                        <td t-att-style="sipanel_value_style"><span t-out="doc.name"/></td>
+                    </tr>
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">
+                            <span t-if="sipanel_is_quotation">Quotation Date</span>
+                            <span t-else="">Order Date</span>
+                        </td>
+                        <td t-att-style="sipanel_value_style">
+                            <span t-if="sipanel_fa_dates and doc.date_order_shamsi" t-out="doc.date_order_shamsi"/>
+                            <span t-else="" t-field="doc.date_order" t-options="{'widget': 'date'}"/>
+                        </td>
+                    </tr>
+                    <tr t-if="sipanel_is_quotation and doc.validity_date">
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Valid Until</td>
+                        <td t-att-style="sipanel_value_style">
+                            <span t-if="sipanel_fa_dates and doc.validity_date_shamsi" t-out="doc.validity_date_shamsi"/>
+                            <span t-else="" t-field="doc.validity_date" t-options="{'widget': 'date'}"/>
+                        </td>
+                    </tr>
+
+                    <tr><td colspan="2" class="o_sipanel_page1_section" t-att-style="sipanel_section_style">CUSTOMER</td></tr>
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Customer</td>
+                        <td t-att-style="sipanel_value_style" class="o_sipanel_page1_customer"><span t-out="sipanel_parties[0].name"/></td>
+                    </tr>
+                    <tr t-if="sipanel_parties[1]">
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Contact Person</td>
+                        <td t-att-style="sipanel_value_style" class="o_sipanel_page1_contact"><span t-out="sipanel_parties[1].name"/></td>
+                    </tr>
+
+                    <tr><td colspan="2" class="o_sipanel_page1_section" t-att-style="sipanel_section_style">PROJECT INFORMATION</td></tr>
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Project Name</td>
+                        <td t-att-style="sipanel_value_style" class="o_sipanel_page1_project_name">
+                            <span t-if="doc.sipanel_project_name" t-out="doc.sipanel_project_name"/>
+                            <span t-else="">Not specified</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Project Site</td>
+                        <td t-att-style="sipanel_value_style" class="o_sipanel_page1_project_site">
+                            <t t-if="sipanel_site">
+                                <div t-if="sipanel_site.name" t-out="sipanel_site.name"/>
+                                <div t-field="doc.partner_shipping_id"
+                                     t-options="{'widget': 'contact', 'fields': ['address'], 'no_marker': True}"/>
+                            </t>
+                            <span t-else="">Not specified</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="o_sipanel_page1_label" t-att-style="sipanel_label_style">Requested System</td>
+                        <td t-att-style="sipanel_value_style" class="o_sipanel_page1_requested_system">
+                            <span t-if="doc.sipanel_requested_system_name_snapshot" t-out="doc.sipanel_requested_system_name_snapshot"/>
+                            <span t-else="">Not specified</span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </xpath>
+    </template>
+</odoo>

@@ -1,0 +1,171 @@
+# Persian (Iran) translation of sipanel_quotation_project_info.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: fa_IR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_crm_lead__sipanel_requested_system_id
+msgid "Requested System"
+msgstr "سیستم درخواستی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_crm_lead__sipanel_requested_system_id
+msgid "The technical system the customer initially asked for (e.g. Standing Seam, Sandwich Panel). Copied once to new quotations of this opportunity."
+msgstr "سیستم فنی که مشتری در ابتدا درخواست کرده است (مثلاً استندینگ سیم، ساندویچ پانل). یک بار به پیش‌فاکتورهای جدید این فرصت کپی می‌شود."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_project_name
+msgid "Project Name"
+msgstr "نام پروژه"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_project_name
+msgid "Printed on the quotation cover. Copied once from the Opportunity name while empty; later Opportunity renames do not change it."
+msgstr "روی جلد پیش‌فاکتور چاپ می‌شود. تا وقتی خالی است یک بار از نام فرصت فروش کپی می‌شود؛ تغییر نام بعدی فرصت آن را تغییر نمی‌دهد."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_id
+msgid "Requested System"
+msgstr "سیستم درخواستی"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_id
+msgid "The technical system the customer initially asked for. Copied once from the Opportunity; the quotation prints the name captured when it was set."
+msgstr "سیستم فنی که مشتری در ابتدا درخواست کرده است. یک بار از فرصت فروش کپی می‌شود؛ پیش‌فاکتور نامی را چاپ می‌کند که هنگام تعیین آن ثبت شده است."
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,field_description:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_name_snapshot
+msgid "Requested System (as printed)"
+msgstr "سیستم درخواستی (چاپ‌شده)"
+
+#. module: sipanel_quotation_project_info
+#: model:ir.model.fields,help:sipanel_quotation_project_info.field_sale_order__sipanel_requested_system_name_snapshot
+msgid "Name of the Requested System captured in the quotation language when the System was set. Renaming the System master later does not change it."
+msgstr "نام سیستم درخواستی که هنگام تعیین آن، به زبان پیش‌فاکتور ثبت شده است. تغییر نام بعدی سیستم در داده‌های پایه آن را تغییر نمی‌دهد."
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "COMMERCIAL QUOTATION"
+msgstr "پیش‌فاکتور تجاری"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "SALES ORDER"
+msgstr "سفارش فروش"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Quotation No."
+msgstr "شماره پیش‌فاکتور"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Order No."
+msgstr "شماره سفارش"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Quotation Date"
+msgstr "تاریخ پیش‌فاکتور"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Order Date"
+msgstr "تاریخ سفارش"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Valid Until"
+msgstr "معتبر تا"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "CUSTOMER"
+msgstr "مشخصات کارفرما"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Customer"
+msgstr "کارفرما"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Contact Person"
+msgstr "شخص تماس"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "PROJECT INFORMATION"
+msgstr "اطلاعات پروژه"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Project Name"
+msgstr "نام پروژه"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "Project Site"
+msgstr "محل پروژه"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Requested System"
+msgstr "سیستم درخواستی"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
+msgid "Not specified"
+msgstr "مشخص نشده"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "Project Information"
+msgstr "اطلاعات پروژه"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "e.g. Taleghan Project"
+msgstr "مثلاً پروژه طالقان"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.crm_lead_view_form_sipanel_requested_system
+msgid "e.g. Standing Seam"
+msgstr "مثلاً استندینگ سیم"
+
+#. module: sipanel_quotation_project_info
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.view_order_form_sipanel_project_info
+msgid "Delivery Address used as the job site. Printed on the quotation only when it differs from the customer; a change that would alter the fiscal position or taxes is refused."
+msgstr "آدرس تحویل که به‌عنوان محل اجرای پروژه استفاده می‌شود. فقط وقتی با مشتری متفاوت باشد روی پیش‌فاکتور چاپ می‌شود؛ تغییری که موقعیت مالی یا مالیات را عوض کند پذیرفته نمی‌شود."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/system_plan.py:0
+msgid "SIPANEL System plan not found: no analytic plan is named \"%(name)s\"."
+msgstr "طرح «سیستم SIPANEL» پیدا نشد: هیچ طرح تحلیلی با نام «%(name)s» وجود ندارد."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/system_plan.py:0
+msgid "SIPANEL System plan is ambiguous: the configured plan \"%(c)s\" differs from the plan \"%(p)s\" resolved by name. Fix the SIPANEL settings first."
+msgstr "طرح «سیستم SIPANEL» مبهم است: طرح تنظیم‌شده «%(c)s» با طرح «%(p)s» که از روی نام یافت شد یکی نیست. ابتدا تنظیمات SIPANEL را اصلاح کنید."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/system_plan.py:0
+msgid "SIPANEL System plan is ambiguous: %(n)s analytic plans are named \"%(name)s\". Rename or merge the duplicates; no plan is picked automatically."
+msgstr "طرح «سیستم SIPANEL» مبهم است: %(n)s طرح تحلیلی با نام «%(name)s» وجود دارد. موارد تکراری را تغییر نام دهید یا ادغام کنید؛ هیچ طرحی خودکار انتخاب نمی‌شود."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/system_plan.py:0
+msgid "\"%(s)s\" is not a SIPANEL System: Requested System must be an analytic account of the \"%(p)s\" plan."
+msgstr "«%(s)s» یک سیستم SIPANEL نیست: سیستم درخواستی باید یک حساب تحلیلی از طرح «%(p)s» باشد."
+
+#. module: sipanel_quotation_project_info
+#: code:addons/sipanel_quotation_project_info/models/sale_order.py:0
+msgid "%(code)s: changing the Delivery Address (Project Site) of %(order)s to \"%(site)s\" would change its fiscal position from \"%(before)s\" to \"%(after)s\" and with it the sale taxes. Project Site entry must not change taxes; the address was not saved."
+msgstr "%(code)s: تغییر آدرس تحویل (محل پروژه) %(order)s به «%(site)s» موقعیت مالی آن را از «%(before)s» به «%(after)s» و همراه آن مالیات‌های فروش را تغییر می‌دهد. ثبت محل پروژه نباید مالیات را تغییر دهد؛ آدرس ذخیره نشد."
+
