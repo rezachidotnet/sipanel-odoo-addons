@@ -54,7 +54,7 @@ cp -r reports/sipanel_scope_implementation_rc_20260919T140237Z $STAGE/bundle/rep
 (cd $STAGE/bundle && find . -type f -print0 | sort -z | xargs -0 sha256sum > $R/SHA256SUMS)
 cp $R/SHA256SUMS $STAGE/bundle/reports/$RUN/SHA256SUMS
 # refuse if any secret-looking content slipped in
-if grep -rIlE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|(db_password|admin_passwd)\s*=\s*[^<[:space:]]' $STAGE/bundle >/dev/null; then echo "SECRET DETECTED, abort" >&2; grep -rIlE '(db_password|admin_passwd)\s*=\s*[^<[:space:]]' $STAGE/bundle >&2; exit 4; fi
+python3 "$(dirname "$0")/sipanel_secret_scan.py" --dir $STAGE/bundle || { echo "SECRET DETECTED, abort" >&2; exit 4; }
 (cd $STAGE/bundle && python3 - "$ZIP" <<'PYZ'
 import os, sys, zipfile
 zp=sys.argv[1]
