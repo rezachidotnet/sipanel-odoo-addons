@@ -3,7 +3,7 @@
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_page1_clone_validate.sh all|clone|pre|install|test|post|evidence|drop
 #   CLONE=<db name>   reuse/choose the clone (default sipanel_page1_clone_<UTC timestamp>, printed on start)
-#   PG_ADMIN=<role>   postgres maintenance role in odoo-db for CREATE/DROP DATABASE and pg_dump (default postgres)
+#   PG_ADMIN=<role>   postgres maintenance role in odoo-db for CREATE/DROP DATABASE and pg_dump (default odoo, the role sipanel_recovery_point.sh uses)
 # Clone ownership = Odoo's db_user from /etc/odoo/odoo.conf; a clone that fails restore, ownership check or
 # neutralization is dropped immediately (fail closed).
 # The module directory is copied into /opt/odoo/addons (inert until installed; it is not auto_install).
@@ -24,7 +24,7 @@ echo "clone database: $CLONE"
 [[ "$CLONE" == sipanel_page1_clone_* ]] || { echo "refusing: clone name must start with sipanel_page1_clone_"; exit 2; }
 
 # PG_ADMIN: maintenance role used only for CREATE/DROP DATABASE and the read-only pg_dump of production.
-PG_ADMIN=${PG_ADMIN:-postgres}
+PG_ADMIN=${PG_ADMIN:-odoo}
 # Odoo's own role, read from the running container's config (never hard-coded); every clone object must belong to it.
 db_user() {
   local u

@@ -13,9 +13,9 @@
             <t t-set="sipanel_is_quotation" t-value="doc.state in ['draft', 'sent']"/>
             <t t-set="sipanel_parties" t-value="doc._sipanel_page1_parties()"/>
             <t t-set="sipanel_site" t-value="doc._sipanel_page1_project_site()"/>
-            <t t-set="sipanel_label_style" t-value="'width: 34%%; padding: 4px 8px; font-weight: bold; vertical-align: top; text-align: %s;' % sipanel_start"/>
-            <t t-set="sipanel_value_style" t-value="'padding: 4px 8px; vertical-align: top; text-align: %s;' % sipanel_start"/>
-            <t t-set="sipanel_section_style" t-value="'padding: 14px 8px 4px 8px; font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #555; border-bottom: 1px solid #999; text-align: %s;' % sipanel_start"/>
+            <t t-set="sipanel_label_style" t-value="'width: 34%; padding: 4px 8px; font-weight: bold; vertical-align: top; text-align: ' + sipanel_start + ';'"/>
+            <t t-set="sipanel_value_style" t-value="'padding: 4px 8px; vertical-align: top; text-align: ' + sipanel_start + ';'"/>
+            <t t-set="sipanel_section_style" t-value="'padding: 14px 8px 4px 8px; font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #555; border-bottom: 1px solid #999; text-align: ' + sipanel_start + ';'"/>
             <div class="o_sipanel_page1" t-att-dir="'rtl' if sipanel_rtl else 'ltr'"
                  style="width: 80%; margin: 0 auto; color: #000; font-size: 15px; line-height: 1.5;">
                 <div style="font-size: 34px; font-weight: bold; text-align: center; margin-bottom: 18px;">
