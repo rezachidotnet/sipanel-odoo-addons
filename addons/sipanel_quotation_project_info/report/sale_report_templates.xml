@@ -6,6 +6,16 @@
          t-lang="doc.partner_id.lang", so it reads in one language, never "English / Persian".
          Nothing internal is printed: no ids, no analytic code, no plan, no Scope or Recipe data. -->
     <template id="report_saleorder_document_project_info" inherit_id="sale.report_saleorder_document">
+        <!-- V-01: web.address_layout prints the native address row (recipient + invoicing/shipping
+             information_block) above the page. The cover hides it behind its negative margin, but a distinct
+             delivery address (= any Project Site) makes it taller than the mask, so it showed clipped. Page 1
+             already prints Customer and Project Site: the row is reset to False here, on the same anchor and
+             scope as the cover. The native t-sets are kept (sale_shamsi_report xpaths into them).
+             The invoice address is therefore no longer printed anywhere (Legal/Tax ID task). -->
+        <xpath expr="//div[hasclass('custom-full-page-cover')]" position="before">
+            <t t-set="address" t-value="False"/>
+            <t t-set="information_block" t-value="False"/>
+        </xpath>
         <xpath expr="//div[hasclass('custom-full-page-cover')]/div[contains(@style, 'font-size: 26px')]" position="replace">
             <t t-set="sipanel_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
             <t t-set="sipanel_start" t-value="'right' if sipanel_rtl else 'left'"/>

@@ -4,8 +4,8 @@ Run: docker exec -i -e PHASE=pre|post -e OUT=/tmp/page1 odoo-sipanel odoo shell 
 
 PHASE=pre : render SI-26/2546 as it is (before the module is installed on the clone).
 PHASE=post: render SI-26/2546 as it is (= what Production would print after deployment, no data change),
-            then build a synthetic copy with Opportunity / Requested System / distinct Project Site and render it
-            in en_US and fa_IR. Everything written in PHASE=post is rolled back; the clone keeps SI-26/2546 as restored.
+            then build a synthetic copy with Opportunity / Requested System and render it in en_US and fa_IR,
+            without and then with a distinct Project Site. Everything written in PHASE=post is rolled back; the clone keeps SI-26/2546 as restored.
 PDFs + a JSON summary land in $OUT inside the container (copy them out with docker cp).
 """
 import json
@@ -62,11 +62,16 @@ if PHASE == 'post':
                                           'type': 'delivery', 'street': 'Taleghan Road', 'city': 'Taleghan',
                                           'country_id': ref.partner_id.country_id.id or env.ref('base.ir').id})
         before = commercial(fixture)
+        nosite = {}
+        for lang in ('en_US', 'fa_IR'):                           # V-01: same document without a Project Site
+            fixture.partner_id.lang = lang
+            nosite[f'pdf_{lang}_nosite'] = render(fixture, f'fixture_{lang}_nosite')
         fixture.write({'partner_shipping_id': site.id})          # fiscal guard runs here
         after = commercial(fixture)
         summary['fixture'] = {'name': fixture.name, 'before': before, 'after': after,
                               'fiscal_unchanged': (before['fiscal_position'], before['tax'], before['total'])
-                                                  == (after['fiscal_position'], after['tax'], after['total'])}
+                                                  == (after['fiscal_position'], after['tax'], after['total']),
+                              **nosite}
         for lang in ('en_US', 'fa_IR'):
             fixture.partner_id.lang = lang
             summary['fixture'][f'pdf_{lang}'] = render(fixture, f'fixture_{lang}')

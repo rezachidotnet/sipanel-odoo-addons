@@ -338,6 +338,31 @@ class TestQuotationPage1(TransactionCase):
         self.assertEqual(self._cell(block, 'o_sipanel_page1_project_site'), 'مشخص نشده')
         self.assertIn(order.date_order_shamsi, text, 'Persian documents keep the Shamsi date')
 
+    def test_n03_native_address_row_is_not_printed(self):
+        """V-01: the native recipient / invoicing / shipping row of web.address_layout is not printed, in either
+        language, with or without a distinct Project Site; Page 1 still carries Customer and Project Site."""
+        self._activate_fa()
+        order = self._quotation_from(self.lead, partner=self.contact)
+        site = self._site(self.customer_co, city=f'{PT}-Taleghan')
+        for with_site in (False, True):
+            order.write({'partner_shipping_id': (site if with_site else self.contact).id})
+            for lang in ('en_US', 'fa_IR'):
+                (self.customer_co | self.contact).write({'lang': lang})
+                content = self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0]
+                doc = lxml_html.fromstring(content)
+                where = f'{lang}, distinct site={with_site}'
+                self.assertFalse(doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' address ')]"),
+                                 f'native address row printed ({where})')
+                self.assertFalse(doc.xpath("//*[@name='information_block']"), f'information block printed ({where})')
+                self.assertFalse(doc.xpath("//*[contains(@class, 'customer_label')]"), f'"Customer:" label printed ({where})')
+                block = self._page1(order)
+                self.assertEqual(self._cell(block, 'o_sipanel_page1_customer'), f'{PT} Customer Co')
+                site_cell = self._cell(block, 'o_sipanel_page1_project_site')
+                if with_site:
+                    self.assertIn(f'{PT} Taleghan Site', site_cell)
+                else:
+                    self.assertIn(site_cell, ('Not specified', 'مشخص نشده'))
+
     # ------------------------------------------------------------------ A — Requested System access (amendment)
     def test_s01_sales_user_selects_system_without_analytic_group(self):
         """A plain Sales user selects the System through the native Sales access (no new group, no ACL change)."""
