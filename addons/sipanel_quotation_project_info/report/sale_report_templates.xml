@@ -28,7 +28,7 @@
             <t t-set="sipanel_section_style" t-value="'padding: 14px 8px 4px 8px; font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #555; border-bottom: 1px solid #999; text-align: ' + sipanel_start + ';'"/>
             <div class="o_sipanel_page1" t-att-dir="'rtl' if sipanel_rtl else 'ltr'"
                  style="width: 80%; margin: 0 auto; color: #000; font-size: 15px; line-height: 1.5;">
-                <div style="font-size: 34px; font-weight: bold; text-align: center; margin-bottom: 18px;">
+                <div class="o_sipanel_page1_title" style="font-size: 34px; font-weight: bold; text-align: center; margin-bottom: 18px;">
                     <span t-if="sipanel_is_quotation">COMMERCIAL QUOTATION</span>
                     <span t-else="">SALES ORDER</span>
                 </div>

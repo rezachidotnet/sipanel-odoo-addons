@@ -124,7 +124,7 @@ msgstr "تغییر محل پروژه با اثر مالیاتی"
 #. module: sipanel_quotation_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info
 msgid "COMMERCIAL QUOTATION"
-msgstr "پیش‌فاکتور تجاری"
+msgstr "پیش‌فاکتور"
 
 #. module: sipanel_quotation_project_info
 #: model_terms:ir.ui.view,arch_db:sipanel_quotation_project_info.report_saleorder_document_project_info

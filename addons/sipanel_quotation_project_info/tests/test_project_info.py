@@ -74,6 +74,11 @@ class TestQuotationPage1(TransactionCase):
         cells = block.xpath(f".//td[contains(concat(' ', normalize-space(@class), ' '), ' {cls} ')]")
         return self._text(cells[0]) if cells else None
 
+    def _title(self, block):
+        titles = block.xpath(".//div[contains(concat(' ', normalize-space(@class), ' '), ' o_sipanel_page1_title ')]")
+        self.assertEqual(len(titles), 1, 'exactly one Page 1 title')
+        return self._text(titles[0])
+
     def _labels(self, block):
         return [self._text(td) for td in block.xpath(
             ".//td[contains(@class, 'o_sipanel_page1_label') or contains(@class, 'o_sipanel_page1_section')]")]
@@ -305,7 +310,7 @@ class TestQuotationPage1(TransactionCase):
         self.assertEqual(block.get('dir'), 'ltr')
         text = self._text(block)
         labels = self._labels(block)
-        self.assertIn('COMMERCIAL QUOTATION', text)
+        self.assertEqual(self._title(block), 'COMMERCIAL QUOTATION')
         self.assertEqual(labels, ['Quotation No.', 'Quotation Date', 'Valid Until', 'CUSTOMER', 'Customer', 'Contact Person',
                                   'PROJECT INFORMATION', 'Project Name', 'Project Site', 'Requested System']
                          if order.validity_date else
@@ -327,7 +332,8 @@ class TestQuotationPage1(TransactionCase):
         self.assertEqual(block.get('dir'), 'rtl')
         text = self._text(block)
         labels = self._labels(block)
-        self.assertIn('پیش‌فاکتور تجاری', text)
+        self.assertEqual(self._title(block), 'پیش‌فاکتور', 'fa_IR cover title is the plain term (not "پیش‌فاکتور تجاری")')
+        self.assertNotIn('تجاری', text)
         self.assertNotIn('COMMERCIAL QUOTATION', text)
         for fa in ('شماره پیش‌فاکتور', 'تاریخ پیش‌فاکتور', 'مشخصات کارفرما', 'کارفرما', 'شخص تماس',
                    'اطلاعات پروژه', 'نام پروژه', 'محل پروژه', 'سیستم درخواستی'):
