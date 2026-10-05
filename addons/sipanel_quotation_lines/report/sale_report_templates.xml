@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_saleorder_document_quotation_lines" inherit_id="sale.report_saleorder_document">
+        <!-- A: the first line of the line description is the item title; the following lines (the native
+             description_sale Odoo appends, or the Scope note body) are printed below it, smaller and muted,
+             inside the same cell. Block elements inherit the document direction, so RTL and LTR both work;
+             the table frame / repeated header of sale_shamsi_report are untouched (same cell, same row). -->
+        <xpath expr="//tr[@name='tr_product']/td[@name='td_product_name']/span[@t-field='line.name']" position="replace">
+            <t t-set="sipanel_name_lines" t-value="(line.name or '').split('\n')"/>
+            <span class="o_sipanel_line_title" t-out="sipanel_name_lines[0]"/>
+            <t t-set="sipanel_desc_lines" t-value="sipanel_name_lines[1:]"/>
+            <div t-if="any(l.strip() for l in sipanel_desc_lines)" class="o_sipanel_line_desc text-muted"
+                 style="font-size: 0.82em; color: #6c757d; line-height: 1.35; margin-top: 1px;">
+                <t t-foreach="sipanel_desc_lines" t-as="sipanel_desc_line">
+                    <t t-out="sipanel_desc_line"/><br t-if="not sipanel_desc_line_last"/>
+                </t>
+            </div>
+        </xpath>
+        <!-- C: amount in words, below the totals box (native amount_to_text in the document language) -->
+        <xpath expr="//div[@name='so_total_summary']" position="inside">
+            <div class="row o_sipanel_amount_in_words" name="sipanel_amount_in_words">
+                <div class="col-12" style="margin-top: 4px; font-size: 0.95em;">
+                    <strong>Amount in words:</strong>
+                    <span class="o_sipanel_amount_in_words_text" t-out="doc._sipanel_amount_total_in_words()"/>
+                </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

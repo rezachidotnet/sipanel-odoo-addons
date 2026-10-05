@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="product_template_form_view_sipanel_installation_base" model="ir.ui.view">
+        <field name="name">product.template.form.sipanel.installation.base</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='extra_info']" position="inside">
+                <field name="sipanel_installation_base"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

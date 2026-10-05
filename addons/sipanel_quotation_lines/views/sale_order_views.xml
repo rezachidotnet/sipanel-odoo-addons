@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_sipanel_installation" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.installation</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='sipanel_project_info']/group[1]" position="inside">
+                <field name="sipanel_installation_pct" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_installation_amount" invisible="not sipanel_installation_pct"/>
+            </xpath>
+            <!-- the managed lines are rewritten by the engine on save; the marker is loaded for the list -->
+            <xpath expr="//field[@name='order_line']/list" position="inside">
+                <field name="sipanel_is_installation_line" column_invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

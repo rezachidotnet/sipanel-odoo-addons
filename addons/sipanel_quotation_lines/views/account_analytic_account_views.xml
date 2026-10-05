@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_analytic_account_form_sipanel_installation" model="ir.ui.view">
+        <field name="name">account.analytic.account.form.sipanel.installation</field>
+        <field name="model">account.analytic.account</field>
+        <field name="inherit_id" ref="analytic.view_account_analytic_account_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='plan_id']" position="after">
+                <field name="sipanel_installation_product_id" options="{'no_create': True}"
+                       groups="sales_team.group_sale_manager"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

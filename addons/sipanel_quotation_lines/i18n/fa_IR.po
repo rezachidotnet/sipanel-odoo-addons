@@ -1,0 +1,104 @@
+# Persian (Iran) translation of sipanel_quotation_lines.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: fa_IR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_pct
+msgid "Installation %"
+msgstr "درصد نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_amount
+msgid "Installation amount"
+msgstr "مبلغ نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_base_amount
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_template__sipanel_installation_base
+msgid "Installation base"
+msgstr "مبنای نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order_line__sipanel_is_installation_line
+msgid "Installation line"
+msgstr "سطر نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_installation_product_id
+msgid "Installation product"
+msgstr "محصول نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_installation_pct_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_installation_pct_default
+msgid "Default installation %"
+msgstr "درصد پیش‌فرض نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Amount in words:</strong>"
+msgstr "<strong>مبلغ کل به حروف:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.res_config_settings_view_form_sipanel_installation
+msgid "Installation / Execution"
+msgstr "نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.res_config_settings_view_form_sipanel_installation
+msgid "Default percentage of the item subtotal proposed on new quotations. Empty or 0 = no installation line; each quotation can override it."
+msgstr "درصد پیش‌فرض نصب و اجرا از مبلغ اقلام برای پیش‌فاکتورهای جدید. خالی یا ۰ = بدون سطر نصب و اجرا؛ هر پیش‌فاکتور می‌تواند آن را تغییر دهد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution (%(pct)s%% of item subtotal)"
+msgstr "نصب و اجرا (%(pct)s٪ مبلغ اقلام)"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Order %s has an installation percentage but no SIPANEL System: add a Scope or set the Requested System, or set the installation percentage to 0."
+msgstr "سفارش %s درصد نصب و اجرا دارد اما سیستم SIPANEL ندارد: یک Scope اضافه کنید یا سیستم درخواستی را تعیین کنید، یا درصد نصب و اجرا را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "SIPANEL System \"%s\" has no installation product configured; no installation line can be created. Configure it on the System, or set the installation percentage to 0."
+msgstr "برای سیستم SIPANEL «%s» محصول نصب و اجرا تعریف نشده است؛ سطر نصب و اجرا ایجاد نمی‌شود. آن را روی سیستم تعریف کنید یا درصد نصب و اجرا را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution"
+msgstr "نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Order %s is no longer a quotation; its installation percentage is frozen."
+msgstr "سفارش %s دیگر پیش‌فاکتور نیست؛ درصد نصب و اجرای آن ثابت شده است."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Scope %(s)s (version %(v)s) already includes %(p)s in its price. This quotation was made on a Scope version older than the separate installation line; setting an installation percentage would charge installation twice. Keep the percentage at 0, or quote on the current Scope version."
+msgstr "Scope %(s)s (نسخه %(v)s) هم‌اکنون %(p)s را در قیمت خود دارد. این پیش‌فاکتور بر اساس نسخه‌ای قدیمی‌تر از مدل سطر جداگانه نصب و اجرا تهیه شده است و تعیین درصد نصب و اجرا، هزینه نصب را دو بار محاسبه می‌کند. درصد را ۰ نگه دارید یا با نسخه فعلی Scope پیش‌فاکتور تهیه کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "The installation percentage cannot be negative."
+msgstr "درصد نصب و اجرا نمی‌تواند منفی باشد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order_line.py:0
+msgid "The Installation / Execution lines of %s are managed by its installation percentage; set the percentage to 0 to remove them."
+msgstr "سطرهای نصب و اجرای %s با درصد نصب و اجرا مدیریت می‌شوند؛ برای حذف آن‌ها درصد را ۰ کنید."
