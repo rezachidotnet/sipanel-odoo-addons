@@ -4,7 +4,8 @@ Run: docker exec -i -e PHASE=pre|post -e OUT=/tmp/qlines odoo-sipanel odoo shell
 
 PHASE=pre : SI-26/2546 as restored (module not installed): totals + fa_IR / en_US PDFs.
 PHASE=post: (module installed) SI-26/2546 unchanged; product / System inventory; then, inside ONE rolled-back
-            savepoint: old-version refusal (B3), the Standing Seam v3 creation (scripts/sipanel_standing_seam_v3.py),
+            savepoint: old-version refusal (B3), the Standing Seam v3 customer-text gate (no / partial wording refused)
+            and release of all three scopes (scripts/sipanel_standing_seam_v3.py, owner wording),
             the synthetic copy of SI-26/2546 on the NEW scope version at 40 % and 10 %, crane exclusion, recompute,
             Scope regeneration, costing exclusion, frozen after confirmation, amount in words, PDFs.
 The script ends with a rollback: the clone keeps exactly what was restored + the installed module.
@@ -113,8 +114,9 @@ if PHASE == 'post':
     gut_v = Scope.search([('code', '=', 'CS-STANDING-SEAM-GUTTER')]).current_version_id
     QS = env['sipanel.quote.scope']
 
-    def fixture(version_roof, lang):
-        """Synthetic copy of SI-26/2546 with Commercial Scopes (Roof / Flashing / Gutter)."""
+    def fixture(versions, lang):
+        """Synthetic copy of SI-26/2546 with Commercial Scopes on versions = (Roof, Flashing, Gutter)."""
+        version_roof, flash_v, gut_v = versions
         order = env['sale.order'].create({
             'partner_id': ref.partner_id.id, 'pricelist_id': ref.pricelist_id.id, 'origin': 'SIPANEL-QLINES-ACCEPTANCE',
             'sipanel_project_name': ref.sipanel_project_name, 'sipanel_requested_system_id': seam.id,
@@ -145,7 +147,8 @@ if PHASE == 'post':
             old_v = roof_scope.current_version_id
             summary['old_version'] = {'name': old_v.name, 'install_lines': [
                 (l.sequence, l.placement) for l in old_v.recipe_line_ids if l.product_id == install]}
-            old = fixture(old_v, 'fa_IR')
+            old_versions = (old_v, flash_v, gut_v)
+            old = fixture(old_versions, 'fa_IR')
             try:
                 with env.cr.savepoint():
                     old.sipanel_installation_pct = 40.0
@@ -153,27 +156,52 @@ if PHASE == 'post':
             except UserError as exc:
                 check('b3_old_version_refused', 'twice' in str(exc) or 'دو بار' in str(exc), str(exc))
             check('b3_old_version_no_line', not old.order_line.filtered('sipanel_is_installation_line'))
-            # ---------------- Standing Seam v3 (the corrected commercial model)
+            # ---------------- Standing Seam v3 (the corrected commercial model, all three scopes)
             v3ns = {'SIPANEL_V3_LIBRARY': True}
-            # first without a corrected description: the customer-text gate must refuse (nothing created)
-            os.environ.pop('SIPANEL_V3_DESCRIPTION_EN', None)
             exec(open(os.environ.get('V3_SCRIPT', '/tmp/qlines_src/sipanel_standing_seam_v3.py')).read(), v3ns)
+            approved = v3ns['APPROVED_WORDING']
+            scopes3 = [Scope.search([('code', '=', c)]) for c in v3ns['SCOPE_CODES']]
+            Version = env['sipanel.scope.version'].with_context(active_test=False)
+            n_versions = Version.search_count([])
+            # the customer-text gate refuses without wording, and with wording for only some scopes: nothing created
             gate = v3ns['create_standing_seam_v3'](env)
-            check('v3_description_gate_blocks', gate.get('result') == 'BLOCKED_CUSTOMER_DESCRIPTION'
-                  and roof_scope.current_version_id == old_v, gate)
-            # then with the PROPOSED text (clone only; the owner approves the real wording)
-            os.environ['SIPANEL_V3_DESCRIPTION_EN'] = v3ns['PROPOSED_DESCRIPTION_EN']
-            summary['standing_seam_v3'] = v3ns['create_standing_seam_v3'](env)
-            new_v = roof_scope.current_version_id
-            check('v3_released_v2_preserved', summary['standing_seam_v3'].get('result') == 'RELEASED'
-                  and summary['standing_seam_v3'].get('previous_checksum_unchanged')
-                  and summary['standing_seam_v3'].get('previous_checksum_verified_after')
-                  and summary['standing_seam_v3'].get('previous_lines_after') == summary['standing_seam_v3'].get('previous_lines'),
-                  summary['standing_seam_v3'])
+            check('v3_gate_blocks_without_wording', gate.get('result') == 'BLOCKED_CUSTOMER_DESCRIPTION'
+                  and all(gate['scopes'][c]['result'] == 'BLOCKED_CUSTOMER_DESCRIPTION' for c in v3ns['SCOPE_CODES'])
+                  and [sc.current_version_id for sc in scopes3] == list(old_versions)
+                  and Version.search_count([]) == n_versions, gate)
+            partial = {c: approved[c] for c in v3ns['SCOPE_CODES'][:2]}
+            partial[v3ns['SCOPE_CODES'][0]] = {'en_US': approved[v3ns['SCOPE_CODES'][0]]['en_US']}  # roof en only
+            gate2 = v3ns['create_standing_seam_v3'](env, partial)
+            check('v3_gate_blocks_partial_wording', gate2.get('result') == 'BLOCKED_CUSTOMER_DESCRIPTION'
+                  and [sc.current_version_id for sc in scopes3] == list(old_versions)
+                  and Version.search_count([]) == n_versions, gate2)
+            # then with the owner-approved wording: three new versions, the released ones preserved
+            summary['standing_seam_v3'] = v3 = v3ns['create_standing_seam_v3'](env, approved)
+            check('v3_released_all_three', v3.get('result') == 'RELEASED'
+                  and all(v3['scopes'][c].get('result') == 'RELEASED' for c in v3ns['SCOPE_CODES']), v3.get('result'))
+            for code, sc, prev in zip(v3ns['SCOPE_CODES'], scopes3, old_versions):
+                r = v3['scopes'].get(code, {})
+                nv = sc.current_version_id
+                check(f'v3_{code}_previous_preserved', r.get('result') == 'RELEASED' and nv != prev
+                      and prev.state == 'superseded' and r.get('previous_checksum_unchanged')
+                      and r.get('previous_checksum_verified_after') and r.get('previous_lines_after') == r.get('previous_lines'),
+                      {k: r.get(k) for k in ('previous_version', 'new_version', 'previous_state_after',
+                                             'previous_checksum_unchanged', 'previous_checksum_verified_after')})
+                check(f'v3_{code}_wording', r.get('description_after') == approved[code], r.get('description_after'))
+                check(f'v3_{code}_recipe', len(nv.recipe_line_ids) == r.get('previous_lines') - (1 if code == 'CS-STANDING-SEAM' else 0)
+                      and not nv.recipe_line_ids.filtered(lambda l: l.product_id == install),
+                      [r.get('previous_lines'), len(nv.recipe_line_ids), r.get('removed_lines')])
+            idem = v3ns['create_standing_seam_v3'](env, approved)
+            check('v3_idempotent', idem.get('result') == 'ALREADY_CORRECTED' and Version.search_count([]) == n_versions + 3, idem)
+            new_versions = tuple(sc.current_version_id for sc in scopes3)
+            new_v = new_versions[0]
             check('v3_has_no_installation_line', not new_v.recipe_line_ids.filtered(lambda l: l.product_id == install))
             # ---------------- synthetic copy on the NEW version
             for lang in ('fa_IR', 'en_US'):
-                so = fixture(new_v, lang)
+                so = fixture(new_versions, lang)
+                notes = {qs.source_scope_id.code: norm(qs.anchor_line_id.name) for qs in so.sipanel_quote_scope_ids}
+                check(f'{lang}_v3_wording_on_anchor_lines', all(norm(approved[c][lang]) in notes.get(c, '')
+                                                                 for c in v3ns['SCOPE_CODES']), notes)
                 supply = sum(so.order_line.filtered(lambda l: l.product_id.sipanel_installation_base).mapped('price_subtotal'))
                 check(f'{lang}_supply_24865800000', close(supply, 24865800000) and close(so.amount_untaxed, 24865800000),
                       [supply, so.amount_untaxed])
