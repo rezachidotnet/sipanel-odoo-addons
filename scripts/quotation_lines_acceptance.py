@@ -10,9 +10,12 @@ PHASE=post: (module installed) SI-26/2546 unchanged; product / System inventory;
             Scope regeneration, costing exclusion, frozen after confirmation, amount in words, PDFs.
 The script ends with a rollback: the clone keeps exactly what was restored + the installed module.
 """
+import difflib
 import json
 import os
 import traceback
+
+from lxml import html as lxml_html
 
 from odoo.exceptions import UserError
 
@@ -42,6 +45,17 @@ def render(order, tag, lang=None):
     with open(path, 'wb') as f:
         f.write(pdf)
     return path
+
+
+def html_text(order, lang):
+    """Customer-visible text of the quotation report (HTML render, whitespace-normalised) in `lang`."""
+    order.partner_id.lang = lang
+    body, _ = Report._render_qweb_html('sale.report_saleorder', order.ids)
+    return norm(lxml_html.fromstring(body).text_content())
+
+
+def text_diff(a, b):
+    return list(difflib.unified_diff(a.split(' '), b.split(' '), lineterm='', n=3))[:40]
 
 
 def commercial(order):
@@ -80,6 +94,8 @@ if PHASE == 'post':
     check('si26_2546_words_fa', norm(ref.with_context(lang='fa_IR')._sipanel_amount_total_in_words()) == WORDS_27,
           ref.with_context(lang='fa_IR')._sipanel_amount_total_in_words())
     summary['si26_2546_words_en'] = ref.with_context(lang='en_US')._sipanel_amount_total_in_words()
+    summary['si26_2546_quote_scopes'] = [(qs.source_scope_id.code, qs.source_version_id.name)
+                                         for qs in ref.sipanel_quote_scope_ids]
     # ---------------- inventory: products used on quotation lines (B1 flag, A description_sale)
     used = env['sale.order.line'].search([('display_type', '=', False), ('product_id', '!=', False)]).mapped('product_id')
     env.cr.execute("SELECT id, description_sale FROM product_template WHERE id = ANY(%s)", [used.product_tmpl_id.ids])
@@ -156,6 +172,17 @@ if PHASE == 'post':
             except UserError as exc:
                 check('b3_old_version_refused', 'twice' in str(exc) or 'دو بار' in str(exc), str(exc))
             check('b3_old_version_no_line', not old.order_line.filtered('sipanel_is_installation_line'))
+
+            def anchor_notes(order):
+                return {qs.source_scope_id.code: norm(qs.anchor_line_id.name) for qs in order.sipanel_quote_scope_ids}
+
+            # wording of existing orders BEFORE v3 is released: the old-version order and SI-26/2546 itself
+            old_notes = anchor_notes(old)
+            old_revs = old.sipanel_quote_scope_ids.mapped('current_revision_id')
+            old_rev_desc = [(r.customer_description_fa, r.customer_description_en, r.customer_description_resolved)
+                            for r in old_revs]
+            si26_text = {lang: html_text(ref, lang) for lang in ('fa_IR', 'en_US')}
+            ref.partner_id.lang = ref_lang
             # ---------------- Standing Seam v3 (the corrected commercial model, all three scopes)
             v3ns = {'SIPANEL_V3_LIBRARY': True}
             exec(open(os.environ.get('V3_SCRIPT', '/tmp/qlines_src/sipanel_standing_seam_v3.py')).read(), v3ns)
@@ -193,6 +220,36 @@ if PHASE == 'post':
                       [r.get('previous_lines'), len(nv.recipe_line_ids), r.get('removed_lines')])
             idem = v3ns['create_standing_seam_v3'](env, approved)
             check('v3_idempotent', idem.get('result') == 'ALREADY_CORRECTED' and Version.search_count([]) == n_versions + 3, idem)
+            # ---------------- old-version orders keep their OLD wording after v3 is released
+            v3_texts = [norm(approved[c][lang]) for c in v3ns['SCOPE_CODES'] for lang in ('en_US', 'fa_IR')]
+            v3_markers = v3_texts + ['quoted separately', 'جداگانه']
+
+            def has_v3_wording(text):
+                return [m for m in v3_markers if m and m in text]
+
+            summary['old_version_order'] = {'versions': [(qs.source_scope_id.code, qs.source_version_id.name)
+                                                         for qs in old.sipanel_quote_scope_ids], 'notes': old_notes}
+            check('old_version_order_wording_kept', anchor_notes(old) == old_notes
+                  and not has_v3_wording(' '.join(old_notes.values())), [anchor_notes(old), has_v3_wording(' '.join(old_notes.values()))])
+            check('old_version_snapshot_kept', [(r.customer_description_fa, r.customer_description_en, r.customer_description_resolved)
+                                                for r in old_revs] == old_rev_desc)
+            regen = []
+            for r in old_revs:                 # an explicit note regeneration on the OLD version
+                try:
+                    with env.cr.savepoint():
+                        r.action_generate_note()
+                    regen.append('regenerated')
+                except UserError as exc:
+                    regen.append(f'refused: {exc}')
+            after_regen = anchor_notes(old)
+            check('old_version_regeneration_keeps_old_wording', after_regen == old_notes
+                  and not has_v3_wording(' '.join(after_regen.values())), [regen, after_regen])
+            for lang in ('fa_IR', 'en_US'):
+                now = html_text(ref, lang)
+                check(f'si26_2546_{lang}_text_unchanged_after_v3', now == si26_text[lang] and not has_v3_wording(now),
+                      [has_v3_wording(now), text_diff(si26_text[lang], now)])
+                summary['si26_2546'][f'pdf_after_v3_{lang}'] = render(ref, f'SI-26-2546_after_v3_{lang}', lang)
+            ref.partner_id.lang = ref_lang
             new_versions = tuple(sc.current_version_id for sc in scopes3)
             new_v = new_versions[0]
             check('v3_has_no_installation_line', not new_v.recipe_line_ids.filtered(lambda l: l.product_id == install))
