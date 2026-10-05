@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="sipanel_project_site_fiscal_change_view_form" model="ir.ui.view">
+        <field name="name">sipanel.project.site.fiscal.change.form</field>
+        <field name="model">sipanel.project.site.fiscal.change</field>
+        <field name="arch" type="xml">
+            <form string="Change Project Site (fiscal impact)">
+                <field name="order_id" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="fiscal_impact" invisible="1"/>
+                <div class="alert alert-warning" role="alert" invisible="not fiscal_impact">This Project Site changes the fiscal position and/or the sale taxes of the quotation. The new treatment comes from the Finance-approved fiscal positions; review it before confirming.</div>
+                <group>
+                    <group string="Current">
+                        <field name="current_site_id"/>
+                        <field name="current_fiscal_position_id"/>
+                        <field name="current_amount_untaxed"/>
+                        <field name="current_amount_tax"/>
+                        <field name="current_amount_total"/>
+                    </group>
+                    <group string="Proposed">
+                        <field name="proposed_site_id" options="{'no_quick_create': True}"
+                               context="{'default_type': 'delivery', 'default_parent_id': parent_partner_id, 'show_address': 1}"/>
+                        <field name="proposed_fiscal_position_id"/>
+                        <field name="projected_amount_untaxed"/>
+                        <field name="projected_amount_tax"/>
+                        <field name="projected_amount_total"/>
+                    </group>
+                </group>
+                <field name="line_taxes_html" readonly="1" nolabel="1"/>
+                <group>
+                    <field name="confirm"/>
+                </group>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply Project Site and Taxes" class="btn-primary"
+                            invisible="not proposed_site_id or not confirm"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
