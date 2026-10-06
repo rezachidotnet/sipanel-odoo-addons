@@ -354,6 +354,71 @@ class TestQuotationLines(SipanelCoreCase):
         self.assertEqual(self._install_line(order).price_unit, 35_200_000.0, 'rebuilt once the base is back')
         self._assert_last(order)
 
+    def test_17_generated_installation_price_survives_native_repricing(self):
+        """The engine-created line carries a MANUAL price in Odoo 19 terms (technical_price_unit differs), so
+        a quantity change re-prices neither it nor - through the base - anything but its computed amount."""
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        line = self._install_line(order)
+        self.assertEqual(self.p_install.list_price, 0.0)
+        self.assertEqual(line.price_unit, 9_946_320_000.0)
+        self.assertTrue(order.currency_id.compare_amounts(line.technical_price_unit, line.price_unit),
+                        'native manual-price marker set on the generated line')
+        line.product_uom_qty = 3.0                            # qty change ON the installation line
+        line = self._install_line(order)
+        self.assertEqual((line.product_uom_qty, line.price_unit), (1.0, 9_946_320_000.0),
+                         'not re-priced from the product list price; quantity re-governed')
+        roof = order.order_line.filtered(lambda l: l.product_id == self.p_roof)
+        roof.product_uom_qty = 216.0                          # qty change on an ITEM line: +10 x 88,000,000
+        self.assertEqual(self._install_line(order).price_unit, 10_298_320_000.0)
+        self.assertEqual(self._install_line(order), line, 'same record, updated in place')
+        line.invalidate_recordset()
+        line._compute_price_unit()                            # direct native recompute
+        self.assertEqual(line.price_unit, 10_298_320_000.0)
+        self._assert_last(order)
+
+    def test_18_scope_projection_and_installation_line_on_one_quotation(self):
+        """A Scope with a separately-billable (own_line) component AND the installation line: two
+        independent generated-line mechanisms on one order must not interfere."""
+        order = self._order(self.cust_fa)
+        self.env['sale.order.line'].create({'order_id': order.id, 'display_type': 'line_section',
+                                            'name': 'Standing Seam Roof System', 'sequence': 1})
+        scope = self.env['sipanel.quote.scope']._create_from_version(
+            order, self.v_own, ROOF_QTY, self.uom_m, system=self.system, sequence=20)
+        scope.anchor_line_id.write({'price_unit': ROOF_PRICE})
+        self._line(order, self.p_flash, FLASH_QTY, FLASH_PRICE, sequence=50)
+        self._line(order, self.p_gut, GUTTER_QTY, GUTTER_PRICE, sequence=60)
+        rev = scope.current_revision_id
+        generated = rev.projected_line_ids
+        self.assertEqual(len(generated), 1)
+        recon_before = (rev.reconciliation_ok, rev.separate_amount)
+        order.sipanel_installation_pct = 40.0
+        inst = self._managed(order)
+        self.assertEqual(len(inst), 2)
+        # disjoint: the installation lines are not projection lines and carry no Scope provenance
+        self.assertFalse(inst & rev.projected_line_ids)
+        self.assertFalse(any(inst.mapped('sipanel_is_generated')))
+        self.assertFalse(any(inst.mapped('sipanel_origin_key')) or inst.mapped('sipanel_source_revision_id'))
+        self.assertFalse(generated.sipanel_is_installation_line)
+        # base = flagged products only: the anchor (Roof) + Flashing + Gutter, not the unflagged bracket line
+        self.assertNotIn(generated, order._sipanel_installation_base_lines())
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        self._assert_last(order)
+        rev.invalidate_recordset()
+        self.assertEqual((rev.reconciliation_ok, rev.separate_amount), recon_before,
+                         'the Scope reconciliation ignores the installation line')
+        # Scope regeneration and installation sync, in both orders
+        rev._sync_separately_billable_lines()
+        self.assertEqual(rev.projected_line_ids, generated, 'projection upsert keeps its single line')
+        self.assertEqual(self._managed(order), inst, 'installation lines untouched by the projection sync')
+        self._assert_last(order)
+        order._sipanel_sync_installation()
+        self.assertEqual(rev.projected_line_ids, generated)
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        order.sipanel_installation_pct = 0.0
+        self.assertFalse(self._managed(order))
+        self.assertEqual(rev.projected_line_ids, generated, 'removing the installation line leaves the projection')
+
     # ------------------------------------------------------------------ C. amount in words
     def test_15_amount_in_words(self):
         irr = self.env.ref('base.IRR')

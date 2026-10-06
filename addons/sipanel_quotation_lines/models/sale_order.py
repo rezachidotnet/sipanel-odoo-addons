@@ -193,12 +193,17 @@ class SaleOrder(models.Model):
             # one section and one priced line, nothing else: duplicates are removed, never summed
             (managed - section - line).with_context(**ctx).unlink()
             for record, vals in ((section, section_vals), (line, line_vals)):
-                if record:
-                    changed = {f: v for f, v in vals.items() if Line._sipanel_value_differs(record, f, v)}
-                    if changed:
-                        record.with_context(**ctx).write(changed)
-                else:
-                    Line.with_context(**ctx).create(dict(vals, order_id=order.id, sipanel_is_installation_line=True))
+                if not record:
+                    # created WITHOUT the amount, which is then written: Odoo 19 records the product price in
+                    # technical_price_unit at creation, and a price_unit that differs from it is a manual price
+                    # that native re-pricing (quantity change, pricelist) leaves alone - the same convention as
+                    # the Scope separately-billable projection. _compute_price_unit below is the second guard.
+                    record = Line.with_context(**ctx).create(dict(
+                        {f: v for f, v in vals.items() if f != 'price_unit'},
+                        order_id=order.id, sipanel_is_installation_line=True))
+                changed = {f: v for f, v in vals.items() if Line._sipanel_value_differs(record, f, v)}
+                if changed:
+                    record.with_context(**ctx).write(changed)
 
     # ------------------------------------------------------------------ amount in words (C)
     def _sipanel_amount_total_in_words(self):

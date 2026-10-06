@@ -599,6 +599,9 @@ class TestInvoiceFlow(SeparatelyBillableCase):
 
     def test_generated_line_appears_in_the_customer_pdf_without_internal_data(self):
         import re
+        # A distinctive internal cost: the shared fixture cost of the screw is 1.00, which the document
+        # legitimately prints as a quantity ("1.00" for the crane line) - a false positive, not a leak.
+        self.p_screw.sudo().standard_price = 917.43
         scope, rev = self._confirmed('fa_IR')
         report = self.env.ref('sale.action_report_saleorder')
         html = report._render_qweb_html(report.report_name, scope.order_id.ids)[0]
@@ -614,8 +617,11 @@ class TestInvoiceFlow(SeparatelyBillableCase):
             self.assertNotIn(forbidden, text, f'{forbidden!r} leaked into the customer document')
         # and no internal cost figure appears anywhere in the document
         internal_cost = internal.sudo().unit_cost
-        if internal_cost:
-            self.assertNotIn(f'{internal_cost:.2f}', text)
+        self.assertEqual(internal_cost, 917.43, 'the component snapshots the distinctive cost')
+        for needle in (f'{internal_cost:.2f}', f'{internal_cost:,.2f}'):
+            self.assertNotIn(needle, text)
+        # monetary values print rounded to the currency (IRR: no decimals)
+        self.assertNotRegex(text, r'(?<![\d,.])917(?![\d,.])')
 
 
 @tagged('post_install', '-at_install', 'sipanel', 'sipanel_sepbill')
