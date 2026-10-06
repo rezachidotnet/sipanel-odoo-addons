@@ -10,6 +10,7 @@ fiscal position like any other line.
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare
+from odoo.tools.misc import formatLang
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard, guard_ctx
 
@@ -33,6 +34,10 @@ class SaleOrder(models.Model):
         default=lambda self: self.env.company.sipanel_installation_pct_default,
         help="Installation / Execution as a percentage of the untaxed subtotal of the installation-base "
              "items. Empty or 0 = no installation line. Frozen once the order is confirmed.")
+    sipanel_installation_removed_zero_base = fields.Boolean(
+        readonly=True, copy=False,
+        help="Technical: the engine removed the installation line because the item subtotal reached 0; "
+             "the rebuild is then announced in the chatter.")
     sipanel_installation_base_amount = fields.Monetary(
         string='Installation base', compute='_compute_sipanel_installation_amounts', currency_field='currency_id')
     sipanel_installation_amount = fields.Monetary(
@@ -172,8 +177,16 @@ class SaleOrder(models.Model):
                 order._sipanel_check_installation_not_in_scope()
             base = sum(order._sipanel_installation_base_lines().mapped('price_subtotal'))
             if not pct or order.currency_id.is_zero(base):
+                # removed by the ENGINE (item subtotal 0) - percentage 0 is the user's choice, tracked natively
+                removed_by_engine = bool(pct and managed)
                 if managed:
                     managed.with_context(**ctx).unlink()
+                if removed_by_engine:
+                    order._sipanel_installation_note('removed', pct, base)
+                # pending rebuild while the percentage stays set; a percentage of 0 cancels it
+                pending = bool(pct) and (removed_by_engine or order.sipanel_installation_removed_zero_base)
+                if order.sipanel_installation_removed_zero_base != pending:
+                    order.with_context(**ctx).sipanel_installation_removed_zero_base = pending
                 continue
             product = order._sipanel_installation_product()
             lang = order.partner_id.lang or order.env.lang or 'en_US'
@@ -192,6 +205,7 @@ class SaleOrder(models.Model):
             line = managed.filtered(lambda l: not l.display_type)[:1]
             # one section and one priced line, nothing else: duplicates are removed, never summed
             (managed - section - line).with_context(**ctx).unlink()
+            rebuilt = not line and order.sipanel_installation_removed_zero_base
             for record, vals in ((section, section_vals), (line, line_vals)):
                 if not record:
                     # created WITHOUT the amount, which is then written: Odoo 19 records the product price in
@@ -204,6 +218,24 @@ class SaleOrder(models.Model):
                 changed = {f: v for f, v in vals.items() if Line._sipanel_value_differs(record, f, v)}
                 if changed:
                     record.with_context(**ctx).write(changed)
+            if rebuilt:
+                order.with_context(**ctx).sipanel_installation_removed_zero_base = False
+                order._sipanel_installation_note('rebuilt', pct, base, amount)
+
+    def _sipanel_installation_note(self, event, pct, base, amount=0.0):
+        """Internal chatter note when the ENGINE removes the installation line (item subtotal 0) or rebuilds
+        it; user actions are visible natively (tracked percentage, line edits are impossible)."""
+        self.ensure_one()
+        args = {'pct': format_pct(pct), 'base': formatLang(self.env, base, currency_obj=self.currency_id),
+                'amount': formatLang(self.env, amount, currency_obj=self.currency_id)}
+        if event == 'removed':
+            body = self.env._("Installation & Execution line removed automatically: the item subtotal "
+                              "(installation base) is %(base)s. It is rebuilt at %(pct)s%% as soon as the "
+                              "item subtotal is above 0 again.", **args)
+        else:
+            body = self.env._("Installation & Execution line rebuilt automatically: %(pct)s%% of the item "
+                              "subtotal %(base)s = %(amount)s.", **args)
+        self.message_post(body=body, subtype_xmlid='mail.mt_note')
 
     # ------------------------------------------------------------------ amount in words (C)
     def _sipanel_amount_total_in_words(self):

@@ -3,10 +3,10 @@
 B1-B4), amount in words (C). Every record is synthetic (SIPANEL-PT-QLINES prefix) and rolled back."""
 import uuid
 
-from lxml import html as lxml_html
+from lxml import etree, html as lxml_html
 
 from odoo.exceptions import UserError
-from odoo.tests import tagged
+from odoo.tests import Form, tagged
 
 from odoo.addons.sipanel_commercial_scope_core.tests.common import SipanelCoreCase, set_translation
 
@@ -68,7 +68,7 @@ class TestQuotationLines(SipanelCoreCase):
         cls.cust_fa = Partner.create({'name': f'{PT} Customer FA', 'lang': 'fa_IR'})
 
     @classmethod
-    def _make_version(cls, tag, include_install, own_line=False):
+    def _make_version(cls, tag, include_install, own_line=False, extra=()):
         env = cls.env
         scope = env['sipanel.scope'].create({'code': f'{PT}-{tag}-{uuid.uuid4().hex[:8]}', 'name': f'{PT} Seam {tag}',
                                              'owner_user_id': cls.steward.id})
@@ -91,6 +91,10 @@ class TestQuotationLines(SipanelCoreCase):
                              'dimension_family': 'count', 'basis': 'manual', 'execution_mode': 'no_action', 'no_action_reason': 'covered_cost',
                              'cost_policy': 'manual_estimate', 'placement': 'included_parent', 'customer_eligible': True})
             set_translation(inst, 'customer_label', en='Installation', fa='نصب')
+        for vals in extra:
+            line = L.create(dict(vals, version_id=v.id))
+            if line.customer_eligible:
+                set_translation(line, 'customer_label', en=f'{tag} extra', fa=f'{tag} اضافه')
         v.action_release()
         return v
 
@@ -418,6 +422,102 @@ class TestQuotationLines(SipanelCoreCase):
         order.sipanel_installation_pct = 0.0
         self.assertFalse(self._managed(order))
         self.assertEqual(rev.projected_line_ids, generated, 'removing the installation line leaves the projection')
+
+    def test_19_installation_line_is_readonly_in_the_quotation_form(self):
+        """Decision 2026-10-06 (option A): the computed line cannot be edited in the UI at all."""
+        arch = etree.fromstring(self.env.ref('sale.view_order_form').get_combined_arch())
+        for path, names in (("//field[@name='order_line']/list/", ('sequence', 'product_id', 'product_template_id',
+                                                                  'name', 'product_uom_qty', 'product_uom_id',
+                                                                  'price_unit', 'discount')),
+                            ("//field[@name='order_line']/form//", ('product_id', 'name', 'product_uom_qty',
+                                                                  'product_uom_id', 'price_unit', 'discount'))):
+            for name in names:
+                node = arch.xpath(f"{path}field[@name='{name}']")[0]
+                self.assertIn('sipanel_is_installation_line', node.get('readonly', ''), f'{path} {name}')
+        # the native conditions are kept, not replaced
+        list_path = "//field[@name='order_line']/list"
+        for name, native in (('price_unit', 'qty_invoiced'), ('product_uom_qty', 'is_downpayment'),
+                             ('product_uom_id', 'product_uom_readonly')):
+            readonly = arch.xpath(f"{list_path}/field[@name='{name}']")[0].get('readonly')
+            self.assertIn(native, readonly, name)
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        lines = list(order.order_line)
+        inst_idx = lines.index(self._install_line(order))
+        section_idx = lines.index(self._managed(order).filtered('display_type'))
+        roof_idx = lines.index(order.order_line.filtered(lambda l: l.product_id == self.p_roof))
+        with Form(order) as f:
+            with f.order_line.edit(inst_idx) as line:
+                for fname, value in (('price_unit', 1.0), ('name', 'edited'), ('product_uom_qty', 3.0)):
+                    with self.assertRaises(AssertionError, msg=f'{fname} must be readonly'):
+                        setattr(line, fname, value)
+            with f.order_line.edit(section_idx) as line:
+                with self.assertRaises(AssertionError, msg='section title must be readonly'):
+                    line.name = 'edited'
+            with f.order_line.edit(roof_idx) as line:      # positive control: ordinary lines stay editable
+                line.name = 'Roof (edited)'
+                line.product_uom_qty = ROOF_QTY
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        self._assert_last(order)
+
+    def test_20_chatter_note_on_engine_removal_and_rebuild(self):
+        order = self._order()
+        item = self._line(order, self.p_zero, 10.0, 1_000_000.0, sequence=20)
+        order.sipanel_installation_pct = 40.0
+        note = self.env.ref('mail.mt_note')
+
+        def notes():
+            return order.message_ids.filtered(lambda m: m.subtype_id == note).sorted('id').mapped(lambda m: str(m.body))
+
+        before = len(notes())
+        item.price_unit = 0.0                                 # item subtotal reaches 0
+        self.assertFalse(self._managed(order))
+        self.assertEqual(len(notes()), before + 1)
+        self.assertIn('removed automatically', notes()[-1])
+        self.assertTrue(order.sipanel_installation_removed_zero_base)
+        item.product_uom_qty = 20.0                           # still 0: no second note
+        self.assertEqual(len(notes()), before + 1)
+        item.price_unit = 500_000.0                           # back above 0: 40 % of 10,000,000
+        self.assertEqual(self._install_line(order).price_unit, 4_000_000.0)
+        self.assertEqual(len(notes()), before + 2)
+        self.assertIn('rebuilt automatically', notes()[-1])
+        self.assertFalse(order.sipanel_installation_removed_zero_base)
+        self._assert_last(order)
+        order.sipanel_installation_pct = 0.0                  # the user's choice: no engine note
+        self.assertFalse(self._managed(order))
+        self.assertEqual(len(notes()), before + 2)
+        self.assertFalse(order.sipanel_installation_removed_zero_base)
+
+    def test_21_double_charge_guard_current_behaviour(self):
+        """CHARACTERIZATION of today's guard (owner question 2026-10-06, item 2) - not the target rule.
+
+        Today: the base is every line whose product is flagged, Scope anchors included; the percentage is
+        refused only when an active SIPANEL Scope component uses a System-mapped installation product with
+        placement included_parent / own_line (test_11). Two gaps are pinned here so that they are visible
+        and so that the proposed rule (AM register, report) flips exactly these assertions when approved."""
+        p_labour = self.env['product.product'].create({'name': f'{PT} Installer crew', 'type': 'service',
+                                                       'sale_ok': True, 'uom_id': self.uom_unit.id})
+        common = {'sequence': 30, 'uom_id': self.uom_unit.id, 'dimension_family': 'count', 'basis': 'fixed',
+                  'fixed_qty': 1.0, 'cost_policy': 'manual_estimate'}
+        v_labour = self._make_version('LABOUR', include_install=False, extra=[dict(
+            common, product_id=p_labour.id, execution_mode='labour', activity_id=self.act_ins.id,
+            placement='included_parent', customer_eligible=True)])
+        v_hidden = self._make_version('HIDDEN', include_install=False, extra=[dict(
+            common, product_id=self.p_install.id, execution_mode='no_action', no_action_reason='covered_cost',
+            placement='no_customer_line', disclosure='internal_only', customer_eligible=False)])
+        # a) the Scope anchor's product is flagged -> the anchor amount IS in the installation base
+        order = self._si_2546_copy(scope_version=self.v_new)
+        anchor = order.sipanel_quote_scope_ids.anchor_line_id
+        self.assertTrue(anchor.product_id.sipanel_installation_base)
+        self.assertIn(anchor, order._sipanel_installation_base_lines())
+        # b) GAP 1: a LABOUR component (product not mapped as an installation product) is not detected
+        order_l = self._si_2546_copy(scope_version=v_labour)
+        order_l.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order_l).price_unit, 9_946_320_000.0, 'GAP 1: accepted today')
+        # b) GAP 2: the mapped installation product priced inside the anchor as no_customer_line
+        order_h = self._si_2546_copy(scope_version=v_hidden)
+        order_h.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order_h).price_unit, 9_946_320_000.0, 'GAP 2: accepted today')
 
     # ------------------------------------------------------------------ C. amount in words
     def test_15_amount_in_words(self):

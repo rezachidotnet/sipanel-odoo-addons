@@ -9,9 +9,56 @@
                 <field name="sipanel_installation_pct" readonly="state not in ['draft', 'sent']"/>
                 <field name="sipanel_installation_amount" invisible="not sipanel_installation_pct"/>
             </xpath>
-            <!-- the managed lines are rewritten by the engine on save; the marker is loaded for the list -->
+            <!-- The Installation / Execution section + line are fully computed (decision 2026-10-06, option A):
+                 their content cannot be edited in the quotation, instead of being silently re-governed on save.
+                 `add` + separator keeps every native readonly condition. The engine keeps the block last. -->
             <xpath expr="//field[@name='order_line']/list" position="inside">
                 <field name="sipanel_is_installation_line" column_invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='sequence']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_template_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='name']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_qty']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='discount']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="before">
+                <field name="sipanel_is_installation_line" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='name']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_uom_qty']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_uom_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='price_unit']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='discount']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
             </xpath>
         </field>
     </record>
