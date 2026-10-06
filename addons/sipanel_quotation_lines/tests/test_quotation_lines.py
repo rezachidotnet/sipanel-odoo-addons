@@ -45,10 +45,13 @@ class TestQuotationLines(SipanelCoreCase):
             if desc_en is not None:
                 set_translation(p.product_tmpl_id, 'description_sale', en=desc_en, fa=desc_fa)
             return p
+        # list price = the reference price: Odoo 19 treats a price_unit given at create as the product price
+        # (technical_price_unit) and re-prices such a line from the product on a quantity change / Update prices
         cls.p_roof = mk('Roof Supply', base=True, uom=cls.uom_m, desc_en='Roof desc line 1\nRoof desc line 2',
-                        desc_fa='شرح سقف ۱\nشرح سقف ۲')
-        cls.p_flash = mk('Flashing', base=True, uom=cls.uom_m)
-        cls.p_gut = mk('Gutter', base=True, uom=cls.uom_m)
+                        desc_fa='شرح سقف ۱\nشرح سقف ۲', price=ROOF_PRICE)
+        cls.p_flash = mk('Flashing', base=True, uom=cls.uom_m, price=FLASH_PRICE)
+        cls.p_gut = mk('Gutter', base=True, uom=cls.uom_m, price=GUTTER_PRICE)
+        cls.p_zero = mk('Zero list price item', base=True, uom=cls.uom_m)
         cls.p_crane_svc = mk('Crane (not flagged)')
         cls.p_install = mk('Installation Service', desc_en='Install desc EN', desc_fa='شرح نصب')
         cls.p_own = mk('Own-line bracket', ptype='consu', desc_en='Bracket spec EN', desc_fa='مشخصات بست', price=5.0)
@@ -135,7 +138,7 @@ class TestQuotationLines(SipanelCoreCase):
         self.assertTrue(ordered[-2].sipanel_is_installation_line, 'its own section is right before it')
 
     def _html(self, order):
-        return self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0]
+        return self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0].decode()
 
     def _supply(self, order):
         return sum(order.order_line.filtered(lambda l: l.product_id.sipanel_installation_base).mapped('price_subtotal'))
@@ -336,6 +339,20 @@ class TestQuotationLines(SipanelCoreCase):
                                                  'is_downpayment': True, 'price_unit': 1_000.0, 'product_uom_qty': 1.0})
         self.assertTrue(dp)
         self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'down payments excluded')
+
+    def test_16_update_prices_to_a_zero_base_removes_the_line_cleanly(self):
+        """Regression (clone run 2026-10-06): "Update prices" re-priced the base to 0 mid-batch, the engine
+        removed the managed lines and the native discount reset then wrote on deleted lines (MissingError)."""
+        order = self._order()
+        self._line(order, self.p_zero, 10.0, 1_000_000.0, sequence=20)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 4_000_000.0)
+        order.action_update_prices()
+        self.assertEqual(order.sipanel_installation_base_amount, 0.0)
+        self.assertFalse(self._managed(order), 'base 0 after the update: no installation line, no error')
+        self._line(order, self.p_roof, 1.0, ROOF_PRICE, sequence=30)
+        self.assertEqual(self._install_line(order).price_unit, 35_200_000.0, 'rebuilt once the base is back')
+        self._assert_last(order)
 
     # ------------------------------------------------------------------ C. amount in words
     def test_15_amount_in_words(self):

@@ -71,6 +71,15 @@ class SaleOrder(models.Model):
             self._sipanel_sync_installation()
         return res
 
+    def _recompute_prices(self):
+        """"Update prices" re-prices every line in one native batch (price, then discount = 0, then discount).
+        Syncing after each of those writes could remove the managed lines in the middle of the batch (base
+        re-priced to 0) and the next native write on them would fail; the batch runs without the engine and
+        the installation lines are synced once, on the final prices."""
+        res = super(SaleOrder, self.with_context(**guard_ctx(INSTALL_GUARD)))._recompute_prices()
+        self._sipanel_sync_installation()
+        return res
+
     def _get_copiable_order_lines(self):
         """A duplicated quotation does not copy the managed installation lines; its engine rebuilds them."""
         return super()._get_copiable_order_lines().filtered(lambda l: not l.sipanel_is_installation_line)
