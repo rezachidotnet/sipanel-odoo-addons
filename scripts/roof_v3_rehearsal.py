@@ -10,9 +10,12 @@ sipanel_qlines_clone_* database.
              SIP-000075 as a product (what confirming an order line of it creates natively); SI-26/2546 structure.
 2. v3      - releases the next version of Roof / Flashing / Gutter (supply-only wording, installation work removed)
              through scripts/sipanel_standing_seam_v3.py; previous versions SUPERSEDED; no release warning.
-3. A       - SI-26/2546 itself (manual lines from the native template, no Scope): installation 10 %.
+   SENT    - whether SI-26/2546 was sent to the customer (state, e-mails, portal link, signature, printed PDFs).
+   NATIVE  - installed modules / fields that could cover installation execution, cost and analytics natively.
+   M4      - SIP-000075 unit of measure m² -> Units (master data, clone only), so the line prints "1.00 Units".
+3. A       - a DUPLICATE of SI-26/2546 (the original stays untouched, verified): installation 10 %.
              Confirmation is rehearsed inside a rolled-back savepoint: what the installation line creates.
-4. B       - a copy of SI-26/2546 rebuilt on the v3 Scopes (same quantities and prices), installation 10 %.
+4. B       - another duplicate rebuilt on the v3 Scopes (same quantities and prices), installation 10 %.
 PDFs (fa_IR / en_US) for A and B. Everything is committed on the clone only.
 """
 import json
@@ -126,6 +129,51 @@ try:
     R['si26_2546_before'] = {'state': ref.state, 'lines': lines_of(ref), 'totals': totals(ref),
                              'quote_scopes': len(ref.sipanel_quote_scope_ids)}
     check('si26_2546_has_no_scope', not ref.sipanel_quote_scope_ids, len(ref.sipanel_quote_scope_ids))
+    # ---- SENT: was SI-26/2546 sent to the customer?
+    msgs = env['mail.message'].search([('model', '=', 'sale.order'), ('res_id', '=', ref.id)], order='id')
+    comment = env.ref('mail.mt_comment')
+    sent_mails = msgs.filtered(lambda m: m.message_type == 'email' or (m.subtype_id == comment and m.partner_ids))
+    atts = env['ir.attachment'].search([('res_model', '=', 'sale.order'), ('res_id', '=', ref.id)])
+    R['si26_2546_sent_status'] = {
+        'state': ref.state, 'date_order': str(ref.date_order), 'validity_date': str(ref.validity_date),
+        'write_date': str(ref.write_date),
+        'emails_or_partner_comments': [(str(m.date), m.message_type, m.subtype_id.name, m.author_id.name,
+                                        m.partner_ids.mapped('name'), (m.subject or '')[:60]) for m in sent_mails],
+        'all_messages': [(str(m.date), m.message_type, m.subtype_id.name, ' '.join((m.body or '').split())[:80])
+                         for m in msgs],
+        'portal_access_token': bool(opt(ref, 'access_token')) if 'access_token' in ref._fields else '<n/a>',
+        'signed_by': opt(ref, 'signed_by') or None, 'signed_on': str(opt(ref, 'signed_on') or '') or None,
+        'pdf_attachments': atts.filtered(lambda a: (a.mimetype or '').endswith('pdf')).mapped('name'),
+    }
+    R['si26_2546_sent_verdict'] = ('SENT' if ref.state == 'sent' or sent_mails else
+                                   'NOT_SENT_IN_ODOO (no e-mail, state draft; a PDF printed and sent outside '
+                                   'Odoo cannot be seen here)')
+    # ---- NATIVE: what Odoo could cover without code (M1-M3)
+    Mod = env['ir.module.module']
+    R['native_capabilities'] = {
+        'modules': {m: Mod.search([('name', '=', m)]).state or 'absent' for m in (
+            'sale_project', 'project', 'sale_timesheet', 'hr_timesheet', 'sale_purchase', 'purchase',
+            'sale_margin', 'sale_stock', 'account_budget', 'analytic')},
+        'service_tracking_values': [v for v, _l in tmpl._fields['service_tracking'].selection]
+        if 'service_tracking' in tmpl._fields and isinstance(tmpl._fields['service_tracking'].selection, list) else '<n/a>',
+        'product_has_service_to_purchase': 'service_to_purchase' in tmpl._fields,
+        'sale_line_has_purchase_price': 'purchase_price' in env['sale.order.line']._fields,
+        'analytic_distribution_model': 'account.analytic.distribution.model' in env,
+        'distribution_models_for_sip_000075': env['account.analytic.distribution.model'].search_count(
+            ['|', ('product_id', '=', install.id), ('product_categ_id', '=', tmpl.categ_id.id)])
+        if 'account.analytic.distribution.model' in env else '<n/a>',
+        'sip_000075_standard_price': install.standard_price,
+    }
+    # ---- M4: SIP-000075 unit -> Units (master data; clone only)
+    unit = env.ref('uom.product_uom_unit')
+    R['M4'] = {'before': tmpl.uom_id.name}
+    try:
+        with env.cr.savepoint():
+            tmpl.write({'uom_id': unit.id})
+        R['M4']['after'] = tmpl.uom_id.name
+    except Exception as exc:                                   # noqa: BLE001 - recorded, the rest goes on
+        R['M4']['refused'] = str(exc)
+    check('M4_sip_000075_in_units', tmpl.uom_id == unit, R['M4'])
     check('si26_2546_supply_unchanged', close(ref.amount_untaxed, SUPPLY), totals(ref))
 
     # ------------------------------------------------------------------ 2. v3 release (supply only)
@@ -145,59 +193,73 @@ try:
               sc.current_version_id.name)
     env.cr.commit()
 
-    # ------------------------------------------------------------------ 3. A: SI-26/2546 itself, 10 %
+    # ------------------------------------------------------------------ 3. A: a DUPLICATE of SI-26/2546, 10 %
     seam = env['account.analytic.account'].search([('name', '=', 'Standing Seam'), ('active', '=', True)])
     check('standing_seam_system_maps_sip_000075', len(seam) == 1 and seam.sipanel_installation_product_id == install,
           seam.mapped('name'))
-    # the percentage needs the order's SIPANEL System (B2); SI-26/2546 has no Scope, so its Requested System
-    R['A_requested_system_before'] = ref.sipanel_requested_system_id.name or None
-    if not ref.sipanel_requested_system_id:
-        ref.sipanel_requested_system_id = seam
+    ref_write_date, ref_totals, ref_lines = ref.write_date, totals(ref), lines_of(ref)
+    dup = ref.copy({'origin': f'{ref.name} (rehearsal A: supply only + 10 % installation)'})
+    compared = ('partner_id', 'partner_invoice_id', 'partner_shipping_id', 'pricelist_id', 'fiscal_position_id',
+                'payment_term_id', 'user_id', 'team_id', 'company_id', 'sipanel_requested_system_id',
+                'sipanel_project_name', 'validity_date', 'note', 'client_order_ref', 'opportunity_id')
+    R['A_duplicate_vs_original'] = {f: [str(ref[f].display_name if hasattr(ref[f], 'display_name') else ref[f]),
+                                        str(dup[f].display_name if hasattr(dup[f], 'display_name') else dup[f])]
+                                    for f in compared if f in ref._fields and ref[f] != dup[f]}
+    R['A_requested_system_before'] = dup.sipanel_requested_system_id.name or None
+    if not dup.sipanel_requested_system_id:
+        dup.sipanel_requested_system_id = seam
     try:
-        ref.sipanel_installation_pct = 10.0
+        dup.sipanel_installation_pct = 10.0
         refused = None
     except UserError as exc:
         refused = str(exc)
-    il = ref.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
-    ordered = ref.order_line.sorted(lambda l: (l.sequence, l.id))
+    il = dup.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
+    ordered = dup.order_line.sorted(lambda l: (l.sequence, l.id))
     check('A_no_double_charge_refusal', refused is None, refused)
     check('A_installation_10pct', len(il) == 1 and close(il.price_unit, INSTALL_10) and il.product_id == install,
           [il.mapped('price_unit'), il.product_id.default_code])
-    check('A_untaxed_27352380000', close(ref.amount_untaxed, UNTAXED), totals(ref))
-    check('A_total_30087618000', close(ref.amount_tax, TAX) and close(ref.amount_total, TOTAL), totals(ref))
+    check('A_installation_line_in_units', il.product_uom_id == unit, il.product_uom_id.name)
+    check('A_untaxed_27352380000', close(dup.amount_untaxed, UNTAXED), totals(dup))
+    check('A_total_30087618000', close(dup.amount_tax, TAX) and close(dup.amount_total, TOTAL), totals(dup))
     check('A_installation_last', bool(il) and ordered[-1] == il)
-    R['A'] = {'lines': lines_of(ref), 'totals': totals(ref),
-              'words_fa': ref.with_context(lang='fa_IR')._sipanel_amount_total_in_words(),
-              'words_en': ref.with_context(lang='en_US')._sipanel_amount_total_in_words(),
-              'pdf': render(ref, 'A_SI-26-2546')}
+    R['A'] = {'order': dup.name, 'lines': lines_of(dup), 'totals': totals(dup),
+              'words_fa': dup.with_context(lang='fa_IR')._sipanel_amount_total_in_words(),
+              'words_en': dup.with_context(lang='en_US')._sipanel_amount_total_in_words(),
+              'pdf': render(dup, 'A_dup_SI-26-2546')}
     check('A_words_en_rials_only', R['A']['words_en'].endswith('Rials only'), R['A']['words_en'])
+    ref.invalidate_recordset()
+    check('A_original_untouched', ref.write_date == ref_write_date and totals(ref) == ref_totals
+          and lines_of(ref) == ref_lines, [str(ref.write_date), str(ref_write_date)])
     env.cr.commit()
-    # what confirming creates for the installation line (rolled back: SI-26/2546 stays a quotation)
+    # what confirming creates for the installation line (rolled back: the duplicate stays a quotation)
     conf = R['A_confirmation_rehearsal'] = {}
     try:
         with env.cr.savepoint():
-            ref.action_confirm()
-            il = ref.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
-            conf.update({'state': ref.state, 'analytic_distribution': il.analytic_distribution,
-                         'invoice_status': il.invoice_status, 'qty_to_invoice': il.qty_to_invoice})
+            dup.action_confirm()
+            il = dup.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
+            conf.update({'state': dup.state, 'analytic_distribution': il.analytic_distribution,
+                         'invoice_status': il.invoice_status, 'qty_to_invoice': il.qty_to_invoice,
+                         'purchase_price': opt(il, 'purchase_price')})
             if Demand is not None:
-                conf['sipanel_demands'] = Demand.search_count([('order_id', '=', ref.id)])
+                conf['sipanel_demands'] = Demand.search_count([('order_id', '=', dup.id)])
             if 'project.task' in env and 'sale_line_id' in env['project.task']._fields:
                 conf['tasks_for_installation_line'] = env['project.task'].search_count([('sale_line_id', '=', il.id)])
-            conf['projects'] = len(ref.project_ids) if 'project_ids' in ref._fields else '<n/a>'
+            conf['projects'] = len(dup.project_ids) if 'project_ids' in dup._fields else '<n/a>'
             if 'purchase.order.line' in env and 'sale_line_id' in env['purchase.order.line']._fields:
                 conf['purchase_lines_for_installation_line'] = env['purchase.order.line'].search_count(
                     [('sale_line_id', '=', il.id)])
-            conf['pickings'] = len(ref.picking_ids) if 'picking_ids' in ref._fields else '<n/a>'
+            conf['pickings'] = len(dup.picking_ids) if 'picking_ids' in dup._fields else '<n/a>'
             raise ValidationError('ROLLBACK_CONFIRMATION_REHEARSAL')
     except (UserError, ValidationError) as exc:
         if str(exc) != 'ROLLBACK_CONFIRMATION_REHEARSAL':
             conf['confirmation_refused'] = str(exc)
-    ref.invalidate_recordset()
-    check('A_still_quotation_after_rehearsal', ref.state in ('draft', 'sent'), ref.state)
+    dup.invalidate_recordset()
+    check('A_still_quotation_after_rehearsal', dup.state in ('draft', 'sent'), dup.state)
 
     # ------------------------------------------------------------------ 4. B: copy rebuilt on the v3 Scopes
-    cp = ref.copy({'origin': 'SIPANEL-ROOFV3-REHEARSAL (copy of SI-26/2546)', 'sipanel_installation_pct': 0.0})
+    cp = ref.copy({'origin': f'{ref.name} (rehearsal B: rebuilt on the v3 Scopes)', 'sipanel_installation_pct': 0.0})
+    if not cp.sipanel_requested_system_id:
+        cp.sipanel_requested_system_id = seam
     by_anchor = {sc.current_version_id.anchor_product_id: sc.current_version_id for sc in scopes}
     rebuilt = []
     for line in cp.order_line.filtered(lambda l: not l.display_type and l.product_id in by_anchor).sorted('sequence'):

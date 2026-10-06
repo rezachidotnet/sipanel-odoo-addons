@@ -2,23 +2,37 @@
 # Quotation lines: description / installation line / amount in words (work order 2026-10-05) — CLONE validation.
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
-# Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|drop
-#   rehearsal (last step of all): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 at 10 % (A) and a
-#   copy rebuilt on the v3 Scopes (B); scripts/roof_v3_rehearsal.py
+# Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
+#   rehearsal (after evidence): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 duplicates at 10 %
+#   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
 #   CLONE=<db name>   reuse/choose the clone (default sipanel_qlines_clone_<UTC timestamp>, printed on start)
+#   COMMIT=<sha>      commit under test (default: HEAD at clone creation; fixed per clone in code_commit.txt)
 #   PG_ADMIN=<role>   postgres maintenance role in odoo-db for CREATE/DROP DATABASE and pg_dump (default odoo, the role sipanel_recovery_point.sh uses)
 # Clone ownership = Odoo's db_user from /etc/odoo/odoo.conf; a clone that fails restore, ownership check or
 # neutralization is dropped immediately (fail closed).
-# The module directory is copied into /opt/odoo/addons (inert until installed; it is not auto_install).
+#
+# CODE UNDER TEST (decision 2026-10-06): every Odoo step - neutralize, install, tests, PDF rendering, rehearsal - runs
+# in a THROWAWAY container (same image id as Production, odoo.conf read-only) on a git worktree of the commit
+# under test: addons path = /mnt/branch (the worktree's addons/), /mnt/deps (each module of /opt/odoo/addons the
+# branch does not contain, read-only, listed with a tree hash in deps_modules.txt). Nothing is copied into
+# /opt/odoo/addons and the Production container never connects to the clone. PDFs come from a render server in
+# its own container: HTTP on 127.0.0.1 inside that container only (no published port, no nginx), --db-filter
+# ^clone$, no database list, workers 0, no cron; the clone's web.base.url / report.url point to it. If it cannot
+# be started the run stops with RENDER_BLOCKED - there is no fallback to the Production container.
+# Every container: --memory 700m --memory-swap 1400m --cpus 1.0 --oom-score-adj 800 (CLONE_MEM / CLONE_MEMSWAP /
+# CLONE_CPUS); only the clone's own filestore is mounted.
+#
+# DELETIONS (2026-10-06): every file deletion goes through a guard - non-empty variable, path resolved with
+# realpath and required to sit exactly under its fixed root (evidence root / filestore root / render-out dir /
+# worktree root), file prefixes by `find -maxdepth 1 -type f -delete`, never a glob rm.
 #
 # ONE Odoo process per clone at a time (2026-10-05: an interrupted `test` left its in-container `odoo -u` running,
 # the next `test` died on a lock timeout and `post` deadlocked against it):
 #   - one run per host: flock on $LOCK (a second invocation is refused, it never waits silently);
-#   - before every Odoo step: no in-container process may reference the clone and the clone may have no
-#     non-idle PostgreSQL backend — otherwise the step is REFUSED (never run alongside);
-#   - after every Odoo step: wait until its in-container process is gone and the clone is quiet;
-#   - Ctrl-C / error / hang-up: the in-container processes of THIS clone are stopped (docker exec does not
-#     forward signals to them);
+#   - before every Odoo step: no process (Production container or a clone container) may reference the clone and
+#     the clone may have no non-idle PostgreSQL backend — otherwise the step is REFUSED (never run alongside);
+#   - after every Odoo step: wait until its container is gone and the clone is quiet;
+#   - Ctrl-C / error / hang-up / watchdog: the clone containers of THIS run are removed;
 #   - a failed step stops the run (`all` never continues past a failed install, test or render).
 set -euo pipefail
 MODE=${1:-all}
@@ -32,35 +46,154 @@ CLONE=${CLONE:-sipanel_qlines_clone_${TS}}
 # evidence belongs to the clone (never to the invocation, never to an exported EVID): one clone, one directory
 EVID=/home/ubuntu/sipanel_audit/docs/audits/data/quotation_lines_clone_${CLONE#sipanel_qlines_clone_}
 LOGDIR=${LOGDIR:-$REPO/reports}
+EVID_ROOT=/home/ubuntu/sipanel_audit/docs/audits/data
+FS_ROOT=/opt/odoo/data/filestore
+WT_ROOT=/home/ubuntu/sipanel_qlines_worktrees
+CLONE_RE='^sipanel_qlines_clone_[0-9]{8}T[0-9]{6}Z$'
+refuse() { echo "REFUSED: $*" >&2; exit 2; }
+guard_evid() {  # prints the resolved evidence directory, or refuses
+  local r
+  : "${EVID:?EVID is empty}"
+  r=$(realpath -e -- "$EVID") || refuse "evidence directory $EVID does not exist"
+  [ "$r" != / ] && [ "$(dirname -- "$r")" = "$EVID_ROOT" ] && [[ "$(basename -- "$r")" == quotation_lines_clone_* ]] \
+    || refuse "$r is not a quotation_lines_clone_* directory directly under $EVID_ROOT"
+  printf '%s' "$r"
+}
+evid_delete() {  # $1 = file prefix (pre | post | rehearsal): regular files "<prefix>_*" directly in EVID only
+  local r
+  : "${1:?step name is empty}"
+  [[ "$1" =~ ^[a-z]+$ ]] || refuse "bad evidence prefix '$1'"
+  r=$(guard_evid)
+  find "$r" -maxdepth 1 -type f -name "${1}_*" -delete
+}
+SUDO=${SUDO-sudo}   # the guard test runs it without sudo, inside a sandbox FS_ROOT
+filestore_delete() {  # the clone's filestore copy only
+  local p r
+  : "${CLONE:?CLONE is empty}"
+  # hard refusals, independent of FS_ROOT: the Production database name, and anything that is not a clone name
+  case "$CLONE" in sipanel|sipanel/*|*/*|.*|'') refuse "filestore of '$CLONE' is never deleted";; esac
+  [[ "$CLONE" =~ ^sipanel_qlines_clone_[0-9]{8}T[0-9]{6}Z$ ]] || refuse "filestore of '$CLONE' (not a clone name)"
+  [[ "$CLONE" =~ $CLONE_RE ]] || refuse "clone name $CLONE"
+  : "${FS_ROOT:?FS_ROOT is empty}"
+  p="$FS_ROOT/$CLONE"
+  $SUDO test -e "$p" || return 0
+  r=$($SUDO realpath -e -- "$p") || refuse "cannot resolve $p"
+  [ "$r" = "$p" ] && [ "$(dirname -- "$r")" = "$FS_ROOT" ] \
+    && [[ "$(basename -- "$r")" =~ ^sipanel_qlines_clone_[0-9]{8}T[0-9]{6}Z$ ]] || refuse "$p resolves to $r"
+  $SUDO rm -rf --one-file-system -- "$r"
+}
+outdir_delete() {  # a render output directory made by mktemp under LOGDIR
+  local r root
+  : "${OUTDIR:?OUTDIR is empty}"
+  root=$(realpath -e -- "$LOGDIR")
+  r=$(realpath -e -- "$OUTDIR") || return 0
+  [[ "$r" =~ ^${root}/\.render-out\.[A-Za-z0-9]{6}$ ]] || refuse "$r is not a render output directory under $root"
+  rm -rf --one-file-system -- "$r"
+}
+worktree_delete() {
+  : "${WT:?WT is empty}"
+  [[ "$CLONE" =~ $CLONE_RE ]] && [ "$WT" = "$WT_ROOT/$CLONE" ] || refuse "worktree path $WT"
+  [ ! -d "$WT" ] || git -C "$REPO" worktree remove --force -- "$WT"
+}
 LOCK=${LOCK:-$LOGDIR/.sipanel_qlines_clone.lock}
 QUIET_TIMEOUT=${QUIET_TIMEOUT:-180}
 # Known, pre-existing failure on master (memory: sale_scope '1.00' needle, unrelated to this module). Reported, not hidden.
 KNOWN_FAIL='TestInvoiceFlow.test_generated_line_appears_in_the_customer_pdf_without_internal_data'
-# install / test (the heavy steps) run in a THROWAWAY container with a hard memory and CPU limit, so the kernel
-# OOM-killer and CPU pressure hit the clone run, never Production (2 vCPU / 2 GB host, 2026-10-06). Same image,
-# network and odoo.conf as Production; addons read-only; only the clone's own filestore is mounted.
-# The render / rehearsal steps stay in the Production container: wkhtmltopdf fetches the report assets from the
-# running server (report.url), and they are light. CLONE_MEM=0 falls back to docker exec (no isolation).
 ISO=sipanel-qlines-${CLONE#sipanel_qlines_clone_}
 CLONE_MEM=${CLONE_MEM:-700m}; CLONE_MEMSWAP=${CLONE_MEMSWAP:-1400m}; CLONE_CPUS=${CLONE_CPUS:-1.0}
-odoo_clone() {  # odoo -c ... -d CLONE --no-http --stop-after-init "$@"
-  if [ "$CLONE_MEM" = 0 ]; then
-    docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d "$CLONE" --no-http --stop-after-init "$@"; return
+RPORT=${RPORT:-18069}                                   # inside the render container's own network namespace
+WT=$WT_ROOT/$CLONE
+APATH=/mnt/branch,/mnt/deps
+MOUNTS=()
+IMAGE_ID=; NET=; OUTDIR=
+container_setup() {  # worktree of the commit under test + image + mounts; the commit is fixed per clone
+  local want conf d m
+  mkdir -p "$EVID" "$WT_ROOT"
+  if [ -f "$EVID/code_commit.txt" ]; then
+    want=$(cat "$EVID/code_commit.txt")
+    [ -z "${COMMIT:-}" ] || [ "$(git -C "$REPO" rev-parse "$COMMIT")" = "$want" ] \
+      || refuse "this clone is tested at $want, not $COMMIT"
+  else
+    want=$(git -C "$REPO" rev-parse "${COMMIT:-HEAD}")
+    [ -n "${COMMIT:-}" ] || [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] \
+      || echo "NOTE: uncommitted changes in $REPO are NOT under test (worktree = $want)"
+    echo "$want" > "$EVID/code_commit.txt"
   fi
-  local image net conf mounts=()
-  image=$(docker inspect -f '{{.Config.Image}}' "$APPC"); net=$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$APPC")
+  [ -d "$WT" ] || git -C "$REPO" worktree add --detach "$WT" "$want" >/dev/null
+  [ "$(git -C "$WT" rev-parse HEAD)" = "$want" ] && [ -z "$(git -C "$WT" status --porcelain)" ] \
+    || refuse "worktree $WT is not a clean checkout of $want"
+  IMAGE_ID=$(docker inspect -f '{{.Image}}' "$APPC"); NET=$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$APPC")
   conf=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/odoo/odoo.conf"}}{{.Source}}{{end}}{{end}}' "$APPC")
-  [ -n "$conf" ] || { echo "cannot find the odoo.conf mount of $APPC" >&2; return 2; }
-  mounts=(-v "$conf:/etc/odoo/odoo.conf:ro" -v /opt/odoo/addons:/mnt/extra-addons:ro
-          -v "/opt/odoo/data/filestore/${CLONE}:/var/lib/odoo/filestore/${CLONE}")
-  sudo test -d /opt/odoo/data/addons && mounts+=(-v /opt/odoo/data/addons:/var/lib/odoo/addons:ro)
-  docker run --rm --name "$ISO" --network "$net" --memory "$CLONE_MEM" --memory-swap "$CLONE_MEMSWAP" \
-    --cpus "$CLONE_CPUS" --oom-score-adj 800 "${mounts[@]}" "$image" \
-    odoo -c /etc/odoo/odoo.conf -d "$CLONE" --no-http --stop-after-init "$@"
+  [ -n "$IMAGE_ID" ] && [ -n "$NET" ] && [ -n "$conf" ] || refuse "cannot read image / network / odoo.conf of $APPC"
+  MOUNTS=(-v "$conf:/etc/odoo/odoo.conf:ro" -v "$WT/addons:/mnt/branch:ro")
+  : > "$EVID/deps_modules.txt"
+  for d in /opt/odoo/addons/*/; do
+    m=$(basename -- "$d")
+    [ -f "$d/__manifest__.py" ] && [ ! -e "$WT/addons/$m" ] || continue
+    MOUNTS+=(-v "${d%/}:/mnt/deps/$m:ro")
+    echo "$m $(cd "$d" && sudo find . -type f ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 | sort -z \
+      | sudo xargs -0 sha256sum | sha256sum | cut -c1-16)" >> "$EVID/deps_modules.txt"
+  done
+  sudo test -d /opt/odoo/data/addons && MOUNTS+=(-v /opt/odoo/data/addons:/var/lib/odoo/addons:ro)
+  sudo test -d "$FS_ROOT/$CLONE" && MOUNTS+=(-v "$FS_ROOT/$CLONE:/var/lib/odoo/filestore/$CLONE")
+  return 0
+}
+LIMITS=(--memory "$CLONE_MEM" --memory-swap "$CLONE_MEMSWAP" --cpus "$CLONE_CPUS" --oom-score-adj 800)
+iso_run() {  # $1 = role; rest = image + command; one throwaway, limited container per call
+  local role=$1; shift
+  docker run --rm -i --name "$ISO-$role" --network "$NET" "${LIMITS[@]}" --label "sipanel.qlines.clone=$CLONE" \
+    "${MOUNTS[@]}" "$@"
+}
+odoo_clone() {  # odoo -c ... --addons-path BRANCH -d CLONE --no-http --stop-after-init "$@"
+  iso_run step "$IMAGE_ID" odoo -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http \
+    --stop-after-init "$@"
+}
+render_blocked() { echo "RENDER_BLOCKED: $1" >&2; res_snapshot "render blocked: $1"; exit 15; }
+render_server_start() {
+  local i code=
+  docker ps -aq --filter "name=^/$ISO-render\$" | xargs -r docker rm -f >/dev/null
+  # the clone (never Production) points its own URLs at the render server
+  psql_admin -d "$CLONE" -q -c "INSERT INTO ir_config_parameter (key, value, create_date, write_date) VALUES
+      ('web.base.url', 'http://127.0.0.1:${RPORT}', now(), now()),
+      ('report.url', 'http://127.0.0.1:${RPORT}', now(), now()),
+      ('web.base.url.freeze', 'True', now(), now())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, write_date = now()" \
+    || render_blocked "cannot set web.base.url / report.url on ${CLONE}"
+  docker run -d --name "$ISO-render" --network "$NET" "${LIMITS[@]}" --label "sipanel.qlines.clone=$CLONE" \
+    "${MOUNTS[@]}" "$IMAGE_ID" \
+    odoo -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --db-filter "^${CLONE}\$" --no-database-list \
+    --workers 0 --max-cron-threads 0 --http-interface 127.0.0.1 --http-port "$RPORT" >/dev/null \
+    || render_blocked "docker run of the render server failed"
+  for ((i = 0; i < 90; i++)); do
+    [ -n "$(docker ps -q --filter "name=^/$ISO-render\$")" ] \
+      || render_blocked "render server exited: $(docker logs --tail 15 "$ISO-render" 2>&1 | tr '\n' ' ')"
+    code=$(docker exec "$ISO-render" python3 -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:${RPORT}/web/login', timeout=5).status)" 2>/dev/null || true)
+    [ "$code" = 200 ] && break
+    sleep 2
+  done
+  [ "$code" = 200 ] || render_blocked "render server not answering on 127.0.0.1:${RPORT} after 180 s"
+  [ "$(docker inspect -f '{{len .NetworkSettings.Ports}}' "$ISO-render")" = 0 ] \
+    || render_blocked "render server publishes ports: $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$ISO-render")"
+  res_snapshot "render server up ($ISO-render, 127.0.0.1:${RPORT} inside its own network namespace)"
+  echo "render server up: $ISO-render"
+}
+render_server_stop() {
+  res_snapshot "before render server stop"
+  docker logs "$ISO-render" > "$LOGDIR/qlines-render-server-${TS}.log" 2>&1 || true
+  docker rm -f "$ISO-render" >/dev/null 2>&1 || true
+}
+render_shell() {  # $1 = script in the worktree's scripts/ ; "$@" extra docker options ; files -> OUTDIR
+  local script=$1; shift
+  [[ "$script" =~ ^[a-z0-9_]+\.py$ ]] || refuse "script name $script"
+  docker run --rm -i --name "$ISO-shell" --network "container:$ISO-render" "${LIMITS[@]}" \
+    --label "sipanel.qlines.clone=$CLONE" "${MOUNTS[@]}" -v "$OUTDIR:/out" -v "$WT/scripts:/mnt/scripts:ro" \
+    -e OUT=/out -e V3_SCRIPT=/mnt/scripts/sipanel_standing_seam_v3.py "$@" "$IMAGE_ID" \
+    odoo shell -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http < "$WT/scripts/$script"
 }
 echo "clone database: $CLONE"
 echo "evidence: $EVID"
-[[ "$CLONE" == sipanel_qlines_clone_* ]] || { echo "refusing: clone name must start with sipanel_qlines_clone_"; exit 2; }
+[[ "$CLONE" =~ $CLONE_RE ]] || refuse "clone name must match $CLONE_RE"
+[ "$EVID" = "$EVID_ROOT/quotation_lines_clone_${CLONE#sipanel_qlines_clone_}" ] || refuse "evidence path $EVID"
 
 mkdir -p "$LOGDIR"
 exec 9>"$LOCK"
@@ -87,7 +220,7 @@ clone_procs() {
       c=$(tr "\0" " " < "$d/cmdline" 2>/dev/null) || continue
       case "$c" in *"$QL_CLONE"*) echo "${d#/proc/} $c";; esac
     done'
-  docker ps -q --filter "name=^/${ISO}\$" | sed "s/^/container ${ISO} /"
+  docker ps --filter "label=sipanel.qlines.clone=$CLONE" --format 'container {{.Names}}'
 }
 # PostgreSQL backends on the clone that are not idle (idle pooled connections hold no lock).
 clone_busy_backends() {
@@ -117,9 +250,9 @@ wait_quiet() {  # $1 = step that just ended
 }
 stop_clone_procs() {  # only processes naming THIS clone (and its throwaway container); TERM, then KILL
   local pids i
-  if [ -n "$(docker ps -q --filter "name=^/${ISO}\$")" ]; then
-    echo "stopping clone container ${ISO}" >&2
-    docker stop -t 20 "$ISO" >/dev/null 2>&1 || docker rm -f "$ISO" >/dev/null 2>&1 || true
+  if [ -n "$(docker ps -aq --filter "label=sipanel.qlines.clone=$CLONE")" ]; then
+    echo "removing the clone containers of ${CLONE}" >&2
+    docker ps -aq --filter "label=sipanel.qlines.clone=$CLONE" | xargs -r docker rm -f >/dev/null 2>&1 || true
   fi
   pids=$(clone_procs | awk '$1 ~ /^[0-9]+$/ {print $1}' | tr '\n' ' ')
   [ -n "${pids// /}" ] || return 0
@@ -209,10 +342,11 @@ capacity() {
   [ $(( (free - need) / 1048576 )) -ge 1500 ] || { echo "BLOCKED_DISK_CAPACITY"; exit 3; }
 }
 drop_clone() {  # clone only: in-container processes on it, database, its filestore copy
-  [[ "$CLONE" == sipanel_qlines_clone_* ]] || { echo "refusing to drop $CLONE"; exit 2; }
+  [[ "$CLONE" =~ $CLONE_RE ]] || refuse "drop $CLONE"
   stop_clone_procs
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"${CLONE}\" WITH (FORCE)" || true
-  sudo rm -rf "/opt/odoo/data/filestore/${CLONE:?}"
+  filestore_delete
+  worktree_delete
   psql_admin -d postgres -tAc "select 1 from pg_database where datname='${CLONE}'" | grep -q 1 \
     && { echo "DROP FAILED: ${CLONE} still exists"; return 1; }
   echo "DROPPED ${CLONE}"
@@ -225,7 +359,7 @@ clone() {
   echo "clone owner (db_user from odoo.conf): ${owner}"
   capacity
   psql_admin -d postgres -tAc "select 1 from pg_database where datname='${CLONE}'" | grep -q 1 && { echo "clone exists"; exit 1; }
-  [ -z "$(ls -A "$EVID" 2>/dev/null | grep -v '^resources.log$')" ] \
+  [ -z "$(ls -A "$EVID" 2>/dev/null | grep -v '^resources.log$\|^code_commit.txt$\|^deps_modules.txt$')" ] \
     || { echo "refusing: evidence directory $EVID already has files"; exit 2; }
   # same encoding / collation as production (template0 would otherwise take the server defaults)
   local enc collate ctype
@@ -246,8 +380,10 @@ clone() {
   [ "$bad" = "0" ] || fail_clone "${bad} public relations not owned by ${owner}"
   sudo cp -a "/opt/odoo/data/filestore/${SRC_DB}" "/opt/odoo/data/filestore/${CLONE}" || fail_clone "filestore copy"
   # no mail, no crons, no payment providers; a clone that is not neutralized must never survive
+  container_setup
   OWN_STEP=1
-  docker exec "$APPC" odoo neutralize -c /etc/odoo/odoo.conf -d "$CLONE" || fail_clone "odoo neutralize"
+  iso_run neutralize "$IMAGE_ID" odoo neutralize -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" \
+    || fail_clone "odoo neutralize"
   wait_quiet neutralize; OWN_STEP=0
   neutral=$(psql_admin -d "$CLONE" -tAc "select value from ir_config_parameter where key = 'database.is_neutralized'") \
     || fail_clone "neutralization check"
@@ -255,44 +391,45 @@ clone() {
   mkdir -p "$EVID"
   echo "CLONE_READY ${CLONE} owner=${owner} neutralized=true"
 }
-deploy_dir() {
-  sudo rsync -a --delete "$REPO/addons/$MOD/" "/opt/odoo/addons/$MOD/"
-  sudo chown -R --reference=/opt/odoo/addons/sale_shamsi_report "/opt/odoo/addons/$MOD"
+new_outdir() { OUTDIR=$(mktemp -d "$LOGDIR/.render-out.XXXXXX"); chmod 0777 "$OUTDIR"; }
+collect_out() {  # OUTDIR (written by the clone container) -> EVID, then the guarded delete of OUTDIR
+  local r
+  r=$(guard_evid)
+  find "$OUTDIR" -maxdepth 1 -type f -exec cp -t "$r" {} +
+  outdir_delete
 }
-render() {  # $1 = pre|post ; acceptance + PDFs, everything it writes is rolled back
+render() {  # $1 = pre|post ; acceptance + PDFs through the render server, everything it writes is rolled back
   local out rc
+  : "${1:?step name is empty}"
   assert_exclusive "render $1"
-  mkdir -p "$EVID"
-  rm -f "$EVID/$1"_*                                       # never mix files of an earlier or interrupted run
-  docker exec "$APPC" rm -rf /tmp/qlines /tmp/qlines_src && docker exec "$APPC" mkdir -p /tmp/qlines_src
-  docker cp "$REPO/scripts/sipanel_standing_seam_v3.py" "$APPC:/tmp/qlines_src/sipanel_standing_seam_v3.py"
-  OWN_STEP=1; set +e
-  out=$(docker exec -i -e PHASE="$1" -e OUT=/tmp/qlines -e V3_SCRIPT=/tmp/qlines_src/sipanel_standing_seam_v3.py "$APPC" \
-    odoo shell -c /etc/odoo/odoo.conf -d "$CLONE" --no-http < "$REPO/scripts/quotation_lines_acceptance.py" 2>&1)
-  rc=$?
-  set -e
+  container_setup
+  evid_delete "$1"                                         # never mix files of an earlier or interrupted run
+  new_outdir
+  OWN_STEP=1
+  render_server_start
+  set +e; out=$(render_shell quotation_lines_acceptance.py -e PHASE="$1" 2>&1); rc=$?; set -e
+  render_server_stop
   echo "$out" > "$LOGDIR/qlines-$1-${TS}.log"
   wait_quiet "render $1"; OWN_STEP=0
-  docker cp "$APPC:/tmp/qlines/." "$EVID/" || true
+  collect_out
   echo "$out" | grep '^QLINES_' || true
   echo "$out" | grep -q '^QLINES_[A-Z]* {"all_ok": true' && [ "$rc" -eq 0 ] \
     || { echo "RENDER_$1 FAILED (rc=$rc, log $LOGDIR/qlines-$1-${TS}.log, summary $EVID/$1_summary.json)"; exit 8; }
   echo "RENDER_$1 OK"
 }
-rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 released, SI-26/2546 at 10 %
+rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 released, SI-26/2546 duplicates at 10 %
   local out rc f
   assert_exclusive rehearsal
-  rm -f "$EVID"/rehearsal_*
-  docker exec "$APPC" rm -rf /tmp/qlines /tmp/qlines_src && docker exec "$APPC" mkdir -p /tmp/qlines_src
-  docker cp "$REPO/scripts/sipanel_standing_seam_v3.py" "$APPC:/tmp/qlines_src/sipanel_standing_seam_v3.py"
-  OWN_STEP=1; set +e
-  out=$(docker exec -i -e OUT=/tmp/qlines -e V3_SCRIPT=/tmp/qlines_src/sipanel_standing_seam_v3.py "$APPC" \
-    odoo shell -c /etc/odoo/odoo.conf -d "$CLONE" --no-http < "$REPO/scripts/roof_v3_rehearsal.py" 2>&1)
-  rc=$?
-  set -e
+  container_setup
+  evid_delete rehearsal
+  new_outdir
+  OWN_STEP=1
+  render_server_start
+  set +e; out=$(render_shell roof_v3_rehearsal.py 2>&1); rc=$?; set -e
+  render_server_stop
   echo "$out" > "$LOGDIR/qlines-rehearsal-${TS}.log"
   wait_quiet rehearsal; OWN_STEP=0
-  docker cp "$APPC:/tmp/qlines/." "$EVID/" || true
+  collect_out
   for f in "$EVID"/rehearsal_*.pdf; do
     [ -e "$f" ] || continue
     pdftotext -layout "$f" "${f%.pdf}.txt"; pdftoppm -r 60 -png "$f" "${f%.pdf}"
@@ -303,10 +440,34 @@ rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 r
     || { echo "REHEARSAL FAILED (rc=$rc, log $LOGDIR/qlines-rehearsal-${TS}.log, summary $EVID/rehearsal_summary.json)"; exit 14; }
   echo "REHEARSAL OK"
 }
+proof() {  # which code produced the evidence (commit, image, installed module versions, PDF content markers)
+  container_setup
+  python3 - "$EVID" "$WT" "$IMAGE_ID" "$(docker inspect -f '{{.Image}}' "$APPC")" \
+      "$(psql_admin -d "$CLONE" -tAc "select coalesce(json_object_agg(name, json_build_array(state, latest_version) order by name), '{}')
+                                       from ir_module_module where name like 'sipanel%'")" <<'PY'
+import ast, json, os, subprocess, sys
+evid, wt, image, prod_image, installed = sys.argv[1:6]
+git = lambda *a: subprocess.run(['git', '-C', wt, *a], capture_output=True, text=True, check=True).stdout.strip()
+manifests = {m: ast.literal_eval(open(os.path.join(wt, 'addons', m, '__manifest__.py')).read()).get('version')
+             for m in sorted(os.listdir(os.path.join(wt, 'addons'))) if os.path.isfile(os.path.join(wt, 'addons', m, '__manifest__.py'))}
+installed = json.loads(installed)
+data = {'commit': git('rev-parse', 'HEAD'), 'worktree': wt, 'worktree_clean': git('status', '--porcelain') == '',
+        'image_id': image, 'production_image_id': prod_image, 'same_image': image == prod_image,
+        'branch_manifest_versions': manifests, 'installed_sipanel_modules': installed,
+        'branch_modules_installed_at_branch_version': {m: installed.get(m, [None, None])[1] == v
+                                                      for m, v in manifests.items() if m in installed},
+        'non_branch_modules': open(os.path.join(evid, 'deps_modules.txt')).read().split('\n')[:-1]}
+json.dump(data, open(os.path.join(evid, 'code_version.json'), 'w'), indent=1)
+print(json.dumps({k: data[k] for k in ('commit', 'worktree_clean', 'same_image', 'branch_modules_installed_at_branch_version')}))
+PY
+  python3 "$WT/scripts/qlines_code_markers.py" "$EVID" | tee "$EVID/code_markers.txt"
+  grep -q '^MARKERS PASS' "$EVID/code_markers.txt" || { echo "PROOF FAILED (see code_markers.txt)"; exit 16; }
+  echo "PROOF OK"
+}
 install() {
   local log=$LOGDIR/qlines-install-${TS}.log rc
   assert_exclusive install
-  deploy_dir
+  container_setup
   OWN_STEP=1; set +e; odoo_clone -i "$MOD" > "$log" 2>&1; rc=$?; set -e
   [ "$rc" -ne 137 ] || echo "CLONE_OOM: the clone container hit its memory limit ($CLONE_MEM + swap $CLONE_MEMSWAP)" 
   wait_quiet install; OWN_STEP=0
@@ -317,7 +478,7 @@ install() {
 run_tests() {
   local log=$LOGDIR/qlines-test-${TS}.log rc ran fails errs known other complete
   assert_exclusive test
-  deploy_dir
+  container_setup
   OWN_STEP=1; set +e; odoo_clone -u "$MOD,$SIPANEL_MODS" --test-enable --test-tags sipanel > "$log" 2>&1; rc=$?; set -e
   [ "$rc" -ne 137 ] || echo "CLONE_OOM: the clone container hit its memory limit ($CLONE_MEM + swap $CLONE_MEMSWAP)" 
   wait_quiet test; OWN_STEP=0
@@ -335,7 +496,7 @@ run_tests() {
   echo "TEST OK (only the known pre-existing failure, if any)"
 }
 evidence() {
-  local d=$REPO/scripts/qlines_pdf_diff.py en fa f lang words
+  local d=$WT/scripts/qlines_pdf_diff.py en fa f lang words
   cd "$EVID"
   for f in pre_summary.json post_summary.json; do
     python3 -c "import json,sys; sys.exit(0 if json.load(open('$f'))['all_ok'] else 1)" \
@@ -357,7 +518,7 @@ evidence() {
   grep -q "VERDICT FAIL" SI-26-2546_verdicts.txt && { echo "EVIDENCE FAILED (see SI-26-2546_verdicts.txt)"; exit 12; }
   echo "EVIDENCE OK"
 }
-if [[ "$MODE" =~ ^(all|clone|pre|install|test|post|rehearsal)$ ]]; then
+if [[ "$MODE" =~ ^(all|clone|pre|install|test|post|rehearsal|proof)$ ]]; then
   res_snapshot "before $MODE"
   res_monitor $$ &
   MON_PID=$!
@@ -370,7 +531,8 @@ case "$MODE" in
   post)     render post ;;
   evidence) evidence ;;
   rehearsal) rehearsal ;;
-  all)      clone; render pre; install; run_tests; render post; evidence; rehearsal ;;
+  proof)    proof ;;
+  all)      clone; render pre; install; run_tests; render post; (evidence); rehearsal; proof ;;
   drop)     # DESTRUCTIVE, clone only; the clone must be named explicitly
             [ -n "$CLONE_GIVEN" ] || { echo "set CLONE=sipanel_qlines_clone_..."; exit 2; }
             drop_clone ;;
