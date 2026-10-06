@@ -204,6 +204,9 @@ if PHASE == 'post':
                   and Version.search_count([]) == n_versions, gate2)
             # then with the owner-approved wording: three new versions, the released ones preserved
             summary['standing_seam_v3'] = v3 = v3ns['create_standing_seam_v3'](env, approved)
+            check('v3_no_release_warnings', all(not v3['scopes'].get(c, {}).get('release_warnings')
+                                                for c in v3ns['SCOPE_CODES']),
+                  {c: v3['scopes'].get(c, {}).get('release_warnings') for c in v3ns['SCOPE_CODES']})
             check('v3_released_all_three', v3.get('result') == 'RELEASED'
                   and all(v3['scopes'][c].get('result') == 'RELEASED' for c in v3ns['SCOPE_CODES']), v3.get('result'))
             for code, sc, prev in zip(v3ns['SCOPE_CODES'], scopes3, old_versions):

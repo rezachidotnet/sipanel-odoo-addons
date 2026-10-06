@@ -18,9 +18,11 @@ A released version is immutable, so each scope gets its NEXT version through the
     release checksum untouched - verified before and after)
 
 Customer text gate: customer wording is the owner's decision. create_standing_seam_v3(env, wording) releases
-nothing unless approved wording (en_US AND fa_IR) is supplied for EVERY scope that needs a new version; the
-gate is evaluated for all three scopes before anything is created, so a refusal never leaves a partial set.
-APPROVED_WORDING is the owner's wording of 2026-10-05; the script's own run passes it.
+nothing unless wording (en_US AND fa_IR, free of installation keywords - release rule QL2) is supplied for EVERY
+scope that needs a new version; the gate is evaluated for all three scopes before anything is created, so a
+refusal never leaves a partial set. APPROVED_WORDING is the supply-only text of 2026-10-06 (clone); the owner
+approves the final Production text. Offending recipe lines follow release rule QL1 (installation work, any
+placement). Needs sipanel_quotation_lines installed (QL1/QL2 definitions).
 
 Idempotent: a scope whose current released version neither prices the installation product nor claims
 installation in its description is left alone (ALREADY_CORRECTED). Never touches a quotation.
@@ -36,23 +38,29 @@ import os
 ROOF_CODE = 'CS-STANDING-SEAM'
 SCOPE_CODES = (ROOF_CODE, 'CS-STANDING-SEAM-FLASHING', 'CS-STANDING-SEAM-GUTTER')
 INSTALL_CODE = 'SIP-000075'
-INCLUDED_CLAIMS = ('installation is included', 'supplied and installed', 'نصب شده', 'شامل نصب')
-# Owner-approved customer descriptions (work order 2026-10-05, reply 3).
+# Supply-only customer descriptions (business decision 2026-10-06: Roof 88,000,000/m², Flashing 34,000,000/m and
+# Gutter 67,000,000/m are SUPPLY ONLY; installation is charged only by the order-level line). Keyword-free on
+# purpose, so release rule QL2 stays silent. Used on the clone; the owner approves the final Production text.
 APPROVED_WORDING = {
     'CS-STANDING-SEAM': {
-        'en_US': 'Supply of Standing Seam roof system. Installation is quoted separately in the '
-                 'Installation & Execution line.',
-        'fa_IR': 'تأمین سیستم سقف استندینگ سیم. نصب و اجرا به‌صورت جداگانه در ردیف «نصب و اجرا» محاسبه شده است.',
+        'en_US': 'Supply of Standing Seam roof system (supply only).',
+        'fa_IR': 'تأمین سیستم سقف استندینگ سیم (فقط تأمین).',
     },
     'CS-STANDING-SEAM-FLASHING': {
-        'en_US': 'Supply of flashing & sealing package. Installation is quoted separately.',
-        'fa_IR': 'تأمین پکیج فلاشینگ و آب‌بندی. نصب به‌صورت جداگانه محاسبه شده است.',
+        'en_US': 'Supply of flashing & sealing package (supply only).',
+        'fa_IR': 'تأمین پکیج فلاشینگ و آب‌بندی (فقط تأمین).',
     },
     'CS-STANDING-SEAM-GUTTER': {
-        'en_US': 'Supply of gutter system. Installation is quoted separately.',
-        'fa_IR': 'تأمین سیستم ناودان. نصب به‌صورت جداگانه محاسبه شده است.',
+        'en_US': 'Supply of gutter system (supply only).',
+        'fa_IR': 'تأمین سیستم ناودان (فقط تأمین).',
     },
 }
+
+
+def _wording_rule():
+    """The release-warning keyword rule QL2 of sipanel_quotation_lines (single source of truth)."""
+    from odoo.addons.sipanel_quotation_lines.models.scope_version import INSTALLATION_WORDING
+    return INSTALLATION_WORDING
 
 
 def _stored_terms(env, version, field):
@@ -61,15 +69,20 @@ def _stored_terms(env, version, field):
 
 
 def _plan(env, code, install):
-    """What the scope's current released version needs: (scope, current, offending recipe lines, claims)."""
+    """What the scope's current released version needs: (scope, current, offending recipe lines, claims).
+    Offending = SIPANEL recipe lines of installation WORK (System-mapped installation products + products flagged
+    sipanel_installation_work) in ANY placement - release rule QL1. Claims = installation wording in the customer
+    label or description, any stored language - release rule QL2."""
     scope = env['sipanel.scope'].search([('code', '=', code)])
     assert len(scope) == 1, f'{code}: {len(scope)} scopes'
     current = scope.current_version_id
     assert current and current.state == 'released', f'{code}: no released current version'
-    offending = current.recipe_line_ids.filtered(
-        lambda l: l.product_id == install and l.placement in ('included_parent', 'own_line'))
+    work = env['product.product']._sipanel_installation_work_products() | install
+    offending = current.recipe_line_ids.filtered(lambda l: l.responsibility == 'sipanel' and l.product_id in work)
     desc = _stored_terms(env, current, 'customer_description')
-    claims = {lang: text for lang, text in desc.items() if any(c in (text or '').lower() for c in INCLUDED_CLAIMS)}
+    rule = _wording_rule()
+    claims = {f'{field}:{lang}': text for field in ('customer_label', 'customer_description')
+              for lang, text in _stored_terms(env, current, field).items() if rule.search(text or '')}
     return scope, current, offending, desc, claims
 
 
@@ -92,13 +105,15 @@ def _release_next(env, scope, current, offending, desc, terms):
     draft.update_field_translations('customer_description', terms)
     report['description_before'] = desc
     report['description_after'] = _stored_terms(env, draft, 'customer_description')
-    changes = ["customer description replaced by the owner-approved wording (installation is quoted separately)"]
+    changes = ["customer description replaced by the supply-only wording"]
     if removed:
-        changes.insert(0, f"{INSTALL_CODE} removed from the recipe (installation no longer included in the anchor price)")
+        changes.insert(0, ', '.join(sorted(set(removed.product_id.mapped('default_code'))))
+                       + " removed from the recipe (installation no longer included in the anchor price)")
     draft.message_post(body=(
-        f"Commercial model correction (2026-10-05), copied from {current.name}: " + "; ".join(changes)
+        f"Commercial model correction (2026-10-06, supply only), copied from {current.name}: " + "; ".join(changes)
         + ". Installation / Execution is quoted as a separate percentage line (sipanel_installation_pct)."))
     draft.action_release()
+    report['release_warnings'] = [str(m.body) for m in draft.message_ids if 'Release warning' in str(m.body)]
     current.invalidate_recordset()
     report.update({
         'result': 'RELEASED', 'new_version': draft.name, 'new_version_id': draft.id, 'new_lines': len(draft.recipe_line_ids),
@@ -127,7 +142,7 @@ def create_standing_seam_v3(env, wording=None):
             result['scopes'][code] = {'result': 'ALREADY_CORRECTED', 'current_version': current.name}
             continue
         terms = {lang: (wording.get(code, {}).get(lang) or '').strip() for lang in ('en_US', 'fa_IR')}
-        if not all(terms.values()):
+        if not all(terms.values()) or any(_wording_rule().search(t) for t in terms.values()):
             missing.append(code)
             result['scopes'][code] = {'result': 'BLOCKED_CUSTOMER_DESCRIPTION', 'current_version': current.name,
                                       'description_claims_installation_included': claims,
