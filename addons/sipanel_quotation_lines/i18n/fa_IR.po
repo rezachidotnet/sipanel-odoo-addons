@@ -102,3 +102,33 @@ msgstr "درصد نصب و اجرا نمی‌تواند منفی باشد."
 #: code:addons/sipanel_quotation_lines/models/sale_order_line.py:0
 msgid "The Installation / Execution lines of %s are managed by its installation percentage; set the percentage to 0 to remove them."
 msgstr "سطرهای نصب و اجرای %s با درصد نصب و اجرا مدیریت می‌شوند؛ برای حذف آن‌ها درصد را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution line removed automatically: the item subtotal (installation base) is %(base)s. It is rebuilt at %(pct)s%% as soon as the item subtotal is above 0 again."
+msgstr "ردیف نصب و اجرا به‌طور خودکار حذف شد: جمع اقلام (مبنای نصب و اجرا) %(base)s است. به محض اینکه جمع اقلام بیشتر از صفر شود، با %(pct)s٪ دوباره ساخته می‌شود."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution line rebuilt automatically: %(pct)s%% of the item subtotal %(base)s = %(amount)s."
+msgstr "ردیف نصب و اجرا به‌طور خودکار دوباره ساخته شد: %(pct)s٪ از جمع اقلام %(base)s = %(amount)s."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/scope_version.py:0
+msgid "Anchor %(a)s is in the installation base and recipe line %(l)s is installation work (%(p)s, placement %(pl)s): installation would be charged twice. Remove the line from the recipe (installation is quoted on the Installation / Execution line) or set it to customer responsibility."
+msgstr "محصول اصلی %(a)s در مبنای نصب و اجراست و سطر دستورالعمل %(l)s کار نصب است (%(p)s، جایگاه %(pl)s): هزینه نصب دو بار دریافت می‌شود. این سطر را از دستورالعمل حذف کنید (نصب در ردیف «نصب و اجرا» قیمت داده می‌شود) یا مسئولیت آن را به کارفرما بدهید."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/scope_version.py:0
+msgid "Anchor %(a)s is in the installation base but the %(f)s (%(lang)s) mentions installation (\"%(w)s\"). Check that the text does not promise installation inside this price."
+msgstr "محصول اصلی %(a)s در مبنای نصب و اجراست اما %(f)s (%(lang)s) به نصب اشاره می‌کند («%(w)s»). بررسی کنید که متن، نصب را داخل همین قیمت وعده ندهد."
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_template__sipanel_installation_work
+msgid "Installation work"
+msgstr "کار نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,help:sipanel_quotation_lines.field_product_template__sipanel_installation_work
+msgid "This product IS installation / execution work. A Scope whose anchor is in the installation base cannot be released with a SIPANEL component of this product, and a quotation carrying such a Scope refuses the Installation / Execution percentage (it would charge installation twice). The installation products mapped on SIPANEL Systems count as installation work automatically."
+msgstr "این محصول، کار نصب و اجراست. Scopeی که محصول اصلی آن در مبنای نصب و اجراست با سطر SIPANEL از این محصول منتشر نمی‌شود، و پیش‌فاکتوری که چنین Scopeی دارد درصد نصب و اجرا را نمی‌پذیرد (هزینه نصب دو بار دریافت می‌شد). محصولات نصبِ تعریف‌شده روی سیستم‌های SIPANEL خودبه‌خود کار نصب به شمار می‌آیند."

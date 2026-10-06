@@ -5,7 +5,7 @@ import uuid
 
 from lxml import etree, html as lxml_html
 
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests import Form, tagged
 
 from odoo.addons.sipanel_commercial_scope_core.tests.common import SipanelCoreCase, set_translation
@@ -60,7 +60,7 @@ class TestQuotationLines(SipanelCoreCase):
                                      'sipanel_installation_product_id': cls.p_install.id})
         cls.system_unmapped = Account.create({'name': f'{PT} Unmapped', 'plan_id': cls.plan_system.id})
         cls.v_new = cls._make_version('NEW', include_install=False)
-        cls.v_old = cls._make_version('OLD', include_install=True)
+        cls.v_old = cls._make_version('OLD', include_install=True, legacy=True)
         cls.v_own = cls._make_version('OWN', include_install=False, own_line=True)
         Partner = env['res.partner']
         cls.cust_en = Partner.create({'name': f'{PT} Customer EN', 'lang': 'en_US'})
@@ -68,7 +68,9 @@ class TestQuotationLines(SipanelCoreCase):
         cls.cust_fa = Partner.create({'name': f'{PT} Customer FA', 'lang': 'fa_IR'})
 
     @classmethod
-    def _make_version(cls, tag, include_install, own_line=False, extra=()):
+    def _make_version(cls, tag, include_install, own_line=False, extra=(), legacy=False, release=True, desc=None):
+        """legacy=True: released as before rule QL1 existed (anchor not yet in the installation base at
+        release time) - the shape of the Production v2 Roof; the quotation-time guard must still refuse."""
         env = cls.env
         scope = env['sipanel.scope'].create({'code': f'{PT}-{tag}-{uuid.uuid4().hex[:8]}', 'name': f'{PT} Seam {tag}',
                                              'owner_user_id': cls.steward.id})
@@ -77,6 +79,8 @@ class TestQuotationLines(SipanelCoreCase):
             'anchor_product_id': cls.p_roof.id, 'anchor_owner_mode': 'component_bridge_owner',
             'system_ids': [(6, 0, cls.system.ids)]})
         set_translation(v, 'customer_label', en='Standing Seam Roof', fa='سقف استندینگ سیم')
+        if desc:
+            set_translation(v, 'customer_description', en=desc[0], fa=desc[1])
         L = env['sipanel.scope.recipe.line']
         L.create({'version_id': v.id, 'sequence': 10, 'product_id': cls.p_screw.id, 'uom_id': cls.uom_unit.id,
                   'dimension_family': 'count', 'basis': 'manual', 'execution_mode': 'no_action', 'no_action_reason': 'covered_cost',
@@ -95,7 +99,13 @@ class TestQuotationLines(SipanelCoreCase):
             line = L.create(dict(vals, version_id=v.id))
             if line.customer_eligible:
                 set_translation(line, 'customer_label', en=f'{tag} extra', fa=f'{tag} اضافه')
+        if not release:
+            return v
+        if legacy:
+            cls.p_roof.sipanel_installation_base = False
         v.action_release()
+        if legacy:
+            cls.p_roof.sipanel_installation_base = True
         return v
 
     # ------------------------------------------------------------------ helpers
@@ -488,36 +498,108 @@ class TestQuotationLines(SipanelCoreCase):
         self.assertEqual(len(notes()), before + 2)
         self.assertFalse(order.sipanel_installation_removed_zero_base)
 
-    def test_21_double_charge_guard_current_behaviour(self):
-        """CHARACTERIZATION of today's guard (owner question 2026-10-06, item 2) - not the target rule.
+    def _work_line(self, product, **vals):
+        return dict({'sequence': 30, 'product_id': product.id, 'uom_id': self.uom_unit.id, 'dimension_family': 'count',
+                     'basis': 'fixed', 'fixed_qty': 1.0, 'cost_policy': 'manual_estimate'}, **vals)
 
-        Today: the base is every line whose product is flagged, Scope anchors included; the percentage is
-        refused only when an active SIPANEL Scope component uses a System-mapped installation product with
-        placement included_parent / own_line (test_11). Two gaps are pinned here so that they are visible
-        and so that the proposed rule (AM register, report) flips exactly these assertions when approved."""
-        p_labour = self.env['product.product'].create({'name': f'{PT} Installer crew', 'type': 'service',
-                                                       'sale_ok': True, 'uom_id': self.uom_unit.id})
-        common = {'sequence': 30, 'uom_id': self.uom_unit.id, 'dimension_family': 'count', 'basis': 'fixed',
-                  'fixed_qty': 1.0, 'cost_policy': 'manual_estimate'}
-        v_labour = self._make_version('LABOUR', include_install=False, extra=[dict(
-            common, product_id=p_labour.id, execution_mode='labour', activity_id=self.act_ins.id,
-            placement='included_parent', customer_eligible=True)])
-        v_hidden = self._make_version('HIDDEN', include_install=False, extra=[dict(
-            common, product_id=self.p_install.id, execution_mode='no_action', no_action_reason='covered_cost',
-            placement='no_customer_line', disclosure='internal_only', customer_eligible=False)])
-        # a) the Scope anchor's product is flagged -> the anchor amount IS in the installation base
+    def test_21_double_charge_guard_am07(self):
+        """AM-07 / R-DC1 (owner decision 2026-10-06), quotation-time second guard on versions released before QL1."""
+        crew = self.env['product.product'].create({'name': f'{PT} Installer crew', 'type': 'service', 'sale_ok': True,
+                                                   'uom_id': self.uom_unit.id, 'sipanel_installation_work': True})
+        survey = self.env['product.product'].create({'name': f'{PT} Site survey', 'type': 'service', 'sale_ok': True,
+                                                     'uom_id': self.uom_unit.id})
+        labour = dict(execution_mode='labour', activity_id=self.act_ins.id, placement='included_parent',
+                      customer_eligible=True)
+        hidden = dict(execution_mode='no_action', no_action_reason='covered_cost', placement='no_customer_line',
+                      disclosure='internal_only', customer_eligible=False)
+        # a) unchanged: the anchor of a Scope is in the base when its product is flagged
         order = self._si_2546_copy(scope_version=self.v_new)
         anchor = order.sipanel_quote_scope_ids.anchor_line_id
-        self.assertTrue(anchor.product_id.sipanel_installation_base)
         self.assertIn(anchor, order._sipanel_installation_base_lines())
-        # b) GAP 1: a LABOUR component (product not mapped as an installation product) is not detected
-        order_l = self._si_2546_copy(scope_version=v_labour)
-        order_l.sipanel_installation_pct = 40.0
-        self.assertEqual(self._install_line(order_l).price_unit, 9_946_320_000.0, 'GAP 1: accepted today')
-        # b) GAP 2: the mapped installation product priced inside the anchor as no_customer_line
-        order_h = self._si_2546_copy(scope_version=v_hidden)
-        order_h.sipanel_installation_pct = 40.0
-        self.assertEqual(self._install_line(order_h).price_unit, 9_946_320_000.0, 'GAP 2: accepted today')
+        # closed gap: the mapped installation product as "no customer line" (cost inside the anchor price)
+        v_hidden = self._make_version('HIDDEN', include_install=False, legacy=True,
+                                      extra=[self._work_line(self.p_install, **hidden)])
+        # closed gap: a component flagged as installation WORK
+        v_crew = self._make_version('CREW', include_install=False, legacy=True, extra=[self._work_line(crew, **labour)])
+        for version in (v_hidden, v_crew):
+            order = self._si_2546_copy(scope_version=version)
+            with self.assertRaisesRegex(UserError, 'charge installation twice'):
+                order.sipanel_installation_pct = 40.0
+            self.assertFalse(self._managed(order))
+        # by decision: labour that is not installation work does not refuse
+        v_survey = self._make_version('SURVEY', include_install=False, extra=[self._work_line(survey, **labour)])
+        order = self._si_2546_copy(scope_version=v_survey)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        # customer responsibility is not our charge
+        v_cust = self._make_version('CUST', include_install=False, extra=[self._work_line(
+            self.p_install, execution_mode='no_action', no_action_reason='customer_responsibility',
+            responsibility='customer', placement='own_line')])
+        order = self._si_2546_copy(scope_version=v_cust)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+
+    def test_22_release_refuses_installation_work_in_an_installation_base_anchor(self):
+        """QL1 - primary enforcement at Scope Version release."""
+        crew = self.env['product.product'].create({'name': f'{PT} Installer crew R', 'type': 'service',
+                                                   'sale_ok': True, 'uom_id': self.uom_unit.id,
+                                                   'sipanel_installation_work': True})
+        cases = {
+            'mapped product included': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='included_parent',
+                customer_eligible=True)),
+            'mapped product own line': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='own_line',
+                customer_eligible=True)),
+            'mapped product no customer line': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='no_customer_line',
+                disclosure='internal_only', customer_eligible=False)),
+            'installation work labour': dict(product=crew, vals=dict(
+                execution_mode='labour', activity_id=self.act_ins.id, placement='included_parent',
+                customer_eligible=True)),
+        }
+        for i, (case, spec) in enumerate(cases.items()):
+            with self.subTest(case=case):
+                v = self._make_version(f'QL1{i}', include_install=False, release=False,
+                                       extra=[self._work_line(spec['product'], **spec['vals'])])
+                with self.assertRaisesRegex(ValidationError, r'\[QL1\]'):
+                    v.action_release()
+                self.assertEqual(v.state, 'draft')
+        # anchor NOT in the installation base: the same recipe releases (nothing to double-charge)
+        self.p_roof.sipanel_installation_base = False
+        v = self._make_version('QL1-NOBASE', include_install=False, release=False,
+                               extra=[self._work_line(crew, **cases['installation work labour']['vals'])])
+        v.action_release()
+        self.assertEqual(v.state, 'released')
+        self.p_roof.sipanel_installation_base = True
+        # customer responsibility releases
+        v = self._make_version('QL1-CUST', include_install=False, release=False, extra=[self._work_line(
+            self.p_install, execution_mode='no_action', no_action_reason='customer_responsibility',
+            responsibility='customer', placement='own_line')])
+        v.action_release()
+        self.assertEqual(v.state, 'released')
+
+    def test_23_release_warns_on_installation_wording(self):
+        """QL2 - text only: a warning in the release chatter, never a refusal."""
+        def warnings(v):
+            return [str(m.body) for m in v.message_ids if 'Release warning [QL2]' in str(m.body)]
+        v_en = self._make_version('QL2-EN', include_install=False,
+                                  desc=('Standing seam roof, supplied and installed.', 'سقف استندینگ سیم.'))
+        self.assertEqual(v_en.state, 'released')
+        self.assertEqual(len(warnings(v_en)), 1, warnings(v_en))
+        self.assertIn('install', warnings(v_en)[0])
+        v_fa = self._make_version('QL2-FA', include_install=False,
+                                  desc=('Standing seam roof supply.', 'تأمین و نصب سقف استندینگ سیم.'))
+        self.assertEqual(len(warnings(v_fa)), 1, warnings(v_fa))
+        self.assertIn('نصب', warnings(v_fa)[0])
+        v_clean = self._make_version('QL2-OK', include_install=False,
+                                     desc=('Standing seam roof supply.', 'تأمین سقف استندینگ سیم.'))
+        self.assertFalse(warnings(v_clean))
+        self.p_roof.sipanel_installation_base = False      # anchor outside the base: no warning
+        v_nobase = self._make_version('QL2-NOBASE', include_install=False,
+                                      desc=('Supplied and installed.', 'تأمین و نصب.'))
+        self.assertFalse(warnings(v_nobase))
+        self.p_roof.sipanel_installation_base = True
 
     # ------------------------------------------------------------------ C. amount in words
     def test_15_amount_in_words(self):
@@ -535,5 +617,11 @@ class TestQuotationLines(SipanelCoreCase):
             block = doc.xpath("//div[@name='so_total_summary']//div[@name='sipanel_amount_in_words']")
             self.assertEqual(len(block), 1, 'printed once, below the totals box')
             text = ' '.join(block[0].text_content().split())
-            words = ' '.join(order.currency_id.with_context(lang=partner.lang).amount_to_text(order.amount_total).split())
+            words = ' '.join(order.with_context(lang=partner.lang)._sipanel_amount_total_in_words().split())
             self.assertEqual(text, f'{label} {words}')
+            if partner == self.cust_en:     # owner decision 2026-10-06: "... Rials only", never the unit label
+                self.assertTrue(words.startswith('Thirty-Eight Billion'), words)
+                self.assertTrue(words.endswith('Thousand Rials only'), words)
+                self.assertNotIn(irr.with_context(lang='en_US').currency_unit_label, words.replace('Rials only', ''))
+            else:
+                self.assertTrue(words.endswith('هزار ریال'), words)

@@ -16,9 +16,6 @@ from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard
 
 INSTALL_GUARD = 'sipanel_installation_sync'
 OPEN_STATES = ('draft', 'sent')
-# Scope component placements that already put the installation product in front of the customer:
-# INCLUDED in the anchor price or billed on its OWN line. A percentage line on top would charge it twice.
-INSTALL_IN_SCOPE_PLACEMENTS = ('included_parent', 'own_line')
 
 
 def format_pct(pct):
@@ -137,18 +134,19 @@ class SaleOrder(models.Model):
         return product
 
     def _sipanel_check_installation_not_in_scope(self):
-        """B3: a Scope snapshot that already includes (or bills) an installation product forbids the
-        percentage line - that is a quotation made on a Scope version older than the corrected
-        commercial model. Checked on the frozen quotation snapshot, never on today's master."""
+        """B3 + AM-07 (second guard; the first is the Scope Version release rule QL1): a Scope snapshot with an
+        active SIPANEL component of installation work - a System-mapped installation product or a product
+        flagged `sipanel_installation_work` - in ANY placement (included in the anchor, own line, or no customer
+        line at all: its cost is still inside the anchor price) forbids the percentage line. Customer-
+        responsibility components are not our charge. Checked on the frozen quotation snapshot, never on
+        today's master."""
         self.ensure_one()
-        install_products = self.env['account.analytic.account'].sudo().search(
-            [('sipanel_installation_product_id', '!=', False)]).mapped('sipanel_installation_product_id')
-        if not install_products:
+        work = self.env['product.product']._sipanel_installation_work_products()
+        if not work:
             return
         for scope in self.sipanel_quote_scope_ids.filtered('active'):
             comps = scope.current_revision_id.sudo().component_ids.filtered(
-                lambda c: c.active_state == 'active' and c.responsibility == 'sipanel'
-                and c.placement in INSTALL_IN_SCOPE_PLACEMENTS and c.product_id in install_products)
+                lambda c: c.active_state == 'active' and c.responsibility == 'sipanel' and c.product_id in work)
             if comps:
                 raise UserError(self.env._(
                     "Scope %(s)s (version %(v)s) already includes %(p)s in its price. This quotation was "
@@ -239,6 +237,18 @@ class SaleOrder(models.Model):
 
     # ------------------------------------------------------------------ amount in words (C)
     def _sipanel_amount_total_in_words(self):
-        """Native res.currency.amount_to_text in the document language (the report runs under t-lang)."""
+        """Native res.currency.amount_to_text in the document language (the report runs under t-lang).
+
+        Rial in a non-Persian document (owner decision 2026-10-06): the native words followed by "Rials only"
+        instead of the currency's unit label (the installed en_US label is "IRRial", Odoo's own data says
+        "Dinar"). Only the quotation's printed words change; the currency record and invoices are untouched.
+        Persian keeps the native "... ریال"."""
         self.ensure_one()
-        return self.currency_id.with_context(lang=self.env.lang).amount_to_text(self.amount_total)
+        currency = self.currency_id.with_context(lang=self.env.lang)
+        amount = self.amount_total
+        text = currency.amount_to_text(amount)
+        label = (currency.currency_unit_label or '').strip()
+        if (currency.name == 'IRR' and not (self.env.lang or '').startswith('fa')
+                and currency.is_zero(amount - round(amount)) and label and text.endswith(' ' + label)):
+            return self.env._("%(words)s Rials only", words=text[:-len(label)].rstrip())
+        return text

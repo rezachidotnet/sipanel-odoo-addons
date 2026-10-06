@@ -101,10 +101,67 @@ stop_clone_procs() {  # only processes naming THIS clone; TERM, then KILL
   pids=$(clone_procs | awk '{print $1}' | tr '\n' ' ')
   [ -z "${pids// /}" ] || docker exec "$APPC" sh -c "kill -KILL $pids" 2>/dev/null || true
 }
+# ------------------------------------------------------------------ resource watchdog (2 vCPU / 2 GB host)
+# The host also serves Production (odoo-sipanel and the other Odoo containers on odoo-db). Every invocation
+# records free / docker stats / OOM events before, during (every RES_INTERVAL s) and after, into
+# $EVID/resources.log, and STOPS the run (own processes only) when the clone run endangers the host:
+#   - a new OOM-killer event in the kernel log, or a container flagged OOMKilled;
+#   - MemAvailable below RES_MIN_AVAIL_MB for 3 consecutive samples;
+#   - swap used grown by more than RES_MAX_SWAP_GROWTH_MB over the value at start (the host already swaps at idle);
+#   - swap-in above RES_MAX_SWAPIN_PPS pages/s for 3 consecutive samples (thrashing).
+RES_INTERVAL=${RES_INTERVAL:-10}
+RES_MIN_AVAIL_MB=${RES_MIN_AVAIL_MB:-150}
+RES_MAX_SWAP_GROWTH_MB=${RES_MAX_SWAP_GROWTH_MB:-1024}
+RES_MAX_SWAPIN_PPS=${RES_MAX_SWAPIN_PPS:-1500}
+RESLOG=$EVID/resources.log
+MON_PID=
+meminfo_mb() { awk -v k="$1:" '$1 == k {print int($2 / 1024)}' /proc/meminfo; }
+swap_used_mb() { echo $(( $(meminfo_mb SwapTotal) - $(meminfo_mb SwapFree) )); }
+oom_events() { sudo -n dmesg 2>/dev/null | grep -ciE 'out of memory|killed process|oom-kill' || true; }
+containers_oomkilled() {
+  docker ps --format '{{.Names}}' | xargs -r docker inspect -f '{{.Name}} {{.State.OOMKilled}}' | grep ' true$' || true
+}
+res_snapshot() {  # $1 = label
+  mkdir -p "$EVID"
+  {
+    echo "=== $(date -u +%FT%TZ) $1"
+    free -h
+    echo "MemAvailable=$(meminfo_mb MemAvailable)MB swap_used=$(swap_used_mb)MB oom_events=$(oom_events) load=$(cut -d' ' -f1-3 /proc/loadavg)"
+    docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} ({{.MemPerc}})'
+    containers_oomkilled
+  } >> "$RESLOG" 2>&1
+}
+res_monitor() {  # background; signals the main script on danger
+  local main=$1 swap0 oom0 low=0 thrash=0 in0 in1 avail swap reason=
+  swap0=$(swap_used_mb); oom0=$(oom_events); in0=$(awk '$1 == "pswpin" {print $2}' /proc/vmstat)
+  while sleep "$RES_INTERVAL"; do
+    avail=$(meminfo_mb MemAvailable); swap=$(swap_used_mb)
+    in1=$(awk '$1 == "pswpin" {print $2}' /proc/vmstat)
+    local pps=$(( (in1 - in0) / RES_INTERVAL )); in0=$in1
+    echo "$(date -u +%TZ) avail=${avail}MB swap=${swap}MB (+$((swap - swap0))) swapin=${pps}p/s load=$(cut -d' ' -f1 /proc/loadavg) $(docker stats --no-stream --format '{{.Name}}={{.MemUsage}}' | awk '{print $1}' | tr '\n' ' ')" >> "$RESLOG"
+    [ "$avail" -lt "$RES_MIN_AVAIL_MB" ] && low=$((low + 1)) || low=0
+    [ "$pps" -gt "$RES_MAX_SWAPIN_PPS" ] && thrash=$((thrash + 1)) || thrash=0
+    if [ "$(oom_events)" -gt "$oom0" ] || [ -n "$(containers_oomkilled)" ]; then reason="OOM-killer event"
+    elif [ "$low" -ge 3 ]; then reason="MemAvailable ${avail}MB < ${RES_MIN_AVAIL_MB}MB for 3 samples"
+    elif [ $((swap - swap0)) -gt "$RES_MAX_SWAP_GROWTH_MB" ]; then reason="swap grew by $((swap - swap0))MB"
+    elif [ "$thrash" -ge 3 ]; then reason="swap-in ${pps} pages/s for 3 samples"
+    fi
+    if [ -n "$reason" ]; then
+      echo "RESOURCE_ABORT $(date -u +%FT%TZ): $reason" | tee -a "$RESLOG" >&2
+      res_snapshot "at abort"
+      # bash runs the main script's trap only after its foreground command ends: stop the clone's Odoo
+      # process here (under the run lock only this run uses the clone), which ends that command
+      stop_clone_procs || true
+      kill -USR1 "$main" 2>/dev/null
+      return
+    fi
+  done
+}
 OWN_STEP=0   # 1 while an Odoo process started by this invocation may still run on the clone
 on_exit() {
   local rc=$?
-  trap - EXIT INT TERM HUP
+  trap - EXIT INT TERM HUP USR1
+  [ -z "$MON_PID" ] || { kill "$MON_PID" 2>/dev/null; wait "$MON_PID" 2>/dev/null; res_snapshot "after $MODE (rc=$rc)"; }
   # only a step THIS invocation launched is stopped (a refused invocation never touches another run's processes)
   if [ "$rc" -ne 0 ] && [ "$OWN_STEP" = 1 ]; then stop_clone_procs || true; fi
   exit "$rc"
@@ -113,6 +170,7 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+trap 'echo "STOPPED by the resource watchdog - see $RESLOG" >&2; exit 13' USR1
 
 capacity() {
   local size free need
@@ -139,7 +197,8 @@ clone() {
   echo "clone owner (db_user from odoo.conf): ${owner}"
   capacity
   psql_admin -d postgres -tAc "select 1 from pg_database where datname='${CLONE}'" | grep -q 1 && { echo "clone exists"; exit 1; }
-  [ ! -e "$EVID" ] || { echo "refusing: evidence directory $EVID already exists"; exit 2; }
+  [ -z "$(ls -A "$EVID" 2>/dev/null | grep -v '^resources.log$')" ] \
+    || { echo "refusing: evidence directory $EVID already has files"; exit 2; }
   # same encoding / collation as production (template0 would otherwise take the server defaults)
   local enc collate ctype
   IFS='|' read -r enc collate ctype < <(psql_admin -d postgres -tAc \
@@ -244,6 +303,11 @@ evidence() {
   grep -q "VERDICT FAIL" SI-26-2546_verdicts.txt && { echo "EVIDENCE FAILED (see SI-26-2546_verdicts.txt)"; exit 12; }
   echo "EVIDENCE OK"
 }
+if [[ "$MODE" =~ ^(all|clone|pre|install|test|post)$ ]]; then
+  res_snapshot "before $MODE"
+  res_monitor $$ &
+  MON_PID=$!
+fi
 case "$MODE" in
   clone)    clone ;;
   pre)      render pre ;;
