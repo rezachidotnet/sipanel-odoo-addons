@@ -18,7 +18,8 @@ CLONE_GIVEN=${CLONE:-}
 CLONE=${CLONE:-sipanel_page1_clone_${TS}}
 EVID=${EVID:-/home/ubuntu/sipanel_audit/docs/audits/data/page1_project_info_clone_${TS}}
 export CLONE EVID                                          # sub-invocations of "all" reuse the same clone
-LOGDIR=${LOGDIR:-$REPO/reports}
+LOGDIR=${LOGDIR:-$EVID/logs}                              # outside the code repo
+mkdir -p "$LOGDIR"
 ODOO=(docker exec "$APPC" odoo -c /etc/odoo/odoo.conf -d "$CLONE" --no-http --stop-after-init)
 echo "clone database: $CLONE"
 [[ "$CLONE" == sipanel_page1_clone_* ]] || { echo "refusing: clone name must start with sipanel_page1_clone_"; exit 2; }

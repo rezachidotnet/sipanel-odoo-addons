@@ -2,8 +2,9 @@
 # Build the implementation bundle for a report run directory: SHA256SUMS, release + bundle manifests, ZIP + .sha256.
 set -euo pipefail
 REPO=/home/ubuntu/sipanel_odoo_addons
-RUN=${1:?run dir name under reports/}
-R=$REPO/reports/$RUN
+EVIDENCE=${SIPANEL_EVIDENCE_DIR:-/home/ubuntu/sipanel_audit/docs/audits/data}   # evidence lives outside the code repo
+RUN=${1:?run dir name under $EVIDENCE}
+R=$EVIDENCE/$RUN
 cd $REPO
 COMMIT=$(git rev-parse HEAD 2>/dev/null || echo NONE)
 {
@@ -50,7 +51,7 @@ STAGE=$(mktemp -d)
 mkdir -p $STAGE/bundle/reports/$RUN
 rsync -a --exclude '__pycache__' --exclude '*.pyc' addons test_addons scripts .gitignore $STAGE/bundle/
 rsync -a --exclude 'SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip*' --exclude SHA256SUMS $R/ $STAGE/bundle/reports/$RUN/
-cp -r reports/sipanel_scope_implementation_rc_20260919T140237Z $STAGE/bundle/reports/
+cp -r $EVIDENCE/sipanel_scope_implementation_rc_20260919T140237Z $STAGE/bundle/reports/
 (cd $STAGE/bundle && find . -type f -print0 | sort -z | xargs -0 sha256sum > $R/SHA256SUMS)
 cp $R/SHA256SUMS $STAGE/bundle/reports/$RUN/SHA256SUMS
 # refuse if any secret-looking content slipped in

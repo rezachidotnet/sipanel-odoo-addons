@@ -6,7 +6,9 @@ MODE=${1:-test}
 APPC=odoo-sipanel
 REPO=/home/ubuntu/sipanel_odoo_addons
 MODS=sipanel_commercial_scope_core,sipanel_sale_scope,sipanel_scope_execution,sipanel_scope_costing
-LOG=${LOG:-$REPO/reports/odoo-${MODE}-$(date -u +%Y%m%dT%H%M%SZ).log}
+EVIDENCE=${SIPANEL_EVIDENCE_DIR:-/home/ubuntu/sipanel_audit/docs/audits/data}   # evidence lives outside the code repo
+LOG=${LOG:-$EVIDENCE/logs/odoo-${MODE}-$(date -u +%Y%m%dT%H%M%SZ).log}
+mkdir -p "$(dirname "$LOG")"
 # Production addons path is /opt/odoo/addons (bind-mounted at /mnt/extra-addons). Deploy by copy (never symlink into the repo).
 deploy() {
   for m in ${MODS//,/ }; do sudo rsync -a --delete "$REPO/addons/$m/" "/opt/odoo/addons/$m/"; done

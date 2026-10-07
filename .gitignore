@@ -3,3 +3,9 @@ __pycache__/
 *.log
 .DS_Store
 .claude/settings.local.json
+# evidence lives outside the code repository (moved 2026-10-07); never commit it here
+/reports/
+/architecture/
+/evidence/
+*.zip
+*.pdf
