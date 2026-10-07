@@ -45,7 +45,7 @@ CLONE_GIVEN=${CLONE:-}
 CLONE=${CLONE:-sipanel_qlines_clone_${TS}}
 # evidence belongs to the clone (never to the invocation, never to an exported EVID): one clone, one directory
 EVID=/home/ubuntu/sipanel_audit/docs/audits/data/quotation_lines_clone_${CLONE#sipanel_qlines_clone_}
-LOGDIR=${LOGDIR:-$REPO/reports}
+LOGDIR=${LOGDIR:-$EVID/logs}                              # outside the code repo (per run)
 EVID_ROOT=/home/ubuntu/sipanel_audit/docs/audits/data
 FS_ROOT=/opt/odoo/data/filestore
 WT_ROOT=/home/ubuntu/sipanel_qlines_worktrees
@@ -95,7 +95,7 @@ worktree_delete() {
   [[ "$CLONE" =~ $CLONE_RE ]] && [ "$WT" = "$WT_ROOT/$CLONE" ] || refuse "worktree path $WT"
   [ ! -d "$WT" ] || git -C "$REPO" worktree remove --force -- "$WT"
 }
-LOCK=${LOCK:-$LOGDIR/.sipanel_qlines_clone.lock}
+LOCK=${LOCK:-/home/ubuntu/sipanel_audit/docs/audits/data/.sipanel_qlines_clone.lock}   # one fixed path per host
 QUIET_TIMEOUT=${QUIET_TIMEOUT:-180}
 # Known, pre-existing failure on master (memory: sale_scope '1.00' needle, unrelated to this module). Reported, not hidden.
 KNOWN_FAIL='TestInvoiceFlow.test_generated_line_appears_in_the_customer_pdf_without_internal_data'
