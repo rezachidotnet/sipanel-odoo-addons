@@ -322,7 +322,10 @@ OWN_STEP=0   # 1 while an Odoo process started by this invocation may still run 
 on_exit() {
   local rc=$?
   trap - EXIT INT TERM HUP USR1
-  [ -z "$MON_PID" ] || { kill "$MON_PID" 2>/dev/null; wait "$MON_PID" 2>/dev/null; res_snapshot "after $MODE (rc=$rc)"; }
+  # `wait` on the killed watchdog returns 143; under set -e that would end this handler right here (rc lost,
+  # no snapshot, own clone processes never stopped) - so the handler must not fail on it
+  [ -z "$MON_PID" ] || { kill "$MON_PID" 2>/dev/null || true; wait "$MON_PID" 2>/dev/null || true
+                         res_snapshot "after $MODE (rc=$rc)" || true; }
   # only a step THIS invocation launched is stopped (a refused invocation never touches another run's processes)
   if [ "$rc" -ne 0 ] && [ "$OWN_STEP" = 1 ]; then stop_clone_procs || true; fi
   exit "$rc"
@@ -359,7 +362,8 @@ clone() {
   echo "clone owner (db_user from odoo.conf): ${owner}"
   capacity
   psql_admin -d postgres -tAc "select 1 from pg_database where datname='${CLONE}'" | grep -q 1 && { echo "clone exists"; exit 1; }
-  [ -z "$(ls -A "$EVID" 2>/dev/null | grep -v '^resources.log$\|^code_commit.txt$\|^deps_modules.txt$')" ] \
+  [ -z "$(ls -A "$EVID" 2>/dev/null | grep -v '^resources.log$\|^code_commit.txt$\|^deps_modules.txt$\|^logs$')" ] \
+    && [ -z "$(ls -A "$LOGDIR" 2>/dev/null)" ] \
     || { echo "refusing: evidence directory $EVID already has files"; exit 2; }
   # same encoding / collation as production (template0 would otherwise take the server defaults)
   local enc collate ctype
