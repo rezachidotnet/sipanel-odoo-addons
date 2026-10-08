@@ -100,14 +100,15 @@ def _release_next(env, scope, current, offending, desc, terms):
         'basis': l.basis, 'execution_mode': l.execution_mode, 'cost_policy': l.cost_policy,
         'customer_label': l.with_context(lang='en_US').customer_label,
         'customer_label_fa': l.with_context(lang='fa_IR').customer_label} for l in removed]
+    removed_codes = sorted(set(removed.product_id.mapped('default_code')))   # read before the unlink
     removed.unlink()
     # en_US always passed with fa_IR: a lone fa_IR term would overwrite the source
     draft.update_field_translations('customer_description', terms)
     report['description_before'] = desc
     report['description_after'] = _stored_terms(env, draft, 'customer_description')
     changes = ["customer description replaced by the supply-only wording"]
-    if removed:
-        changes.insert(0, ', '.join(sorted(set(removed.product_id.mapped('default_code'))))
+    if removed_codes:
+        changes.insert(0, ', '.join(removed_codes)
                        + " removed from the recipe (installation no longer included in the anchor price)")
     draft.message_post(body=(
         f"Commercial model correction (2026-10-06, supply only), copied from {current.name}: " + "; ".join(changes)
