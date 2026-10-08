@@ -345,7 +345,9 @@ on_exit() {
   [ -z "$MON_PID" ] || { kill "$MON_PID" 2>/dev/null || true; wait "$MON_PID" 2>/dev/null || true
                          res_snapshot "after $MODE (rc=$rc)" || true; }
   # only a step THIS invocation launched is stopped (a refused invocation never touches another run's processes)
-  if [ "$rc" -ne 0 ] && [ "$OWN_STEP" = 1 ]; then stop_clone_procs || true; fi
+  # a container whose `docker run` was in flight when the signal came appears only afterwards (run
+  # 20261008T100612Z: SIGINT during render_server_start left the render server running) - look again
+  if [ "$rc" -ne 0 ] && [ "$OWN_STEP" = 1 ]; then stop_clone_procs || true; sleep 5; stop_clone_procs || true; fi
   exit "$rc"
 }
 trap on_exit EXIT
