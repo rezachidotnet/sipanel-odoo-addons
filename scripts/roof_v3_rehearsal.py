@@ -13,10 +13,10 @@ sipanel_qlines_clone_* database.
    SENT    - whether SI-26/2546 was sent to the customer (state, e-mails, portal link, signature, printed PDFs).
    NATIVE  - installed modules / fields that could cover installation execution, cost and analytics natively.
    M4      - SIP-000075 unit of measure m² -> Units (master data, clone only), so the line prints "1.00 Units".
-3. A       - a DUPLICATE of SI-26/2546 (the original stays untouched, verified): installation 10 %.
-             Confirmation is rehearsed inside a rolled-back savepoint: what the installation line creates.
-4. B       - another duplicate rebuilt on the v3 Scopes (same quantities and prices), installation 10 %.
-PDFs (fa_IR / en_US) for A and B. Everything is committed on the clone only.
+3. A       - directly on SI-26/2546 (owner decision 2026-10-08: never sent, no duplicate): installation 10 %,
+             supply lines unchanged. Confirmation is rehearsed inside a rolled-back savepoint: what the
+             installation line creates. (Way B was not chosen and is no longer rehearsed.)
+PDFs (fa_IR / en_US) for A. Everything is committed on the clone only.
 """
 import json
 import os
@@ -193,97 +193,72 @@ try:
               sc.current_version_id.name)
     env.cr.commit()
 
-    # ------------------------------------------------------------------ 3. A: a DUPLICATE of SI-26/2546, 10 %
+    # ------------------------------------------------------------------ 3. A: directly on SI-26/2546, 10 %
+    # Owner decision 2026-10-08: SI-26/2546 was never sent - way A is applied to it directly, no duplicate.
+    check('si26_2546_not_sent', R['si26_2546_sent_verdict'].startswith('NOT_SENT'), R['si26_2546_sent_verdict'])
+    check('si26_2546_is_quotation', ref.state == 'draft', ref.state)
     seam = env['account.analytic.account'].search([('name', '=', 'Standing Seam'), ('active', '=', True)])
     check('standing_seam_system_maps_sip_000075', len(seam) == 1 and seam.sipanel_installation_product_id == install,
           seam.mapped('name'))
-    ref_write_date, ref_totals, ref_lines = ref.write_date, totals(ref), lines_of(ref)
-    dup = ref.copy({'origin': f'{ref.name} (rehearsal A: supply only + 10 % installation)'})
-    compared = ('partner_id', 'partner_invoice_id', 'partner_shipping_id', 'pricelist_id', 'fiscal_position_id',
-                'payment_term_id', 'user_id', 'team_id', 'company_id', 'sipanel_requested_system_id',
-                'sipanel_project_name', 'validity_date', 'note', 'client_order_ref', 'opportunity_id')
-    R['A_duplicate_vs_original'] = {f: [str(ref[f].display_name if hasattr(ref[f], 'display_name') else ref[f]),
-                                        str(dup[f].display_name if hasattr(dup[f], 'display_name') else dup[f])]
-                                    for f in compared if f in ref._fields and ref[f] != dup[f]}
-    R['A_requested_system_before'] = dup.sipanel_requested_system_id.name or None
-    if not dup.sipanel_requested_system_id:
-        dup.sipanel_requested_system_id = seam
+    R['A_requested_system_before'] = ref.sipanel_requested_system_id.name or None
+    supply_before = ref.order_line.filtered(lambda l: not l.display_type)
+    supply_before = [(l.id, l.product_id.default_code, l.product_uom_qty, l.price_unit, l.price_subtotal)
+                     for l in supply_before.sorted('id')]
+    if not ref.sipanel_requested_system_id:
+        ref.sipanel_requested_system_id = seam
     try:
-        dup.sipanel_installation_pct = 10.0
+        ref.sipanel_installation_pct = 10.0
         refused = None
     except UserError as exc:
         refused = str(exc)
-    il = dup.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
-    ordered = dup.order_line.sorted(lambda l: (l.sequence, l.id))
+    ref.invalidate_recordset()
+    il = ref.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
+    ordered = ref.order_line.sorted(lambda l: (l.sequence, l.id))
     check('A_no_double_charge_refusal', refused is None, refused)
     check('A_installation_10pct', len(il) == 1 and close(il.price_unit, INSTALL_10) and il.product_id == install,
           [il.mapped('price_unit'), il.product_id.default_code])
+    check('A_installation_qty_1', len(il) == 1 and il.product_uom_qty == 1.0, il.mapped('product_uom_qty'))
     check('A_installation_line_in_units', il.product_uom_id == unit, il.product_uom_id.name)
-    check('A_untaxed_27352380000', close(dup.amount_untaxed, UNTAXED), totals(dup))
-    check('A_total_30087618000', close(dup.amount_tax, TAX) and close(dup.amount_total, TOTAL), totals(dup))
+    check('A_untaxed_27352380000', close(ref.amount_untaxed, UNTAXED), totals(ref))
+    check('A_total_30087618000', close(ref.amount_tax, TAX) and close(ref.amount_total, TOTAL), totals(ref))
     check('A_installation_last', bool(il) and ordered[-1] == il)
-    R['A'] = {'order': dup.name, 'lines': lines_of(dup), 'totals': totals(dup),
-              'words_fa': dup.with_context(lang='fa_IR')._sipanel_amount_total_in_words(),
-              'words_en': dup.with_context(lang='en_US')._sipanel_amount_total_in_words(),
-              'pdf': render(dup, 'A_dup_SI-26-2546')}
+    supply_after = ref.order_line.filtered(lambda l: not l.display_type and not l.sipanel_is_installation_line)
+    supply_after = [(l.id, l.product_id.default_code, l.product_uom_qty, l.price_unit, l.price_subtotal)
+                    for l in supply_after.sorted('id')]
+    check('A_supply_lines_unchanged', supply_after == supply_before, [supply_before, supply_after])
+    R['A'] = {'order': ref.name, 'lines': lines_of(ref), 'totals': totals(ref),
+              'unit_name': {lang: unit.with_context(lang=lang).name for lang in ('en_US', 'fa_IR')},
+              'words_fa': ref.with_context(lang='fa_IR')._sipanel_amount_total_in_words(),
+              'words_en': ref.with_context(lang='en_US')._sipanel_amount_total_in_words(),
+              'pdf': render(ref, 'A_SI-26-2546')}
     check('A_words_en_rials_only', R['A']['words_en'].endswith('Rials only'), R['A']['words_en'])
-    ref.invalidate_recordset()
-    check('A_original_untouched', ref.write_date == ref_write_date and totals(ref) == ref_totals
-          and lines_of(ref) == ref_lines, [str(ref.write_date), str(ref_write_date)])
     env.cr.commit()
-    # what confirming creates for the installation line (rolled back: the duplicate stays a quotation)
+    # what confirming creates for the installation line (rolled back: SI-26/2546 stays a quotation)
     conf = R['A_confirmation_rehearsal'] = {}
     try:
         with env.cr.savepoint():
-            dup.action_confirm()
-            il = dup.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
-            conf.update({'state': dup.state, 'analytic_distribution': il.analytic_distribution,
+            ref.action_confirm()
+            il = ref.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
+            conf.update({'state': ref.state, 'analytic_distribution': il.analytic_distribution,
                          'invoice_status': il.invoice_status, 'qty_to_invoice': il.qty_to_invoice,
                          'purchase_price': opt(il, 'purchase_price')})
             if Demand is not None:
-                conf['sipanel_demands'] = Demand.search_count([('order_id', '=', dup.id)])
+                conf['sipanel_demands'] = Demand.search_count([('order_id', '=', ref.id)])
             if 'project.task' in env and 'sale_line_id' in env['project.task']._fields:
                 conf['tasks_for_installation_line'] = env['project.task'].search_count([('sale_line_id', '=', il.id)])
-            conf['projects'] = len(dup.project_ids) if 'project_ids' in dup._fields else '<n/a>'
+            conf['projects'] = len(ref.project_ids) if 'project_ids' in ref._fields else '<n/a>'
             if 'purchase.order.line' in env and 'sale_line_id' in env['purchase.order.line']._fields:
                 conf['purchase_lines_for_installation_line'] = env['purchase.order.line'].search_count(
                     [('sale_line_id', '=', il.id)])
-            conf['pickings'] = len(dup.picking_ids) if 'picking_ids' in dup._fields else '<n/a>'
+            conf['pickings'] = len(ref.picking_ids) if 'picking_ids' in ref._fields else '<n/a>'
             raise ValidationError('ROLLBACK_CONFIRMATION_REHEARSAL')
     except (UserError, ValidationError) as exc:
         if str(exc) != 'ROLLBACK_CONFIRMATION_REHEARSAL':
             conf['confirmation_refused'] = str(exc)
-    dup.invalidate_recordset()
-    check('A_still_quotation_after_rehearsal', dup.state in ('draft', 'sent'), dup.state)
-
-    # ------------------------------------------------------------------ 4. B: copy rebuilt on the v3 Scopes
-    cp = ref.copy({'origin': f'{ref.name} (rehearsal B: rebuilt on the v3 Scopes)', 'sipanel_installation_pct': 0.0})
-    if not cp.sipanel_requested_system_id:
-        cp.sipanel_requested_system_id = seam
-    by_anchor = {sc.current_version_id.anchor_product_id: sc.current_version_id for sc in scopes}
-    rebuilt = []
-    for line in cp.order_line.filtered(lambda l: not l.display_type and l.product_id in by_anchor).sorted('sequence'):
-        version = by_anchor[line.product_id]
-        qty, price, seq, uom = line.product_uom_qty, line.price_unit, line.sequence, line.product_uom_id
-        uom = uom if uom == version.base_uom_id else version.base_uom_id
-        line.unlink()
-        qs = QS._create_from_version(cp, version, qty, uom, system=seam, sequence=seq)
-        qs.anchor_line_id.write({'price_unit': price})
-        rebuilt.append((version.name, qty, uom.name, price))
-    try:
-        cp.sipanel_installation_pct = 10.0
-        refused_b = None
-    except UserError as exc:
-        refused_b = str(exc)
-    ilb = cp.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
-    check('B_rebuilt_three_scopes_on_v3', len(rebuilt) == 3, rebuilt)
-    check('B_no_double_charge_refusal', refused_b is None, refused_b)
-    check('B_untaxed_27352380000', close(cp.amount_untaxed, UNTAXED) and len(ilb) == 1
-          and close(ilb.price_unit, INSTALL_10), totals(cp))
-    check('B_total_30087618000', close(cp.amount_total, TOTAL), totals(cp))
-    R['B'] = {'order': cp.name, 'rebuilt': rebuilt, 'lines': lines_of(cp), 'totals': totals(cp),
-              'pdf': render(cp, 'B_copy_on_v3')}
-    env.cr.commit()
+    ref.invalidate_recordset()
+    check('A_still_quotation_after_rehearsal', ref.state == 'draft', ref.state)
+    check('A_totals_after_rehearsal', close(ref.amount_untaxed, UNTAXED) and close(ref.amount_total, TOTAL),
+          totals(ref))
 except Exception:
     R['error'] = traceback.format_exc()
     env.cr.rollback()

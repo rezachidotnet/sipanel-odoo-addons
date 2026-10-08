@@ -30,19 +30,47 @@ MARKERS = [
     ('rehearsal_A_*_en_US.pdf', 'Installation & Execution (10% of item subtotal)', 'way A: installation line 10 %'),
     ('rehearsal_A_*_en_US.pdf', 'Rials only', 'way A: amount in words'),
     ('rehearsal_A_*_fa_IR.pdf', 'نصب و اجرا', 'way A: installation section (fa_IR)'),
-    ('rehearsal_B_*_en_US.pdf', '(supply only)', 'way B: v3 Scope anchors'),
-    ('rehearsal_B_*_en_US.pdf', 'Installation & Execution (10% of item subtotal)', 'way B: installation line 10 %'),
-    ('rehearsal_B_*_fa_IR.pdf', 'فقط تأمین', 'way B: v3 Scope anchors (fa_IR)'),
+    ('rehearsal_A_*_en_US.pdf', '30,087,618,000', 'way A: total incl. VAT'),
+    ('rehearsal_A_*_fa_IR.pdf', '30,087,618,000', 'way A: total incl. VAT (fa_IR)'),
 ]
 # old wording that must NOT appear where the new model is printed
 ABSENT = [
-    ('rehearsal_B_*_en_US.pdf', 'supplied and installed', 'v2 wording gone from the v3 quotation'),
+    ('rehearsal_A_*_en_US.pdf', 'IRRial', 'old unit label gone (way A)'),
     ('post_SI-26-2546_en_US.pdf', 'IRRial', 'old unit label gone'),
 ]
 
 
 def text_of(path):
     return squash(subprocess.run(['pdftotext', '-layout', path, '-'], capture_output=True, text=True, check=True).stdout)
+
+
+def installation_rows(evid):
+    """Way A: the printed installation row (quantity + unit) in both languages. The unit name must be the
+    Units record's name in that language (from rehearsal_summary.json); the quantity format is reported as is."""
+    import json
+    import re
+    try:
+        names = json.load(open(os.path.join(evid, 'rehearsal_summary.json')))['A']['unit_name']
+    except (OSError, KeyError, ValueError) as exc:
+        print(f'FAIL installation row: no unit names in rehearsal_summary.json ({exc})')
+        return False
+    ok = True
+    for lang, label in (('en_US', 'Installation & Execution (10% of item subtotal)'), ('fa_IR', 'نصب و اجرا')):
+        files = sorted(glob.glob(os.path.join(evid, f'rehearsal_A_*_{lang}.pdf')))
+        if not files:
+            print(f'FAIL installation row {lang}: no PDF')
+            ok = False
+            continue
+        layout = subprocess.run(['pdftotext', '-layout', files[0], '-'], capture_output=True, text=True,
+                                check=True).stdout
+        rows = [r for r in layout.splitlines() if squash(label) in squash(r) and '2,486,580,000' in r]
+        unit = squash(names[lang])
+        good = len(rows) == 1 and unit in squash(rows[0])
+        qty = re.findall(r'(?<![\d,])(\d+(?:\.\d+)?)(?![\d,%])', rows[0]) if rows else []
+        ok &= good
+        print(f"{'PASS' if good else 'FAIL'} {os.path.basename(files[0])}: installation row has unit "
+              f"{names[lang]!r}; quantity printed as {qty[:3]} (INFO); row: {' '.join(rows[0].split()) if rows else None!r}")
+    return ok
 
 
 def main(evid):
@@ -60,6 +88,7 @@ def main(evid):
             ok &= good
             print(f"{'PASS' if good else 'FAIL'} {os.path.basename(f)}: {'has' if must else 'has not'} "
                   f"{marker!r} ({why})")
+    ok &= installation_rows(evid)
     print('MARKERS ' + ('PASS' if ok else 'FAIL'))
     return 0 if ok else 1
 

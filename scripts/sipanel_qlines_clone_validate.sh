@@ -3,7 +3,7 @@
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
-#   rehearsal (after evidence): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 duplicates at 10 %
+#   rehearsal (after evidence): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
 #   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
 #   CLONE=<db name>   reuse/choose the clone (default sipanel_qlines_clone_<UTC timestamp>, printed on start)
 #   COMMIT=<sha>      commit under test (default: HEAD at clone creation; fixed per clone in code_commit.txt)
@@ -417,7 +417,7 @@ render() {  # $1 = pre|post ; acceptance + PDFs through the render server, every
     || { echo "RENDER_$1 FAILED (rc=$rc, log $LOGDIR/qlines-$1-${TS}.log, summary $EVID/$1_summary.json)"; exit 8; }
   echo "RENDER_$1 OK"
 }
-rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 released, SI-26/2546 duplicates at 10 %
+rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
   local out rc f
   assert_exclusive rehearsal
   container_setup
