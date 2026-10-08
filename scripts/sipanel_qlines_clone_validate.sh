@@ -309,6 +309,7 @@ res_snapshot() {  # $1 = label
 }
 res_monitor() {  # background; signals the main script on danger
   local main=$1 swap0 oom0 low=0 thrash=0 in0 in1 avail swap reason=
+  exec 9>&-   # its sleep children must not hold the run lock after the run ends (proof after rehearsal was refused)
   swap0=$(swap_used_mb); oom0=$(oom_events); in0=$(awk '$1 == "pswpin" {print $2}' /proc/vmstat)
   while sleep "$RES_INTERVAL"; do
     avail=$(meminfo_mb MemAvailable); swap=$(swap_used_mb)

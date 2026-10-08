@@ -27,7 +27,6 @@ MARKERS = [
     ('post_synthetic_en_US_install40.pdf', '(supply only)', 'v3 supply-only wording on the Scope anchor'),
     ('post_synthetic_fa_IR_install40.pdf', 'فقط تأمین', 'v3 supply-only wording (fa_IR)'),
     ('post_synthetic_fa_IR_install40.pdf', 'نصب و اجرا', 'installation section (fa_IR)'),
-    ('rehearsal_A_*_en_US.pdf', 'Installation & Execution (10% of item subtotal)', 'way A: installation line 10 %'),
     ('rehearsal_A_*_en_US.pdf', 'Rials only', 'way A: amount in words'),
     ('rehearsal_A_*_fa_IR.pdf', 'نصب و اجرا', 'way A: installation section (fa_IR)'),
     ('rehearsal_A_*_en_US.pdf', '30,087,618,000', 'way A: total incl. VAT'),
@@ -55,7 +54,9 @@ def installation_rows(evid):
         print(f'FAIL installation row: no unit names in rehearsal_summary.json ({exc})')
         return False
     ok = True
-    for lang, label in (('en_US', 'Installation & Execution (10% of item subtotal)'), ('fa_IR', 'نصب و اجرا')):
+    # the line text is stored in the customer's language when it is created (SI-26/2546: fa_IR), so the row is
+    # found by its amount + tax column, not by its label; the section row has the amount but no tax
+    for lang in ('en_US', 'fa_IR'):
         files = sorted(glob.glob(os.path.join(evid, f'rehearsal_A_*_{lang}.pdf')))
         if not files:
             print(f'FAIL installation row {lang}: no PDF')
@@ -63,7 +64,7 @@ def installation_rows(evid):
             continue
         layout = subprocess.run(['pdftotext', '-layout', files[0], '-'], capture_output=True, text=True,
                                 check=True).stdout
-        rows = [r for r in layout.splitlines() if squash(label) in squash(r) and '2,486,580,000' in r]
+        rows = [r for r in layout.splitlines() if r.count('2,486,580,000') == 2 and '10%' in r]
         unit = squash(names[lang])
         good = len(rows) == 1 and unit in squash(rows[0])
         qty = re.findall(r'(?<![\d,])(\d+(?:\.\d+)?)(?![\d,%])', rows[0]) if rows else []
