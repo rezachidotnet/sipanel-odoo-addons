@@ -183,8 +183,12 @@ render_server_start() {
     sleep 2
   done
   [ "$code" = 200 ] || render_blocked "render server not answering on 127.0.0.1:${RPORT} after 180 s"
-  [ "$(docker inspect -f '{{len .NetworkSettings.Ports}}' "$ISO-render")" = 0 ] \
-    || render_blocked "render server publishes ports: $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$ISO-render")"
+  # the image EXPOSEs 8069/8071/8072, so NetworkSettings.Ports lists them with null bindings; what matters is
+  # that nothing is bound on the host: no port bindings requested and `docker port` empty
+  [ -z "$(docker port "$ISO-render")" ] \
+    && [[ "$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$ISO-render")" =~ ^(\{\}|null)$ ]] \
+    && [ "$(docker inspect -f '{{.HostConfig.PublishAllPorts}}' "$ISO-render")" = false ] \
+    || render_blocked "render server publishes ports: $(docker port "$ISO-render" | tr '\n' ' ')"
   res_snapshot "render server up ($ISO-render, 127.0.0.1:${RPORT} inside its own network namespace)"
   echo "render server up: $ISO-render"
 }
