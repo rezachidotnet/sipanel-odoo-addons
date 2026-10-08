@@ -135,6 +135,12 @@ container_setup() {  # worktree of the commit under test + image + mounts; the c
       | sudo xargs -0 sha256sum | sha256sum | cut -c1-16)" >> "$EVID/deps_modules.txt"
   done
   sudo test -d /opt/odoo/data/addons && MOUNTS+=(-v /opt/odoo/data/addons:/var/lib/odoo/addons:ro)
+  # Production's user-site Python packages (pip --user inside odoo-sipanel, e.g. jdatetime for sale_shamsi_report):
+  # not in the image, so a clone container without them cannot load the registry (run 20261008T080307Z)
+  if sudo test -d /opt/odoo/data/.local; then
+    MOUNTS+=(-v /opt/odoo/data/.local:/var/lib/odoo/.local:ro)
+    sudo find /opt/odoo/data/.local -maxdepth 4 -name '*.dist-info' -printf 'user-site %f\n' | sort >> "$EVID/deps_modules.txt"
+  fi
   sudo test -d "$FS_ROOT/$CLONE" && MOUNTS+=(-v "$FS_ROOT/$CLONE:/var/lib/odoo/filestore/$CLONE")
   return 0
 }
@@ -148,7 +154,12 @@ odoo_clone() {  # odoo -c ... --addons-path BRANCH -d CLONE --no-http --stop-aft
   iso_run step "$IMAGE_ID" odoo -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http \
     --stop-after-init "$@"
 }
-render_blocked() { echo "RENDER_BLOCKED: $1" >&2; res_snapshot "render blocked: $1"; exit 15; }
+render_blocked() {
+  echo "RENDER_BLOCKED: $1" >&2
+  docker logs "$ISO-render" > "$LOGDIR/qlines-render-server-blocked-${TS}.log" 2>&1 || true
+  docker logs --tail 15 "$ISO-render" 2>&1 | grep -E "CRITICAL|ERROR|Error" >&2 || true
+  res_snapshot "render blocked: $1"; exit 15
+}
 render_server_start() {
   local i code=
   docker ps -aq --filter "name=^/$ISO-render\$" | xargs -r docker rm -f >/dev/null
