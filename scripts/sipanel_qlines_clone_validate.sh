@@ -3,7 +3,9 @@
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
-#   rehearsal (after evidence): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
+#   prodsim (after evidence; in all): P1 = the Production steps P7 v3, P8 M4 + way A (dry run, then commit) and P9
+#            post-checks with the Production scripts; replaces rehearsal in all (2026-10-08)
+#   rehearsal (not in all): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
 #   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
 #   CLONE=<db name>   reuse/choose the clone (default sipanel_qlines_clone_<UTC timestamp>, printed on start)
 #   COMMIT=<sha>      commit under test (default: HEAD at clone creation; fixed per clone in code_commit.txt)
@@ -59,10 +61,10 @@ guard_evid() {  # prints the resolved evidence directory, or refuses
     || refuse "$r is not a quotation_lines_clone_* directory directly under $EVID_ROOT"
   printf '%s' "$r"
 }
-evid_delete() {  # $1 = file prefix (pre | post | rehearsal): regular files "<prefix>_*" directly in EVID only
+evid_delete() {  # $1 = file prefix (pre | post | rehearsal | prodsim | p9): regular files "<prefix>_*" directly in EVID only
   local r
   : "${1:?step name is empty}"
-  [[ "$1" =~ ^[a-z]+$ ]] || refuse "bad evidence prefix '$1'"
+  [[ "$1" =~ ^[a-z]+[0-9]*$ ]] || refuse "bad evidence prefix '$1'"
   r=$(guard_evid)
   find "$r" -maxdepth 1 -type f -name "${1}_*" -delete
 }
@@ -460,6 +462,77 @@ rehearsal() {  # supply-only rehearsal (2026-10-06): COMMITS on the clone - v3 r
     || { echo "REHEARSAL FAILED (rc=$rc, log $LOGDIR/qlines-rehearsal-${TS}.log, summary $EVID/rehearsal_summary.json)"; exit 14; }
   echo "REHEARSAL OK"
 }
+# P1 = Production rehearsal (owner decision 2026-10-08): P7 (v3), P8 (M4 + way A) and P9 (post-checks) with EXACTLY the
+# scripts and flags of the Production plan - dry run, then commit - only the database and the addons path differ.
+REF_EVID=${REF_EVID:-$EVID_ROOT/quotation_lines_clone_20261008T084437Z}   # PDFs of the reviewed way-A rehearsal
+prod_shell() {  # $1 = role, $2 = script in the worktree's scripts/, rest = docker -e options; output -> $EVID/prodsim_<role>.log
+  local role=$1 script=$2 rc; shift 2
+  set +e
+  iso_run "$role" "$@" "$IMAGE_ID" odoo shell -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http \
+    < "$WT/scripts/$script" > "$EVID/prodsim_${role}.log" 2>&1
+  rc=$?; set -e
+  wait_quiet "$role"
+  return $rc
+}
+json_line() {  # $1 = prefix, $2 = log, $3 = python expression on d -> exit 0 when true
+  python3 - "$1" "$2" "$3" <<'PY2'
+import json, sys
+prefix, log, expr = sys.argv[1:4]
+lines = [l[len(prefix) + 1:] for l in open(log, encoding='utf-8') if l.startswith(prefix + ' {')]
+d = json.loads(lines[-1]) if lines else {}
+sys.exit(0 if lines and eval(expr, {}, {'d': d}) else 1)
+PY2
+}
+prodsim() {
+  local out rc f lang
+  assert_exclusive prodsim
+  container_setup
+  evid_delete prodsim; evid_delete p9
+  OWN_STEP=1
+  # P7: Standing Seam v3 (with the fa_IR labels) - dry run, then commit
+  prod_shell p7dry sipanel_standing_seam_v3.py || true
+  json_line SIPANEL_V3 "$EVID/prodsim_p7dry.log" "d.get('result') == 'RELEASED' and not d.get('unexpected_release_warnings')" \
+    && grep -q '^SIPANEL_V3 ROLLED_BACK' "$EVID/prodsim_p7dry.log" || { echo "PRODSIM P7 dry run FAILED ($EVID/prodsim_p7dry.log)"; exit 17; }
+  echo "P7 dry run OK (RELEASED, only accepted warnings, ROLLED_BACK)"
+  prod_shell p7commit sipanel_standing_seam_v3.py -e SIPANEL_V3_COMMIT=1 || true
+  grep -q '^SIPANEL_V3 COMMITTED' "$EVID/prodsim_p7commit.log" || { echo "PRODSIM P7 commit FAILED ($EVID/prodsim_p7commit.log)"; exit 17; }
+  echo "P7 COMMITTED"
+  # P8: M4 + way A on SI-26/2546 - dry run, then commit
+  prod_shell p8dry sipanel_si26_2546_way_a.py || true
+  json_line SIPANEL_WAY_A "$EVID/prodsim_p8dry.log" "d.get('all_ok') is True" \
+    && grep -q '^SIPANEL_WAY_A ROLLED_BACK$' "$EVID/prodsim_p8dry.log" || { echo "PRODSIM P8 dry run FAILED ($EVID/prodsim_p8dry.log)"; exit 18; }
+  echo "P8 dry run OK (all checks, ROLLED_BACK)"
+  prod_shell p8commit sipanel_si26_2546_way_a.py -e SIPANEL_WAY_A_COMMIT=1 || true
+  grep -q '^SIPANEL_WAY_A COMMITTED' "$EVID/prodsim_p8commit.log" || { echo "PRODSIM P8 commit FAILED ($EVID/prodsim_p8commit.log)"; exit 18; }
+  echo "P8 COMMITTED"
+  # idempotency: a second P8 dry run changes nothing and still passes
+  prod_shell p8again sipanel_si26_2546_way_a.py || true
+  json_line SIPANEL_WAY_A "$EVID/prodsim_p8again.log" "d.get('all_ok') is True" || { echo "PRODSIM P8 re-run FAILED"; exit 18; }
+  # P9: read-only post-checks + PDFs through the render server
+  new_outdir
+  render_server_start
+  set +e; out=$(render_shell sipanel_qlines_p9_check.py 2>&1); rc=$?; set -e
+  render_server_stop
+  echo "$out" > "$EVID/prodsim_p9.log"
+  wait_quiet p9; OWN_STEP=0
+  collect_out
+  for f in "$EVID"/p9_*.pdf; do
+    [ -e "$f" ] || continue
+    pdftotext -layout "$f" "${f%.pdf}.txt"; pdftoppm -r 60 -png "$f" "${f%.pdf}"
+    echo "$(basename "$f") pages=$(pdfinfo "$f" | awk '/^Pages/{print $2}')"
+  done
+  echo "$out" | grep '^SIPANEL_P9' || true
+  grep -hE " (ERROR|CRITICAL) |Traceback" "$EVID"/prodsim_*.log > "$EVID/prodsim_log_errors.txt" || true
+  echo "log ERROR/CRITICAL/Traceback lines in P7-P9: $(grep -c . "$EVID/prodsim_log_errors.txt" || true)"
+  # the comparison P9 makes on Production: same rows, totals and words as the reviewed rehearsal PDFs
+  for lang in fa_IR en_US; do
+    [ -f "$REF_EVID/rehearsal_A_SI-26-2546_${lang}.pdf" ] || continue
+    python3 "$WT/scripts/qlines_pdf_diff.py" "$REF_EVID/rehearsal_A_SI-26-2546_${lang}.pdf" "$EVID/p9_SI-26-2546_${lang}.pdf" --identical || true
+  done | tee "$EVID/p9_vs_reviewed_rehearsal.txt" | grep VERDICT || true
+  echo "$out" | grep -q '^SIPANEL_P9 {"all_ok": true' && [ "$rc" -eq 0 ] && [ ! -s "$EVID/prodsim_log_errors.txt" ] \
+    || { echo "PRODSIM P9 FAILED (summary $EVID/p9_summary.json, errors $EVID/prodsim_log_errors.txt)"; exit 19; }
+  echo "PRODSIM OK"
+}
 proof() {  # which code produced the evidence (commit, image, installed module versions, PDF content markers)
   container_setup
   python3 - "$EVID" "$WT" "$IMAGE_ID" "$(docker inspect -f '{{.Image}}' "$APPC")" \
@@ -538,7 +611,7 @@ evidence() {
   grep -q "VERDICT FAIL" SI-26-2546_verdicts.txt && { echo "EVIDENCE FAILED (see SI-26-2546_verdicts.txt)"; exit 12; }
   echo "EVIDENCE OK"
 }
-if [[ "$MODE" =~ ^(all|clone|pre|install|test|post|rehearsal|proof)$ ]]; then
+if [[ "$MODE" =~ ^(all|clone|pre|install|test|post|rehearsal|prodsim|proof)$ ]]; then
   res_snapshot "before $MODE"
   res_monitor $$ &
   MON_PID=$!
@@ -552,7 +625,8 @@ case "$MODE" in
   evidence) evidence ;;
   rehearsal) rehearsal ;;
   proof)    proof ;;
-  all)      clone; render pre; install; run_tests; render post; (evidence); rehearsal; proof ;;
+  all)      clone; render pre; install; run_tests; render post; (evidence); prodsim; proof ;;
+  prodsim)  prodsim ;;
   drop)     # DESTRUCTIVE, clone only; the clone must be named explicitly
             [ -n "$CLONE_GIVEN" ] || { echo "set CLONE=sipanel_qlines_clone_..."; exit 2; }
             drop_clone ;;

@@ -204,7 +204,9 @@ if PHASE == 'post':
                   and Version.search_count([]) == n_versions, gate2)
             # then with the owner-approved wording: three new versions, the released ones preserved
             summary['standing_seam_v3'] = v3 = v3ns['create_standing_seam_v3'](env, approved)
-            check('v3_no_release_warnings', all(not v3['scopes'].get(c, {}).get('release_warnings')
+            # owner 2026-10-08: the only accepted warning is R2 for ru_RU (active language, not needed)
+            check('v3_no_release_warnings', all(not v3['scopes'].get(c, {}).get('unexpected_release_warnings')
+                                                and 'unexpected_release_warnings' in v3['scopes'].get(c, {})
                                                 for c in v3ns['SCOPE_CODES']),
                   {c: v3['scopes'].get(c, {}).get('release_warnings') for c in v3ns['SCOPE_CODES']})
             check('v3_released_all_three', v3.get('result') == 'RELEASED'
@@ -218,6 +220,9 @@ if PHASE == 'post':
                       {k: r.get(k) for k in ('previous_version', 'new_version', 'previous_state_after',
                                              'previous_checksum_unchanged', 'previous_checksum_verified_after')})
                 check(f'v3_{code}_wording', r.get('description_after') == approved[code], r.get('description_after'))
+                check(f'v3_{code}_label_fa', (r.get('label_after') or {}).get('fa_IR') == v3ns['APPROVED_LABELS'][code]['fa_IR']
+                      and (r.get('label_after') or {}).get('en_US') == (r.get('label_before') or {}).get('en_US'),
+                      [r.get('label_before'), r.get('label_after')])
                 check(f'v3_{code}_recipe', len(nv.recipe_line_ids) == r.get('previous_lines') - (1 if code == 'CS-STANDING-SEAM' else 0)
                       and not nv.recipe_line_ids.filtered(lambda l: l.product_id == install),
                       [r.get('previous_lines'), len(nv.recipe_line_ids), r.get('removed_lines')])

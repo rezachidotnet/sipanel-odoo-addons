@@ -55,6 +55,20 @@ APPROVED_WORDING = {
         'fa_IR': 'تأمین سیستم ناودان (فقط تأمین).',
     },
 }
+# Persian customer labels (owner decision 2026-10-08, release rule R2: the released labels were en_US only, so a
+# fa_IR quotation could not be sealed on these Scopes). The en_US label stays as it is. ru_RU is not needed
+# (owner); while ru_RU stays an active language, R2 keeps warning for it - the only warning accepted here.
+APPROVED_LABELS = {
+    'CS-STANDING-SEAM': {'fa_IR': 'سیستم پوشش سقف استندینگ سیم'},
+    'CS-STANDING-SEAM-FLASHING': {'fa_IR': 'فلاشینگ'},
+    'CS-STANDING-SEAM-GUTTER': {'fa_IR': 'آبرو'},
+}
+ACCEPTED_WARNING = 'Release warning [R2]: Customer label has no translation for: ru_RU.'
+
+
+def unexpected_warnings(warnings):
+    """Release warnings other than R2 for ru_RU alone (the owner's accepted case)."""
+    return [w for w in warnings if ACCEPTED_WARNING not in w]
 
 
 def _wording_rule():
@@ -86,7 +100,7 @@ def _plan(env, code, install):
     return scope, current, offending, desc, claims
 
 
-def _release_next(env, scope, current, offending, desc, terms):
+def _release_next(env, scope, current, offending, desc, terms, label_fa):
     prev_checksum = current.release_checksum
     report = {'scope': scope.code, 'previous_version': current.name, 'previous_version_id': current.id,
               'previous_checksum_verified_before': current.verify_release_checksum(),
@@ -106,7 +120,14 @@ def _release_next(env, scope, current, offending, desc, terms):
     draft.update_field_translations('customer_description', terms)
     report['description_before'] = desc
     report['description_after'] = _stored_terms(env, draft, 'customer_description')
-    changes = ["customer description replaced by the supply-only wording"]
+    label_before = _stored_terms(env, draft, 'customer_label')
+    assert label_before.get('en_US'), f'{scope.code}: the copied version has no en_US label'
+    # en_US passed with fa_IR (a lone fa_IR term would overwrite the source)
+    draft.update_field_translations('customer_label', {'en_US': label_before['en_US'], 'fa_IR': label_fa})
+    report['label_before'] = label_before
+    report['label_after'] = _stored_terms(env, draft, 'customer_label')
+    changes = ["customer description replaced by the supply-only wording",
+               f"customer label fa_IR set ({label_fa})"]
     if removed_codes:
         changes.insert(0, ', '.join(removed_codes)
                        + " removed from the recipe (installation no longer included in the anchor price)")
@@ -115,6 +136,7 @@ def _release_next(env, scope, current, offending, desc, terms):
         + ". Installation / Execution is quoted as a separate percentage line (sipanel_installation_pct)."))
     draft.action_release()
     report['release_warnings'] = [str(m.body) for m in draft.message_ids if 'Release warning' in str(m.body)]
+    report['unexpected_release_warnings'] = unexpected_warnings(report['release_warnings'])
     current.invalidate_recordset()
     report.update({
         'result': 'RELEASED', 'new_version': draft.name, 'new_version_id': draft.id, 'new_lines': len(draft.recipe_line_ids),
@@ -130,10 +152,12 @@ def _release_next(env, scope, current, offending, desc, terms):
     return report
 
 
-def create_standing_seam_v3(env, wording=None):
-    """wording: {scope code: {'en_US': ..., 'fa_IR': ...}}. Missing wording for a scope that needs a new
-    version blocks the whole run (nothing created)."""
+def create_standing_seam_v3(env, wording=None, labels=None):
+    """wording: {scope code: {'en_US': ..., 'fa_IR': ...}}; labels: {scope code: {'fa_IR': ...}} (default
+    APPROVED_LABELS). Missing wording or fa_IR label for a scope that needs a new version blocks the whole run
+    (nothing created)."""
     wording = wording or {}
+    labels = APPROVED_LABELS if labels is None else labels
     install = env['product.product'].with_context(active_test=False).search([('default_code', '=', INSTALL_CODE)])
     assert len(install) == 1, f'{INSTALL_CODE}: {len(install)} products'
     plans, result, missing = [], {'scopes': {}}, []
@@ -143,27 +167,33 @@ def create_standing_seam_v3(env, wording=None):
             result['scopes'][code] = {'result': 'ALREADY_CORRECTED', 'current_version': current.name}
             continue
         terms = {lang: (wording.get(code, {}).get(lang) or '').strip() for lang in ('en_US', 'fa_IR')}
-        if not all(terms.values()) or any(_wording_rule().search(t) for t in terms.values()):
+        label_fa = (labels.get(code, {}).get('fa_IR') or '').strip()
+        if not all(terms.values()) or any(_wording_rule().search(t) for t in terms.values()) \
+                or not label_fa or _wording_rule().search(label_fa):
             missing.append(code)
             result['scopes'][code] = {'result': 'BLOCKED_CUSTOMER_DESCRIPTION', 'current_version': current.name,
                                       'description_claims_installation_included': claims,
                                       'installation_lines_in_recipe': offending.mapped('sequence')}
-        plans.append((scope, current, offending, desc, terms))
+        plans.append((scope, current, offending, desc, terms, label_fa))
     if missing:
         result['result'] = 'BLOCKED_CUSTOMER_DESCRIPTION'
-        result['action'] = ('Supply the approved customer description (en_US and fa_IR) for: '
+        result['action'] = ('Supply the approved customer description (en_US and fa_IR) and fa_IR label for: '
                             + ', '.join(missing) + '; nothing was created.')
         return result
-    for scope, current, offending, desc, terms in plans:
-        result['scopes'][scope.code] = _release_next(env, scope, current, offending, desc, terms)
+    for scope, current, offending, desc, terms, label_fa in plans:
+        result['scopes'][scope.code] = _release_next(env, scope, current, offending, desc, terms, label_fa)
     result['result'] = 'RELEASED' if plans else 'ALREADY_CORRECTED'
+    result['unexpected_release_warnings'] = {c: r['unexpected_release_warnings'] for c, r in result['scopes'].items()
+                                             if r.get('unexpected_release_warnings')}
     return result
 
 
 if 'env' in globals() and not globals().get('SIPANEL_V3_LIBRARY'):
     result = create_standing_seam_v3(env, APPROVED_WORDING)
     print('SIPANEL_V3 ' + json.dumps(result, ensure_ascii=False, default=str))
-    if os.environ.get('SIPANEL_V3_COMMIT') == '1' and result['result'] == 'RELEASED':
+    # commits only a complete release whose warnings are at most the accepted R2 for ru_RU
+    if os.environ.get('SIPANEL_V3_COMMIT') == '1' and result['result'] == 'RELEASED' \
+            and not result['unexpected_release_warnings']:
         env.cr.commit()
         print('SIPANEL_V3 COMMITTED')
     else:

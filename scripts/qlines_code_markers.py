@@ -27,14 +27,14 @@ MARKERS = [
     ('post_synthetic_en_US_install40.pdf', '(supply only)', 'v3 supply-only wording on the Scope anchor'),
     ('post_synthetic_fa_IR_install40.pdf', 'فقط تأمین', 'v3 supply-only wording (fa_IR)'),
     ('post_synthetic_fa_IR_install40.pdf', 'نصب و اجرا', 'installation section (fa_IR)'),
-    ('rehearsal_A_*_en_US.pdf', 'Rials only', 'way A: amount in words'),
-    ('rehearsal_A_*_fa_IR.pdf', 'نصب و اجرا', 'way A: installation section (fa_IR)'),
-    ('rehearsal_A_*_en_US.pdf', '30,087,618,000', 'way A: total incl. VAT'),
-    ('rehearsal_A_*_fa_IR.pdf', '30,087,618,000', 'way A: total incl. VAT (fa_IR)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Rials only', 'P9 way A: amount in words'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'نصب و اجرا', 'P9 way A: installation section (fa_IR)'),
+    ('p9_SI-26-2546_en_US.pdf', '30,087,618,000', 'P9 way A: total incl. VAT'),
+    ('p9_SI-26-2546_fa_IR.pdf', '30,087,618,000', 'P9 way A: total incl. VAT (fa_IR)'),
 ]
 # old wording that must NOT appear where the new model is printed
 ABSENT = [
-    ('rehearsal_A_*_en_US.pdf', 'IRRial', 'old unit label gone (way A)'),
+    ('p9_SI-26-2546_en_US.pdf', 'IRRial', 'old unit label gone (way A)'),
     ('post_SI-26-2546_en_US.pdf', 'IRRial', 'old unit label gone'),
 ]
 
@@ -44,20 +44,20 @@ def text_of(path):
 
 
 def installation_rows(evid):
-    """Way A: the printed installation row (quantity + unit) in both languages. The unit name must be the
-    Units record's name in that language (from rehearsal_summary.json); the quantity format is reported as is."""
+    """P9 (SI-26/2546 after way A): the printed installation row (quantity + unit) in both languages. The unit name must be the
+    Units record's name in that language (from p9_summary.json); the quantity format is reported as is."""
     import json
     import re
     try:
-        names = json.load(open(os.path.join(evid, 'rehearsal_summary.json')))['A']['unit_name']
+        names = json.load(open(os.path.join(evid, 'p9_summary.json')))['unit_name']
     except (OSError, KeyError, ValueError) as exc:
-        print(f'FAIL installation row: no unit names in rehearsal_summary.json ({exc})')
+        print(f'FAIL installation row: no unit names in p9_summary.json ({exc})')
         return False
     ok = True
     # the line text is stored in the customer's language when it is created (SI-26/2546: fa_IR), so the row is
     # found by its amount + tax column, not by its label; the section row has the amount but no tax
     for lang in ('en_US', 'fa_IR'):
-        files = sorted(glob.glob(os.path.join(evid, f'rehearsal_A_*_{lang}.pdf')))
+        files = sorted(glob.glob(os.path.join(evid, f'p9_SI-26-2546_{lang}.pdf')))
         if not files:
             print(f'FAIL installation row {lang}: no PDF')
             ok = False
