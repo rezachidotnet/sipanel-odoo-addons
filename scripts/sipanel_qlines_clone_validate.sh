@@ -3,7 +3,7 @@
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
-#   prodsim (after evidence; in all): P1 = the Production steps P7 v3, P8 M4 + way A (dry run, then commit) and P9
+#   prodsim (after evidence; in all): P1 = the Production steps P6b commercial data, P7 v3, P8 M4 + way A (dry run, then commit) and P9
 #            post-checks with the Production scripts; replaces rehearsal in all (2026-10-08)
 #   rehearsal (not in all): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
 #   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
@@ -491,6 +491,18 @@ prodsim() {
   container_setup
   evid_delete prodsim; evid_delete p9
   OWN_STEP=1
+  # P6b: commercial data (requirements 2026-10-08 items 6-12, decisions 2026-10-09) - dry run, commit, idempotent re-run;
+  # before P7 so that ru_RU is archived when v3 is released
+  prod_shell p6bdry sipanel_quotation_terms_data.py || true
+  json_line SIPANEL_TERMS "$EVID/prodsim_p6bdry.log" "d.get('all_ok') is True" \
+    && grep -q '^SIPANEL_TERMS ROLLED_BACK$' "$EVID/prodsim_p6bdry.log" || { echo "PRODSIM P6b dry run FAILED ($EVID/prodsim_p6bdry.log)"; exit 20; }
+  echo "P6b dry run OK (all checks, ROLLED_BACK)"
+  prod_shell p6bcommit sipanel_quotation_terms_data.py -e SIPANEL_TERMS_COMMIT=1 || true
+  grep -q '^SIPANEL_TERMS COMMITTED' "$EVID/prodsim_p6bcommit.log" || { echo "PRODSIM P6b commit FAILED ($EVID/prodsim_p6bcommit.log)"; exit 20; }
+  echo "P6b COMMITTED"
+  prod_shell p6bagain sipanel_quotation_terms_data.py || true
+  json_line SIPANEL_TERMS "$EVID/prodsim_p6bagain.log" "d.get('all_ok') is True and not d.get('changed')" \
+    || { echo "PRODSIM P6b re-run FAILED (not idempotent)"; exit 20; }
   # P7: Standing Seam v3 (with the fa_IR labels) - dry run, then commit
   prod_shell p7dry sipanel_standing_seam_v3.py || true
   json_line SIPANEL_V3 "$EVID/prodsim_p7dry.log" "d.get('result') == 'RELEASED' and not d.get('unexpected_release_warnings')" \
@@ -526,11 +538,12 @@ prodsim() {
   echo "$out" | grep '^SIPANEL_P9' || true
   grep -hE " (ERROR|CRITICAL) |Traceback" "$EVID"/prodsim_*.log > "$EVID/prodsim_log_errors.txt" || true
   echo "log ERROR/CRITICAL/Traceback lines in P7-P9: $(grep -c . "$EVID/prodsim_log_errors.txt" || true)"
-  # the comparison P9 makes on Production: same rows, totals and words as the reviewed rehearsal PDFs
+  # INFO only since 2026-10-08: the reviewed rehearsal PDFs predate the commercial terms and data (P6b), so these
+  # verdicts are expected to FAIL; P9's own checks and the PDF markers are the gate
   for lang in fa_IR en_US; do
     [ -f "$REF_EVID/rehearsal_A_SI-26-2546_${lang}.pdf" ] || continue
     python3 "$WT/scripts/qlines_pdf_diff.py" "$REF_EVID/rehearsal_A_SI-26-2546_${lang}.pdf" "$EVID/p9_SI-26-2546_${lang}.pdf" --identical || true
-  done | tee "$EVID/p9_vs_reviewed_rehearsal.txt" | grep VERDICT || true
+  done | tee "$EVID/p9_vs_reviewed_rehearsal.txt" | grep VERDICT | sed 's/^/INFO /' || true
   echo "$out" | grep -q '^SIPANEL_P9 {"all_ok": true' && [ "$rc" -eq 0 ] && [ ! -s "$EVID/prodsim_log_errors.txt" ] \
     || { echo "PRODSIM P9 FAILED (summary $EVID/p9_summary.json, errors $EVID/prodsim_log_errors.txt)"; exit 19; }
   echo "PRODSIM OK"
@@ -591,7 +604,7 @@ run_tests() {
   echo "TEST OK (only the known pre-existing failure, if any)"
 }
 evidence() {
-  local d=$WT/scripts/qlines_pdf_diff.py en fa f lang words
+  local d=$WT/scripts/qlines_pdf_diff.py f lang
   cd "$EVID"
   for f in pre_summary.json post_summary.json; do
     python3 -c "import json,sys; sys.exit(0 if json.load(open('$f'))['all_ok'] else 1)" \
@@ -599,14 +612,13 @@ evidence() {
   done
   for f in *.pdf; do pdftotext -layout "$f" "${f%.pdf}.txt"; pdftoppm -r 60 -png "$f" "${f%.pdf}"; \
     echo "$f pages=$(pdfinfo "$f" | awk '/^Pages/{print $2}')"; done
-  en=$(python3 -c "import json; print(json.load(open('post_summary.json'))['si26_2546_words_en'])")
-  fa='مبلغ کل به حروف: بیست و هفت میلیارد و سیصد و پنجاه و دو میلیون و سیصد و هشتاد هزار ریال'
   for lang in fa_IR en_US; do
     diff <(pdftotext -layout "pre_SI-26-2546_${lang}.pdf" -) <(pdftotext -layout "post_SI-26-2546_${lang}.pdf" -) \
       > "SI-26-2546_${lang}_pre_post.diff" || true
-    [ "$lang" = fa_IR ] && words=$fa || words="Amount in words: $en"
-    # module installed: only the amount-in-words line may appear
-    python3 "$d" "pre_SI-26-2546_${lang}.pdf" "post_SI-26-2546_${lang}.pdf" --words-line "$words" || true
+    # pre -> post (module installed): since the requirements of 2026-10-08 the module changes more than the
+    # amount-in-words line (no internal codes, payment terms + delivery time in the terms, "Sales Department"),
+    # so there is no single-insertion verdict any more; the raw diff above is kept for review and the content
+    # is checked by the PDF markers (proof step, scripts/qlines_code_markers.py)
     # Standing Seam v3 released: SI-26/2546 (old wording, no installation line) must not change at all
     python3 "$d" "post_SI-26-2546_${lang}.pdf" "post_SI-26-2546_after_v3_${lang}.pdf" --identical || true
   done | tee SI-26-2546_verdicts.txt

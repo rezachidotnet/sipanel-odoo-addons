@@ -2,9 +2,11 @@
 """Quotation lines (work order 2026-10-05): technical description (A), Installation / Execution line (B,
 B1-B4), amount in words (C). Every record is synthetic (SIPANEL-PT-QLINES prefix) and rolled back."""
 import uuid
+from datetime import timedelta
 
 from lxml import etree, html as lxml_html
 
+from odoo import fields
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests import Form, tagged
 
@@ -625,3 +627,149 @@ class TestQuotationLines(SipanelCoreCase):
                 self.assertNotIn(irr.with_context(lang='en_US').currency_unit_label, words.replace('Rials only', ''))
             else:
                 self.assertTrue(words.endswith('هزار ریال'), words)
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_quotation_lines')
+class TestQuotationCommercialTerms(SipanelCoreCase):
+    """Requirements 2026-10-08, items 1-5: internal codes are not printed; payment terms, delivery time, the optional
+    bank account and the validity gate printing / sending a quotation. Synthetic records only, rolled back."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        env = cls.env
+        # the shared fixture gives every new order a payment term and a delivery time (for the other modules'
+        # tests); this class tests the requirement itself, so it starts from Odoo's own defaults
+        env['ir.default'].search([('field_id.model', '=', 'sale.order'),
+                                  ('field_id.name', 'in', ('payment_term_id', 'sipanel_delivery_days'))]).unlink()
+        env['res.lang']._activate_lang('fa_IR')
+        Partner = env['res.partner']
+        cls.cust_en = Partner.create({'name': f'{PT} Terms EN', 'lang': 'en_US'})
+        cls.cust_fa = Partner.create({'name': f'{PT} Terms FA', 'lang': 'fa_IR'})
+        cls.term = env['account.payment.term'].create({
+            'name': f'{PT} 70/30', 'note': f'<p>{PT} seventy now, thirty before loading</p>'})
+        set_translation(cls.term, 'name', en=f'{PT} 70/30', fa=f'{PT} ۷۰ پیش، ۳۰ قبل از بارگیری')
+        cls.product = env['product.product'].create({
+            'name': f'{PT} Coded roof', 'default_code': 'PT-QL-0074', 'type': 'service', 'list_price': 10.0})
+        cls.bank = env['res.partner.bank'].create({'acc_number': 'PT-QL-IR000111222333', 'partner_id': env.company.partner_id.id,
+                                                   'bank_id': env['res.bank'].create({'name': f'{PT} Bank'}).id})
+        cls.foreign_bank = env['res.partner.bank'].create({'acc_number': 'PT-QL-IR999', 'partner_id': cls.cust_en.id})
+
+    def _order(self, partner=None, ready=True, **vals):
+        if ready:
+            vals = dict({'payment_term_id': self.term.id, 'sipanel_delivery_days': 45}, **vals)
+        order = self.env['sale.order'].create(dict({'partner_id': (partner or self.cust_en).id, 'origin': PT}, **vals))
+        self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.product.id, 'product_uom_qty': 2.0})
+        return order
+
+    def _html(self, order):
+        return self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0].decode()
+
+    def _text(self, order):
+        return ' '.join(lxml_html.fromstring(self._html(order)).text_content().split())
+
+    def _assert_blocked(self, order, *needles):
+        for call in (lambda: self.env['ir.actions.report']._render_qweb_pdf('sale.action_report_saleorder', order.ids),
+                     lambda: self.env['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', order.ids),
+                     order.action_quotation_send, order.action_quotation_sent, order.action_preview_sale_order):
+            with self.assertRaises(UserError) as err:
+                call()
+            self.assertIn(f'پیش‌فاکتور {order.name} قابل چاپ یا ارسال نیست', str(err.exception))
+            for needle in needles:
+                self.assertIn(needle, str(err.exception))
+        self.assertEqual(order.state, 'draft', 'nothing was sent')
+
+    # ------------------------------------------------------------------ item 1
+    def test_01_internal_code_is_not_printed(self):
+        for partner in (self.cust_en, self.cust_fa):
+            order = self._order(partner)
+            line = order.order_line
+            self.assertTrue(line.name.startswith('[PT-QL-0074] '), 'the stored description keeps the native prefix')
+            doc = lxml_html.fromstring(self._html(order))
+            title = doc.xpath("//span[contains(@class,'o_sipanel_line_title')]")
+            self.assertEqual(len(title), 1)
+            self.assertEqual(title[0].text_content().strip(), f'{PT} Coded roof')
+            self.assertNotIn('PT-QL-0074', self._text(order))
+            self.assertEqual(self.product.default_code, 'PT-QL-0074', 'product data unchanged')
+        self.assertEqual(line._sipanel_report_name_lines(), [f'{PT} Coded roof'])
+        line.name = 'Free text [kept]\n[second line kept]'
+        self.assertEqual(line._sipanel_report_name_lines(), ['Free text [kept]', '[second line kept]'],
+                         'only a leading code on the first line is left out')
+
+    # ------------------------------------------------------------------ items 2-5: gate
+    def test_02_no_new_defaults(self):
+        order = self.env['sale.order'].create({'partner_id': self.cust_en.id})
+        self.assertFalse(order.payment_term_id, 'no payment term default (the customer has none)')
+        self.assertEqual(order.sipanel_delivery_days, 0)
+        self.assertFalse(order.sipanel_show_bank_account)
+        self.assertFalse(order.sipanel_bank_account_id)
+        days = order.company_id.quotation_validity_days
+        self.assertEqual(order.validity_date, fields.Date.context_today(order) + timedelta(days) if days else False,
+                         'native default quotation validity')
+        self.assertFalse(order.commitment_date, 'no delivery date default')
+
+    def test_03_payment_term_and_delivery_time_required(self):
+        order = self._order(ready=False)
+        self._assert_blocked(order, '«شرایط پرداخت» انتخاب نشده است',
+                             '«زمان تحویل (روز کاری پس از دریافت پیش‌پرداخت)» وارد نشده است')
+        order.payment_term_id = self.term
+        self._assert_blocked(order, 'زمان تحویل')
+        order.sipanel_delivery_days = 45
+        order._sipanel_check_customer_document()
+        order.action_quotation_sent()
+        self.assertEqual(order.state, 'sent')
+        with self.assertRaises(ValidationError):
+            order.sipanel_delivery_days = -1
+
+    def test_04_bank_account_only_when_ticked(self):
+        order = self._order()
+        self.assertNotIn('PT-QL-IR000111222333', self._text(order))
+        order.sipanel_show_bank_account = True
+        self._assert_blocked(order, 'شماره حساب شرکت انتخاب نشده است')
+        with self.assertRaises(ValidationError):
+            order.sipanel_bank_account_id = self.foreign_bank
+        order.sipanel_bank_account_id = self.bank
+        order._sipanel_check_customer_document()
+        text = self._text(order)
+        self.assertIn(f'Bank account for the down payment: PT-QL-IR000111222333 - {PT} Bank', text)
+        order.sipanel_show_bank_account = False
+        self.assertNotIn('PT-QL-IR000111222333', self._text(order), 'kept on the order, not printed')
+
+    def test_05_expired_validity_blocks_and_nothing_moves(self):
+        order = self._order()
+        past = fields.Date.context_today(order) - timedelta(days=3)
+        order.validity_date = past
+        self.assertTrue(order.is_expired)
+        self._assert_blocked(order, 'لطفاً تاریخ پیش‌فاکتور و تاریخ اعتبار را به‌روز کنید')
+        self.assertEqual(order.validity_date, past, 'the validity is never moved silently')
+        order.validity_date = fields.Date.context_today(order)
+        order._sipanel_check_customer_document()
+        order.validity_date = False
+        order._sipanel_check_customer_document()
+
+    def test_06_confirmed_orders_are_not_gated(self):
+        order = self._order()
+        order.action_confirm()
+        order.write({'payment_term_id': False, 'sipanel_delivery_days': 0,
+                     'validity_date': fields.Date.context_today(order) - timedelta(days=3)})
+        order._sipanel_check_customer_document()
+        self.assertIn(order.name, self._text(order))
+
+    # ------------------------------------------------------------------ items 2-4: printed terms
+    def test_07_terms_section(self):
+        order = self._order(note='<p>Terms text line</p>')
+        text = self._text(order)
+        self.assertIn(f'Terms text line Payment terms: {PT} 70/30 {PT} seventy now, thirty before loading '
+                      'Delivery time: 45 working days after receipt of the down payment', text)
+        self.assertIn('Sales Department', text)
+        self.assertNotIn('Sell Department', text)
+        self.assertNotIn('Delivery Date', text, 'no commitment date, no Delivery Date column')
+        order.commitment_date = fields.Datetime.now()
+        self.assertIn('Delivery Date', self._text(order), 'printed only when filled (native)')
+        fa = self._order(self.cust_fa)
+        text = self._text(fa)
+        self.assertIn(f'شرایط پرداخت: {PT} ۷۰ پیش، ۳۰ قبل از بارگیری', text)
+        self.assertIn('زمان تحویل: 45 روز کاری پس از دریافت پیش‌پرداخت', text)
+        self.assertIn('دپارتمان فروش', text)
+        fa.write({'sipanel_show_bank_account': True, 'sipanel_bank_account_id': self.bank.id})
+        self.assertIn(f'شماره حساب جهت واریز پیش‌پرداخت: PT-QL-IR000111222333 - {PT} Bank', self._text(fa))

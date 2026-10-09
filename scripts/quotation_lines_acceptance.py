@@ -3,7 +3,8 @@
 Run: docker exec -i -e PHASE=pre|post -e OUT=/tmp/qlines odoo-sipanel odoo shell -c /etc/odoo/odoo.conf -d <clone> --no-http < this
 
 PHASE=pre : SI-26/2546 as restored (module not installed): totals + fa_IR / en_US PDFs.
-PHASE=post: (module installed) SI-26/2546 unchanged; product / System inventory; then, inside ONE rolled-back
+PHASE=post: (module installed) SI-26/2546 unchanged (rendered with the payment term / delivery time / validity the
+            print gate needs, inside the rolled-back transaction - function printable); product / System inventory; then, inside ONE rolled-back
             savepoint: old-version refusal (B3), the Standing Seam v3 customer-text gate (no / partial wording refused)
             and release of all three scopes (scripts/sipanel_standing_seam_v3.py, owner wording),
             the synthetic copy of SI-26/2546 on the NEW scope version at 40 % and 10 %, crane exclusion, recompute,
@@ -17,6 +18,7 @@ import traceback
 
 from lxml import html as lxml_html
 
+from odoo import fields
 from odoo.exceptions import UserError
 
 PHASE = os.environ.get('PHASE', 'post')
@@ -37,7 +39,25 @@ def norm(s):
     return ' '.join((s or '').split())
 
 
+def printable(order):
+    """Requirements 2026-10-08: with the module installed a quotation prints only with a payment term, a delivery time
+    and a validity that has not passed. Inside this script's rolled-back transactions only, the order gets what is
+    missing (never committed; Production's SI-26/2546 is completed by scripts/sipanel_quotation_terms_data.py)."""
+    if 'sipanel_delivery_days' not in order._fields:
+        return
+    vals = {}
+    if not order.payment_term_id:
+        vals['payment_term_id'] = env.ref('account.account_payment_term_immediate').id
+    if order.sipanel_delivery_days <= 0:
+        vals['sipanel_delivery_days'] = 30
+    if order.is_expired:
+        vals['validity_date'] = fields.Date.context_today(order)
+    if vals:
+        order.write(vals)
+
+
 def render(order, tag, lang=None):
+    printable(order)
     if lang:
         order.partner_id.lang = lang
     pdf, _ = Report._render_qweb_pdf('sale.report_saleorder', order.ids)
@@ -181,6 +201,7 @@ if PHASE == 'post':
             old_revs = old.sipanel_quote_scope_ids.mapped('current_revision_id')
             old_rev_desc = [(r.customer_description_fa, r.customer_description_en, r.customer_description_resolved)
                             for r in old_revs]
+            printable(ref)                    # the same values the renders below give it (rolled back)
             si26_text = {lang: html_text(ref, lang) for lang in ('fa_IR', 'en_US')}
             ref.partner_id.lang = ref_lang
             # ---------------- Standing Seam v3 (the corrected commercial model, all three scopes)

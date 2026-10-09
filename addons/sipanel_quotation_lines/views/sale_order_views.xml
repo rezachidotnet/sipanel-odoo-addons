@@ -5,6 +5,19 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
+            <!-- Items 2-4 (2026-10-08): required before the quotation is printed or sent (sale_order_terms.py). The
+                 native placeholder "Immediate" (an empty term) is replaced: an empty term now blocks printing. -->
+            <xpath expr="//group[@name='order_details']//field[@name='payment_term_id']" position="attributes">
+                <attribute name="placeholder">الزامی برای چاپ و ارسال پیش‌فاکتور</attribute>
+            </xpath>
+            <xpath expr="//group[@name='order_details']//field[@name='payment_term_id']" position="after">
+                <field name="sipanel_delivery_days" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_company_partner_id" invisible="1"/>
+                <field name="sipanel_show_bank_account" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_bank_account_id" invisible="not sipanel_show_bank_account"
+                       required="sipanel_show_bank_account" readonly="state not in ['draft', 'sent']"
+                       options="{'no_create': True}"/>
+            </xpath>
             <xpath expr="//group[@name='sipanel_project_info']/group[1]" position="inside">
                 <field name="sipanel_installation_pct" readonly="state not in ['draft', 'sent']"/>
                 <field name="sipanel_installation_amount" invisible="not sipanel_installation_pct"/>

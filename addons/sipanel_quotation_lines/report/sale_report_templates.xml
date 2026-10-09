@@ -4,9 +4,11 @@
         <!-- A: the first line of the line description is the item title; the following lines (the native
              description_sale Odoo appends, or the Scope note body) are printed below it, smaller and muted,
              inside the same cell. Block elements inherit the document direction, so RTL and LTR both work;
-             the table frame / repeated header of sale_shamsi_report are untouched (same cell, same row). -->
+             the table frame / repeated header of sale_shamsi_report are untouched (same cell, same row).
+             Item 1 (2026-10-08): the "[internal reference] " prefix of a product line is not printed (report level
+             only; it also put the brackets the wrong way round in RTL). -->
         <xpath expr="//tr[@name='tr_product']/td[@name='td_product_name']/span[@t-field='line.name']" position="replace">
-            <t t-set="sipanel_name_lines" t-value="(line.name or '').split('\n')"/>
+            <t t-set="sipanel_name_lines" t-value="line._sipanel_report_name_lines()"/>
             <span class="o_sipanel_line_title" t-out="sipanel_name_lines[0]"/>
             <t t-set="sipanel_desc_lines" t-value="sipanel_name_lines[1:]"/>
             <div t-if="any(l.strip() for l in sipanel_desc_lines)" class="o_sipanel_line_desc text-muted"
@@ -24,6 +26,32 @@
                     <span class="o_sipanel_amount_in_words_text" t-out="doc._sipanel_amount_total_in_words()"/>
                 </div>
             </div>
+        </xpath>
+        <!-- Items 2-4 (2026-10-08): the terms section prints, after the terms text (doc.note), the payment terms
+             (name + note, replacing the native note-only paragraph), the delivery time and, when ticked, the
+             company bank account. The quotation cannot be printed without the first two (sale_order_terms.py). -->
+        <xpath expr="//p[span[@t-field='doc.payment_term_id.note']]" position="replace">
+            <div t-if="doc.payment_term_id" class="o_sipanel_payment_term" name="sipanel_payment_term" style="margin-top: 6px;">
+                <strong>Payment terms:</strong>
+                <span class="o_sipanel_payment_term_name" t-out="doc.payment_term_id.name"/>
+                <div t-if="not is_html_empty(doc.payment_term_id.note)" t-field="doc.payment_term_id.note"/>
+            </div>
+            <div t-if="doc.sipanel_delivery_days" class="o_sipanel_delivery_time" name="sipanel_delivery_time" style="margin-top: 6px;">
+                <strong>Delivery time:</strong>
+                <span class="o_sipanel_delivery_days" t-out="doc.sipanel_delivery_days"/>
+                <span>working days after receipt of the down payment</span>
+            </div>
+            <div t-if="doc.sipanel_show_bank_account and doc.sipanel_bank_account_id" class="o_sipanel_bank_account"
+                 name="sipanel_bank_account" style="margin-top: 6px;">
+                <t t-set="sipanel_bank" t-value="doc.sipanel_bank_account_id.sudo()"/>
+                <strong>Bank account for the down payment:</strong>
+                <span class="o_sipanel_bank_acc_number" t-out="sipanel_bank.acc_number"/>
+                <t t-if="sipanel_bank.bank_id.name"> - <span t-out="sipanel_bank.bank_id.name"/></t>
+            </div>
+        </xpath>
+        <!-- Item 10 (2026-10-08): the signature caption of sale_shamsi_report says "Sell Department" -->
+        <xpath expr="//span[hasclass('signature_title')]" position="replace">
+            <span class="signature_title">Sales Department</span>
         </xpath>
     </template>
 </odoo>

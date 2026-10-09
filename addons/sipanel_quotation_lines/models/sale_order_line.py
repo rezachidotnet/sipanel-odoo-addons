@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """sale.order.line side of the installation engine: the marker, the recompute triggers and the
 protection of the system-managed lines (work order 2026-10-05, B)."""
+import re
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
 from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard
 
 from .sale_order import INSTALL_GUARD, OPEN_STATES
+
+# Odoo prefixes a product line's description with "[internal reference] "; the customer printout leaves it out.
+INTERNAL_CODE_PREFIX = re.compile(r'^\s*\[[^\]\n]*\]\s*')
 
 # A change of any of these on an ordinary line can change the installation base or the position of the
 # installation block (it must stay last).
@@ -26,6 +31,16 @@ class SaleOrderLine(models.Model):
         string='Installation line', readonly=True, copy=False, index=True,
         help="System-managed Installation / Execution line (and its section). Never part of the "
              "installation base, never a Scope component, never in Scope costing.")
+
+    def _sipanel_report_name_lines(self):
+        """The description as printed on the customer quotation (requirements 2026-10-08, item 1): its lines,
+        the first one without the "[internal reference] " prefix Odoo puts in front of a product line's name.
+        Report level only - the stored description and the product are not changed."""
+        self.ensure_one()
+        lines = (self.name or '').split('\n')
+        if self.product_id and not self.display_type:
+            lines[0] = INTERNAL_CODE_PREFIX.sub('', lines[0], count=1)
+        return lines
 
     @api.model
     def _sipanel_value_differs(self, record, field_name, value):

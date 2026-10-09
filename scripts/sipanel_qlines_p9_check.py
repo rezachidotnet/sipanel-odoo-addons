@@ -7,9 +7,9 @@ Same script on the P1 clone and on Production (owner decision 2026-10-08):
 Writes p9_SI-26-2546_{fa_IR,en_US}.pdf and p9_summary.json to OUT; prints "SIPANEL_P9 {...}".
 
 Checks: module installed; Standing Seam v3 (three new versions released, previous superseded with intact checksum,
-supply-only description, fa_IR label, no installation work, release warnings at most R2 for ru_RU); master data
+supply-only description, fa_IR label, no installation work, no release warnings - ru_RU archived by P6b); master data
 (SIP-000075 in Units, installation base flags, System mapping); SI-26/2546 after way A (quotation, totals, the
-installation line, supply lines, amount in words); the quotation form as the Sales user uid 10 (installation line
+installation line, supply lines, amount in words); the commercial terms and data of P6b; the quotation form as the Sales user uid 10 (installation line
 readonly); the two PDFs. Rendering switches the partner language inside this transaction (rolled back).
 """
 import json
@@ -31,7 +31,16 @@ EXPECTED = {  # scope code: (new version name, previous version name, fa_IR labe
                                 {'en_US': 'Supply of gutter system (supply only).',
                                  'fa_IR': 'تأمین سیستم ناودان (فقط تأمین).'}),
 }
-ACCEPTED_WARNING = 'Release warning [R2]: Customer label has no translation for: ru_RU.'
+# P6b archives ru_RU before P7, so v3 is released without the R2 "no ru_RU label" warning (requirements 2026-10-08)
+TERMS = {'payment_term_en': '70% in advance, 30% before delivery.', 'delivery_days': 45, 'validity_days': 8,
+         'incoterm': 'EXW', 'site': 'طالقان', 'contact_prefix': 'جناب آقای ', 'vat_fa': 'مالیات بر ارزش افزوده',
+         'meter_fa': 'متر طول', 'tagline_fa': 'طراحی، تأمین و نصب انواع سامانه‌های پوشش سالن‌های صنعتی',
+         'terms_lines': ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
+                         'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
+                         'مقادیر نهایی بر اساس متره اجرایی و صورت‌وضعیت محاسبه می‌شود.'),
+         'lines': {'SIP-000074': 'سیستم پوشش سقف استندینگ سیم (فقط تأمین)',
+                   'SIP-000076': 'فلاشینگ و فیلر بلوک هم‌جنس ورق رویه (فقط تأمین)',
+                   'SIP-000077': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)'}}
 R = {'db': env.cr.dbname, 'checks': {}}
 su = env(su=True)
 
@@ -74,7 +83,7 @@ try:
         check(f'{code}_description', {k: description.get(k) for k in desc} == desc, description)
         check(f'{code}_no_installation_work',
               not cur.recipe_line_ids.filtered(lambda l: l.responsibility == 'sipanel' and l.product_id in work))
-        check(f'{code}_release_warnings_only_ru_RU_label', all(ACCEPTED_WARNING in w for w in warnings), warnings)
+        check(f'{code}_no_release_warnings', not warnings, warnings)
 
     # ---- master data
     unit = su.ref('uom.product_uom_unit')
@@ -116,6 +125,52 @@ try:
                                                               'Eighteen Thousand Rials only', R['si26_2546']['words_en'])
     check('si26_2546_words_fa', R['si26_2546']['words_fa'] == 'سی میلیارد و هشتاد و هفت میلیون و ششصد و هجده هزار ریال',
           R['si26_2546']['words_fa'])
+
+    # ---- commercial terms and data (P6b, requirements 2026-10-08 items 2-12)
+    import datetime
+    import pytz
+    tehran = pytz.timezone('Asia/Tehran')
+    order_day = ref.date_order.replace(tzinfo=pytz.utc).astimezone(tehran).date()
+    company = ref.company_id
+    texts = {
+        'note': ' '.join(str(ref.note or '').replace('&nbsp;', ' ').split()),
+        'company_terms': ' '.join((stored(company, 'invoice_terms').get('en_US') or '').split()),
+        'header_fa': stored(company, 'report_header').get('fa_IR'),
+        'lines': [(l.display_type or l.product_id.default_code, l.name) for l in ordered]}
+    R['si26_2546_terms'] = dict(texts, payment_term=ref.payment_term_id.with_context(lang='en_US').name,
+                                delivery_days=ref.sipanel_delivery_days, bank=ref.sipanel_show_bank_account,
+                                incoterm=ref.incoterm.code, date_order=str(ref.date_order),
+                                validity=str(ref.validity_date), commitment=str(ref.commitment_date),
+                                site=ref.partner_shipping_id.display_name, contact=ref.partner_id.name,
+                                problems=ref._sipanel_customer_document_problems())
+    check('si26_2546_printable', ref._sipanel_customer_document_problems() == [],
+          ref._sipanel_customer_document_problems())
+    check('si26_2546_payment_term', ref.payment_term_id.with_context(lang='en_US').name == TERMS['payment_term_en'])
+    check('si26_2546_delivery_days', ref.sipanel_delivery_days == TERMS['delivery_days'])
+    check('si26_2546_no_bank_line', not ref.sipanel_show_bank_account)
+    check('si26_2546_incoterm_exw', ref.incoterm.code == TERMS['incoterm'], ref.incoterm.code)
+    check('si26_2546_dates', ref.validity_date == order_day + datetime.timedelta(days=TERMS['validity_days'])
+          and not ref.is_expired and not ref.commitment_date, [str(ref.date_order), str(ref.validity_date)])
+    check('si26_2546_project_site', ref._sipanel_page1_project_site().name == TERMS['site'],
+          ref.partner_shipping_id.display_name)
+    check('si26_2546_contact', ref.partner_id.name.startswith(TERMS['contact_prefix']), ref.partner_id.name)
+    check('si26_2546_note', all(t in texts['note'] for t in TERMS['terms_lines']) and '...' not in texts['note'],
+          texts['note'])
+    check('company_default_terms', all(t in texts['company_terms'] for t in TERMS['terms_lines'])
+          and '...' not in texts['company_terms'], texts['company_terms'])
+    check('company_tagline_fa', TERMS['tagline_fa'] in (texts['header_fa'] or ''), texts['header_fa'])
+    names = {l.product_id.default_code: l.name for l in supply}
+    check('si26_2546_line_descriptions', names == TERMS['lines'] and 'ARCZIP' not in str(texts['lines']), names)
+    notes = [(l.display_type, l.name) for l in ordered if l.display_type and not l.sipanel_is_installation_line]
+    check('si26_2546_sections_notes', notes == [('line_section', 'Standing Seam Roof System'),
+                                                ('line_section', 'متعلقات'),
+                                                ('line_note', 'شامل: متعلقات استاندارد سیستم')], notes)
+    vat = su['account.tax.group'].search([]).filtered(lambda g: stored(g, 'name').get('en_US') == 'VAT')
+    check('vat_group_fa', [stored(g, 'name').get('fa_IR') for g in vat] == [TERMS['vat_fa']],
+          [stored(g, 'name') for g in vat])
+    check('meter_fa', stored(su.ref('uom.product_uom_meter'), 'name').get('fa_IR') == TERMS['meter_fa'])
+    ru = su['res.lang'].with_context(active_test=False).search([('code', '=', 'ru_RU')])
+    check('ru_RU_archived', len(ru) == 1 and not ru.active)
 
     # ---- the quotation form as the Sales user (no sudo)
     user = su['res.users'].browse(SALES_UID).exists()

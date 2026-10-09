@@ -2,8 +2,9 @@
 {
     'name': 'SIPANEL Quotation Lines',
     'summary': 'Quotation lines: technical description under the item title, Installation / Execution '
-               'percentage line, amount in words under the totals',
-    'version': '19.0.1.0.0',
+               'percentage line, amount in words under the totals; commercial terms (payment terms, delivery '
+               'time, bank account, validity) required before a quotation is printed or sent',
+    'version': '19.0.1.1.0',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
     'license': 'LGPL-3',

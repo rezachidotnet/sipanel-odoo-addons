@@ -31,11 +31,38 @@ MARKERS = [
     ('p9_SI-26-2546_fa_IR.pdf', 'نصب و اجرا', 'P9 way A: installation section (fa_IR)'),
     ('p9_SI-26-2546_en_US.pdf', '30,087,618,000', 'P9 way A: total incl. VAT'),
     ('p9_SI-26-2546_fa_IR.pdf', '30,087,618,000', 'P9 way A: total incl. VAT (fa_IR)'),
+    # requirements 2026-10-08 (code: items 1-4, 10; data P6b: items 6-12)
+    # (Persian markers without digits / trailing punctuation: RTL extraction may move them)
+    ('p9_SI-26-2546_fa_IR.pdf', 'شرایط پرداخت', 'payment terms in the terms section'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'زمان تحویل', 'delivery time label'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'روز کاری پس از دریافت پیش‌پرداخت', 'delivery time text'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است', 'new terms text'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'سیستم پوشش سقف استندینگ سیم', 'Persian line description'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'متعلقات', 'Persian section'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'متر طول', 'meter fa_IR name'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'طالقان', 'project site'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'EXW', 'incoterm'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'جناب آقای', 'contact name typo fixed'),
+    ('p9_SI-26-2546_en_US.pdf', 'Payment terms:', 'payment terms (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Delivery time: 45 working days after receipt of the down payment', 'delivery time (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Sales Department', 'signature caption'),
 ]
 # old wording that must NOT appear where the new model is printed
 ABSENT = [
     ('p9_SI-26-2546_en_US.pdf', 'IRRial', 'old unit label gone (way A)'),
     ('post_SI-26-2546_en_US.pdf', 'IRRial', 'old unit label gone'),
+    ('post_SI-26-2546_en_US.pdf', 'SIP-000074', 'internal code not printed (item 1)'),
+    ('post_SI-26-2546_fa_IR.pdf', 'SIP-000074', 'internal code not printed (item 1, fa_IR)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'SIP-0000', 'internal codes not printed'),
+    ('p9_SI-26-2546_en_US.pdf', 'SIP-0000', 'internal codes not printed (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Sell Department', 'old signature caption'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'ساندویچ پانل تولید شرکت', 'placeholder terms line'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'ARCZIP', 'no brand name'),
+    ('p9_SI-26-2546_en_US.pdf', 'Excluded:', 'the Excluded note is removed'),
+    ('p9_SI-26-2546_en_US.pdf', 'Accessories', 'the section is Persian'),
+    ('p9_SI-26-2546_en_US.pdf', 'Delivery Date', 'no native delivery date (commitment_date cleared)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'DAP', 'old incoterm'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'جناب اقای', 'contact name typo'),
 ]
 
 

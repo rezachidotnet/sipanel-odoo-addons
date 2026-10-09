@@ -132,3 +132,28 @@ msgstr "کار نصب و اجرا"
 #: model:ir.model.fields,help:sipanel_quotation_lines.field_product_template__sipanel_installation_work
 msgid "This product IS installation / execution work. A Scope whose anchor is in the installation base cannot be released with a SIPANEL component of this product, and a quotation carrying such a Scope refuses the Installation / Execution percentage (it would charge installation twice). The installation products mapped on SIPANEL Systems count as installation work automatically."
 msgstr "این محصول، کار نصب و اجراست. Scopeی که محصول اصلی آن در مبنای نصب و اجراست با سطر SIPANEL از این محصول منتشر نمی‌شود، و پیش‌فاکتوری که چنین Scopeی دارد درصد نصب و اجرا را نمی‌پذیرد (هزینه نصب دو بار دریافت می‌شد). محصولات نصبِ تعریف‌شده روی سیستم‌های SIPANEL خودبه‌خود کار نصب به شمار می‌آیند."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Payment terms:</strong>"
+msgstr "<strong>شرایط پرداخت:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Delivery time:</strong>"
+msgstr "<strong>زمان تحویل:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<span>working days after receipt of the down payment</span>"
+msgstr "<span>روز کاری پس از دریافت پیش‌پرداخت</span>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Bank account for the down payment:</strong>"
+msgstr "<strong>شماره حساب جهت واریز پیش‌پرداخت:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<span class=\"signature_title\">Sales Department</span>"
+msgstr "<span class=\"signature_title\">دپارتمان فروش</span>"
