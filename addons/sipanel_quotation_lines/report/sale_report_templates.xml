@@ -49,8 +49,12 @@
                 <t t-if="sipanel_bank.bank_id.name"> - <span t-out="sipanel_bank.bank_id.name"/></t>
             </div>
         </xpath>
-        <!-- Item 10 (2026-10-08): the signature caption of sale_shamsi_report says "Sell Department" -->
-        <xpath expr="//span[hasclass('signature_title')]" position="replace">
+        <!-- Item 10 (2026-10-08): the signature caption of sale_shamsi_report says "Sell Department". Located by its
+             position (first element of the signature block), not by its class: the fa_IR copy of that view's arch
+             (Odoo stores one arch per language) has the caption as <strong style=...>دپارتمان فروش</strong> without
+             the class, so a class xpath broke every fa_IR quotation render (P1 run 20261011T144037Z). The caption
+             here is translated by this module (fa_IR «دپارتمان فروش»), same text the fa_IR copy printed. -->
+        <xpath expr="//div[hasclass('o_sipanel_signature_block')]/div/*[1]" position="replace">
             <span class="signature_title">Sales Department</span>
         </xpath>
     </template>
