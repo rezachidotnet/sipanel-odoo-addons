@@ -67,14 +67,34 @@ def changed(what):
 
 
 def stored(record, field):
-    """Raw jsonb of a translated field (no language fallback)."""
+    """Raw jsonb of a translated field (no language fallback); pending ORM writes are flushed first."""
+    record.flush_recordset([field])
     env.cr.execute(f'SELECT "{field}" FROM "{record._table}" WHERE id = %s', (record.id,))
     return env.cr.fetchone()[0] or {}
 
 
 def set_terms(record, field, terms):
-    """All current languages are passed (Odoo 19: a lone fa_IR key would overwrite the en_US source)."""
-    record.update_field_translations(field, dict(stored(record, field), **terms))
+    """en_US is passed with the new terms (Odoo 19: a lone fa_IR key would overwrite the en_US source). Other stored
+    languages are not passed: Odoo merges them in unchanged, and refuses inactive ones (ru_RU, archived above)."""
+    record.update_field_translations(field, dict({'en_US': stored(record, field)['en_US']}, **terms))
+
+
+def set_raw_lang_value(record, field, lang, value):
+    """Replace one language's stored value of a term-translated Html field as is. report_header is
+    Html(translate=True) = term translation in Odoo 19, and its fa_IR value is a separate HTML (not a term-by-term
+    translation of en_US), so update_field_translations would rebuild it from the en_US structure; this only swaps
+    the text inside the fa_IR value (P1 run 20261011T154052Z)."""
+    env.cr.execute(f'UPDATE "{record._table}" SET "{field}" = jsonb_set("{field}", %s, to_jsonb(%s::text)) WHERE id = %s',
+                   ('{%s}' % lang, value, record.id))
+    record.invalidate_recordset([field])
+    record.modified([field])
+
+
+def terms_done(html):
+    """The approved terms text is in place: every line present, no placeholder left. Text based - Odoo sanitizes the
+    HTML on write, so the stored markup never equals TERMS_HTML byte for byte (P1 run 20261011T154052Z)."""
+    text = squash(html)
+    return all(line in text for line in TERMS_LINES) and not any(p in text for p in OLD_PLACEHOLDERS)
 
 
 def squash(html):
@@ -112,17 +132,17 @@ check('ru_RU_archived', len(ru) == 1 and not ru.active)
 # ---- item 6: company default terms + the note of SI-26/2546
 terms = stored(company, 'invoice_terms')
 src = terms.get('en_US') or ''
-check('company_terms_expected_before', squash(src) == squash(TERMS_HTML) or all(p in src for p in OLD_PLACEHOLDERS),
+check('company_terms_expected_before', terms_done(src) or all(p in src for p in OLD_PLACEHOLDERS),
       squash(src)[:300])
-if squash(src) != squash(TERMS_HTML) and all(p in src for p in OLD_PLACEHOLDERS):
+if not terms_done(src) and all(p in src for p in OLD_PLACEHOLDERS):
     company.with_context(lang='en_US').invoice_terms = TERMS_HTML
     changed('res.company invoice_terms (en_US source; no other language stored)')
-check('company_terms_new', squash(stored(company, 'invoice_terms').get('en_US')) == squash(TERMS_HTML)
-      and set(stored(company, 'invoice_terms')) == set(terms))
+check('company_terms_new', terms_done(stored(company, 'invoice_terms').get('en_US'))
+      and set(stored(company, 'invoice_terms')) == set(terms), stored(company, 'invoice_terms'))
 note = str(ref.note or '')
-check('si26_note_expected_before', squash(note) == squash(TERMS_HTML) or all(p in note for p in OLD_PLACEHOLDERS),
+check('si26_note_expected_before', terms_done(note) or all(p in note for p in OLD_PLACEHOLDERS),
       squash(note)[:300])
-if squash(note) != squash(TERMS_HTML) and all(p in note for p in OLD_PLACEHOLDERS):
+if not terms_done(note) and all(p in note for p in OLD_PLACEHOLDERS):
     ref.note = TERMS_HTML
     changed('SI-26/2546 note')
 R['other_orders_with_placeholder_note'] = env['sale.order'].search(
@@ -133,10 +153,11 @@ header = stored(company, 'report_header')
 fa = header.get('fa_IR') or ''
 check('tagline_expected_before', (TAGLINE_OLD in fa) != (TAGLINE_NEW in fa), fa)
 if TAGLINE_OLD in fa:
-    set_terms(company, 'report_header', {'fa_IR': fa.replace(TAGLINE_OLD, TAGLINE_NEW)})
+    set_raw_lang_value(company, 'report_header', 'fa_IR', fa.replace(TAGLINE_OLD, TAGLINE_NEW))
     changed('res.company report_header fa_IR tagline')
 after_header = stored(company, 'report_header')
-check('tagline_new', TAGLINE_NEW in after_header.get('fa_IR', '') and after_header.get('en_US') == header.get('en_US'))
+check('tagline_new', after_header.get('fa_IR') == fa.replace(TAGLINE_OLD, TAGLINE_NEW)
+      and after_header.get('en_US') == header.get('en_US') and set(after_header) == set(header), after_header)
 groups = env['account.tax.group'].with_context(active_test=False).search([])
 vat = groups.filtered(lambda g: stored(g, 'name').get('fa_IR') in (VAT_FA_OLD, VAT_FA_NEW))
 check('vat_group_found', len(vat) == 1 and stored(vat, 'name').get('en_US') == 'VAT', [(g.id, stored(g, 'name')) for g in vat])
@@ -201,7 +222,11 @@ Partner = env['res.partner'].with_context(active_test=False)
 site = Partner.search([('parent_id', '=', commercial.id), ('type', '=', 'delivery'), ('name', '=', SITE_NAME)])
 check('site_at_most_one', len(site) <= 1, site.ids)
 if not site:
-    site = Partner.create({'parent_id': commercial.id, 'type': 'delivery', 'name': SITE_NAME, 'lang': 'fa_IR'})
+    # the customer company's country (and state): the Domestic fiscal position auto-applies by country, an address
+    # without one matched "Foreign Trade" and the Page 1 guard refused the change (P1 run 20261011T154052Z)
+    site = Partner.create({'parent_id': commercial.id, 'type': 'delivery', 'name': SITE_NAME, 'lang': 'fa_IR',
+                           'city': SITE_NAME, 'country_id': commercial.country_id.id,
+                           'state_id': commercial.state_id.id})
     changed(f'res.partner {site.id} delivery address «{SITE_NAME}» under {commercial.name}')
 if len(site) == 1 and ref.partner_shipping_id != site:
     ref.partner_shipping_id = site           # refused by sipanel_quotation_project_info if it moved the taxes
