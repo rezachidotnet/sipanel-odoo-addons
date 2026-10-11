@@ -743,7 +743,7 @@ class TestQuotationCommercialTerms(SipanelCoreCase):
         self._assert_blocked(order, 'لطفاً تاریخ پیش‌فاکتور و تاریخ اعتبار را به‌روز کنید')
         self.assertEqual(order.validity_date, past, 'the validity is never moved silently')
         order.validity_date = fields.Date.context_today(order)
-        order._sipanel_check_customer_document()
+        order._sipanel_check_customer_document()        # not the cached native is_expired (no @api.depends)
         order.validity_date = False
         order._sipanel_check_customer_document()
 

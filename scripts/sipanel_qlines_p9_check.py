@@ -150,7 +150,7 @@ try:
     check('si26_2546_no_bank_line', not ref.sipanel_show_bank_account)
     check('si26_2546_incoterm_exw', ref.incoterm.code == TERMS['incoterm'], ref.incoterm.code)
     check('si26_2546_dates', ref.validity_date == order_day + datetime.timedelta(days=TERMS['validity_days'])
-          and not ref.is_expired and not ref.commitment_date, [str(ref.date_order), str(ref.validity_date)])
+          and not ref._sipanel_customer_document_problems() and not ref.commitment_date, [str(ref.date_order), str(ref.validity_date)])
     check('si26_2546_project_site', ref._sipanel_page1_project_site().name == TERMS['site'],
           ref.partner_shipping_id.display_name)
     check('si26_2546_contact', ref.partner_id.name.startswith(TERMS['contact_prefix']), ref.partner_id.name)

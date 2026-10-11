@@ -50,7 +50,7 @@ def printable(order):
         vals['payment_term_id'] = env.ref('account.account_payment_term_immediate').id
     if order.sipanel_delivery_days <= 0:
         vals['sipanel_delivery_days'] = 30
-    if order.is_expired:
+    if order.validity_date and order.validity_date < fields.Date.context_today(order):   # not the cached is_expired
         vals['validity_date'] = fields.Date.context_today(order)
     if vals:
         order.write(vals)

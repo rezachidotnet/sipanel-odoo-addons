@@ -4,7 +4,7 @@
 - Payment terms: the native payment_term_id, no default added here (Odoo's own partner default stays).
 - Delivery time: working days after receipt of the down payment, no default.
 - Bank account: an optional line with one of the company's own native bank accounts (res.partner.bank).
-- Validity: the native validity_date / is_expired and the native default quotation validity setting.
+- Validity: the native validity_date (rule of the native is_expired) and the native default quotation validity setting.
 
 A quotation (draft / sent) that misses one of them, or whose validity has passed, cannot be printed, sent by
 email, marked as sent or opened in the customer preview / portal. Nothing is filled in or moved silently: the
@@ -62,7 +62,10 @@ class SaleOrder(models.Model):
             problems.append("«زمان تحویل (روز کاری پس از دریافت پیش‌پرداخت)» وارد نشده است.")
         if self.sipanel_show_bank_account and not self.sipanel_bank_account_id:
             problems.append("«نمایش شماره حساب در پیش‌فاکتور» فعال است اما شماره حساب شرکت انتخاب نشده است.")
-        if self.is_expired:
+        # not the native is_expired: it has no @api.depends, so a value read earlier in the transaction stays cached
+        # after validity_date is updated (P1 run 20261011T151122Z refused an order whose validity had just been
+        # set to today). Same rule as native (validity_date before today), today in the user's timezone.
+        if self.validity_date and self.validity_date < fields.Date.context_today(self):
             date = self.validity_date_shamsi or fields.Date.to_string(self.validity_date)
             problems.append(f"اعتبار این پیش‌فاکتور در تاریخ {date} به پایان رسیده است. لطفاً تاریخ پیش‌فاکتور و "
                             "تاریخ اعتبار را به‌روز کنید.")
