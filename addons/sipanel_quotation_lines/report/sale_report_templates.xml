@@ -49,6 +49,11 @@
                 <t t-if="sipanel_bank.bank_id.name"> - <span t-out="sipanel_bank.bank_id.name"/></t>
             </div>
         </xpath>
+        <!-- Owner decision 2026-10-11: the Project Site of Page 1 (sipanel_quotation_project_info) is printed once:
+             its name, then only the address parts that add something (no city repeating the name, no own country). -->
+        <xpath expr="//td[hasclass('o_sipanel_page1_project_site')]//div[@t-field='doc.partner_shipping_id']" position="replace">
+            <div t-foreach="doc._sipanel_project_site_address_lines()" t-as="sipanel_site_line" t-out="sipanel_site_line"/>
+        </xpath>
         <!-- Item 10 (2026-10-08): the signature caption of sale_shamsi_report says "Sell Department". Located by its
              position (first element of the signature block), not by its class: the fa_IR copy of that view's arch
              (Odoo stores one arch per language) has the caption as <strong style=...>دپارتمان فروش</strong> without

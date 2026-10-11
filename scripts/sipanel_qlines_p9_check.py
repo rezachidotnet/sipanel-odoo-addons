@@ -162,13 +162,19 @@ try:
     names = {l.product_id.default_code: l.name for l in supply}
     check('si26_2546_line_descriptions', names == TERMS['lines'] and 'ARCZIP' not in str(texts['lines']), names)
     notes = [(l.display_type, l.name) for l in ordered if l.display_type and not l.sipanel_is_installation_line]
-    check('si26_2546_sections_notes', notes == [('line_section', 'Standing Seam Roof System'),
+    check('si26_2546_sections_notes', notes == [('line_section', 'سیستم پوشش سقف استندینگ سیم'),
                                                 ('line_section', 'متعلقات'),
                                                 ('line_note', 'شامل: متعلقات استاندارد سیستم')], notes)
     vat = su['account.tax.group'].search([]).filtered(lambda g: stored(g, 'name').get('en_US') == 'VAT')
     check('vat_group_fa', [stored(g, 'name').get('fa_IR') for g in vat] == [TERMS['vat_fa']],
           [stored(g, 'name') for g in vat])
     check('meter_fa', stored(su.ref('uom.product_uom_meter'), 'name').get('fa_IR') == TERMS['meter_fa'])
+    check('account_2316_fa_name', R['account_2316_name'] == {'en_US': 'Standing Seam', 'fa_IR': 'استندینگ سیم'},
+          R['account_2316_name'])
+    check('si26_2546_requested_system_fa', ref.sipanel_requested_system_name_snapshot == 'استندینگ سیم',
+          ref.sipanel_requested_system_name_snapshot)
+    check('si26_2546_project_site_printed_once', ref._sipanel_project_site_address_lines() == [],
+          ref._sipanel_project_site_address_lines())
     ru = su['res.lang'].with_context(active_test=False).search([('code', '=', 'ru_RU')])
     check('ru_RU_archived', len(ru) == 1 and not ru.active)
 

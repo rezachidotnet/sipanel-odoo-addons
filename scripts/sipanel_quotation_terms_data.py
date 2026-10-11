@@ -54,6 +54,8 @@ LINE_NAMES = {'SIP-000074': 'سیستم پوشش سقف استندینگ سیم 
               'SIP-000076': 'فلاشینگ و فیلر بلوک هم‌جنس ورق رویه (فقط تأمین)',
               'SIP-000077': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)'}
 SECTION_OLD, SECTION_NEW = 'Accessories', 'متعلقات'
+FIRST_SECTION_OLD, FIRST_SECTION_NEW = 'Standing Seam Roof System', 'سیستم پوشش سقف استندینگ سیم'   # owner 2026-10-11
+SYSTEM_EN, SYSTEM_FA = 'Standing Seam', 'استندینگ سیم'          # account 2316, owner 2026-10-11
 NOTE_OLD, NOTE_NEW = 'Included: Standard system components', 'شامل: متعلقات استاندارد سیستم'
 NOTE_REMOVED = 'Excluded:'
 
@@ -145,8 +147,28 @@ check('si26_note_expected_before', terms_done(note) or all(p in note for p in OL
 if not terms_done(note) and all(p in note for p in OLD_PLACEHOLDERS):
     ref.note = TERMS_HTML
     changed('SI-26/2546 note')
-R['other_orders_with_placeholder_note'] = env['sale.order'].search(
-    [('id', '!=', ref.id), ('note', 'ilike', OLD_PLACEHOLDERS[0])]).mapped(lambda o: (o.name, o.state))
+
+
+def never_sent(order):
+    """No e-mail, no message to a partner, no portal signature, still a draft (same rule as the rehearsal)."""
+    msgs = env['mail.message'].search([('model', '=', 'sale.order'), ('res_id', '=', order.id)])
+    comment = env.ref('mail.mt_comment')
+    return order.state == 'draft' and not order.signed_by and not msgs.filtered(
+        lambda m: m.message_type == 'email' or (m.subtype_id == comment and m.partner_ids))
+
+
+# owner decision 2026-10-11: other quotations with the placeholder copy - only drafts never sent get the new text;
+# sent / confirmed / cancelled ones stay as historical records
+others = env['sale.order'].search([('id', '!=', ref.id), ('note', 'ilike', OLD_PLACEHOLDERS[0])])
+R['other_orders_with_placeholder_note'] = sorted((o.name, o.state, never_sent(o)) for o in others)
+for order in others.filtered(never_sent):
+    if not terms_done(order.note) and all(p in str(order.note or '') for p in OLD_PLACEHOLDERS):
+        order.note = TERMS_HTML
+        changed(f'{order.name} note (draft, never sent)')
+check('other_drafts_terms', all(terms_done(o.note) for o in others.filtered(never_sent)),
+      [o.name for o in others.filtered(never_sent)])
+check('historical_orders_untouched', all(not terms_done(o.note) for o in others - others.filtered(never_sent)),
+      [(o.name, o.state) for o in others - others.filtered(never_sent)])
 
 # ---- item 10: header tagline (fa_IR), VAT tax group (fa_IR), contact name
 header = stored(company, 'report_header')
@@ -173,6 +195,19 @@ if contact.name.startswith(CONTACT_OLD):
     changed(f'res.partner {contact.id} name')
 check('contact_new', contact.name.startswith(CONTACT_NEW), contact.name)
 
+# ---- owner 2026-10-11: System account 2316 fa_IR name; SI-26/2546 prints its Requested System from a snapshot
+# taken in the quotation language when the System was set, so the snapshot is refreshed below
+system = env['account.analytic.account'].with_context(lang='en_US').search(
+    [('name', '=', SYSTEM_EN), ('plan_id', '=', env['sipanel.config'].resolve_system_plan().id)])
+sterms = stored(system, 'name') if len(system) == 1 else {}
+check('system_account_found', len(system) == 1 and sterms.get('en_US') == SYSTEM_EN
+      and sterms.get('fa_IR') in (None, SYSTEM_FA), [system.ids, sterms])
+if len(system) == 1 and sterms.get('fa_IR') is None:
+    set_terms(system, 'name', {'fa_IR': SYSTEM_FA})
+    changed(f'account.analytic.account {system.id} fa_IR name')
+check('system_account_fa', len(system) == 1 and stored(system, 'name').get('fa_IR') == SYSTEM_FA
+      and stored(system, 'name').get('en_US') == SYSTEM_EN, stored(system, 'name') if len(system) == 1 else None)
+
 # ---- item 9: meter fa_IR
 meter = env.ref('uom.product_uom_meter')
 mterms = stored(meter, 'name')
@@ -196,6 +231,11 @@ for code, name in LINE_NAMES.items():
         line.name = name
         changed(f'SI-26/2546 line {code} description')
     check(f'line_{code}_name', len(line) == 1 and line.name == name, line.mapped('name'))
+first = lines.filtered(lambda l: l.display_type == 'line_section' and l.name in (FIRST_SECTION_OLD, FIRST_SECTION_NEW))
+check('first_section_found', len(first) == 1, first.mapped('name'))
+if len(first) == 1 and first.name != FIRST_SECTION_NEW:
+    first.name = FIRST_SECTION_NEW
+    changed('SI-26/2546 section Standing Seam Roof System')
 section = lines.filtered(lambda l: l.display_type == 'line_section' and l.name in (SECTION_OLD, SECTION_NEW))
 check('section_found', len(section) == 1, section.mapped('name'))
 if len(section) == 1 and section.name != SECTION_NEW:
@@ -214,7 +254,7 @@ if len(excluded) == 1:
     changed('SI-26/2546 note Excluded removed')
 ref.invalidate_recordset()
 check('no_english_section_or_note_left', not ref.order_line.filtered(
-    lambda l: l.display_type in ('line_section', 'line_note') and (l.name or '') in (SECTION_OLD, NOTE_OLD)
+    lambda l: l.display_type in ('line_section', 'line_note') and (l.name or '') in (SECTION_OLD, NOTE_OLD, FIRST_SECTION_OLD)
     or (l.name or '').startswith(NOTE_REMOVED)))
 # Project Site: a delivery address of the customer company (sipanel_quotation_project_info prints it on page 1)
 commercial = ref.partner_id.commercial_partner_id
@@ -232,6 +272,13 @@ if len(site) == 1 and ref.partner_shipping_id != site:
     ref.partner_shipping_id = site           # refused by sipanel_quotation_project_info if it moved the taxes
     changed('SI-26/2546 project site')
 check('project_site', ref._sipanel_page1_project_site() == site and site.name == SITE_NAME, ref.partner_shipping_id.display_name)
+if ref.sipanel_requested_system_id == system and ref.sipanel_requested_system_name_snapshot != ref._sipanel_system_print_name():
+    R['system_snapshot_before'] = ref.sipanel_requested_system_name_snapshot
+    ref._sipanel_refresh_system_snapshot()
+    changed('SI-26/2546 Requested System snapshot (quotation language)')
+check('requested_system_snapshot', ref.sipanel_requested_system_id == system and (
+      ref.sipanel_requested_system_name_snapshot == (SYSTEM_FA if ref.partner_id.lang == 'fa_IR' else SYSTEM_EN)),
+      [ref.partner_id.lang, ref.sipanel_requested_system_name_snapshot])
 # commercial terms
 term = env['account.payment.term'].with_context(lang='en_US').search([('name', '=', PAYMENT_TERM_EN)])
 check('payment_term_found', len(term) == 1, term.ids)

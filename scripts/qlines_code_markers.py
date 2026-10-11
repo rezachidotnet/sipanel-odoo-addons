@@ -41,6 +41,7 @@ MARKERS = [
     ('p9_SI-26-2546_fa_IR.pdf', 'متعلقات', 'Persian section'),
     ('p9_SI-26-2546_fa_IR.pdf', 'متر طول', 'meter fa_IR name'),
     ('p9_SI-26-2546_fa_IR.pdf', 'طالقان', 'project site'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'استندینگ سیم', 'Requested System in Persian (account 2316 fa_IR)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'EXW', 'incoterm'),
     ('p9_SI-26-2546_fa_IR.pdf', 'جناب آقای', 'contact name typo fixed'),
     ('p9_SI-26-2546_en_US.pdf', 'Payment terms:', 'payment terms (en_US)'),
@@ -63,6 +64,7 @@ ABSENT = [
     ('p9_SI-26-2546_en_US.pdf', 'Delivery Date', 'no native delivery date (commitment_date cleared)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'DAP', 'old incoterm'),
     ('p9_SI-26-2546_fa_IR.pdf', 'جناب اقای', 'contact name typo'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'Standing Seam Roof System', 'first section is Persian (owner 2026-10-11)'),
 ]
 
 

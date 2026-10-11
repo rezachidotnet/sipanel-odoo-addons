@@ -49,6 +49,22 @@ class SaleOrder(models.Model):
                 raise ValidationError(
                     f"شماره حساب «{account.display_name}» متعلق به شرکت «{order.company_id.name}» نیست.")
 
+    def _sipanel_project_site_address_lines(self):
+        """Owner decision 2026-10-11: Page 1 prints the Project Site once. Below its name only the address parts that
+        add information: street, street2, zip + city unless the city repeats the site name, state, and the country
+        unless it is the company's own. A site «طالقان» in city «طالقان», Iran prints «طالقان» alone."""
+        self.ensure_one()
+        site = self._sipanel_page1_project_site()
+        if not site:
+            return []
+        name = ' '.join((site.name or '').split())
+        city = ' '.join((site.city or '').split())
+        lines = [site.street, site.street2,
+                 ' '.join(p for p in (site.zip, city if city != name else '') if p),
+                 site.state_id.name,
+                 site.country_id.name if site.country_id != self.company_id.country_id else False]
+        return [line for line in (' '.join((l or '').split()) for l in lines) if line]
+
     # ------------------------------------------------------------------ gate
     def _sipanel_customer_document_problems(self):
         """Persian list of what blocks printing / sending this quotation (empty = printable)."""

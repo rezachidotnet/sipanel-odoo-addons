@@ -773,3 +773,20 @@ class TestQuotationCommercialTerms(SipanelCoreCase):
         self.assertIn('دپارتمان فروش', text)
         fa.write({'sipanel_show_bank_account': True, 'sipanel_bank_account_id': self.bank.id})
         self.assertIn(f'شماره حساب جهت واریز پیش‌پرداخت: PT-QL-IR000111222333 - {PT} Bank', self._text(fa))
+
+    # ------------------------------------------------------------------ owner decision 2026-10-11: Project Site once
+    def test_08_project_site_printed_once(self):
+        company_country = self.env.company.country_id
+        site = self.env['res.partner'].create({'parent_id': self.cust_fa.id, 'type': 'delivery', 'name': 'طالقان',
+                                               'city': 'طالقان', 'country_id': company_country.id})
+        order = self._order(self.cust_fa, partner_shipping_id=site.id)
+        self.assertEqual(order._sipanel_project_site_address_lines(), [], 'city = name and own country add nothing')
+        cell = lxml_html.fromstring(self._html(order)).xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
+        self.assertEqual(len(cell), 1)
+        self.assertEqual(' '.join(cell[0].text_content().split()), 'طالقان')
+        site.write({'street': 'جاده اصلی، کیلومتر ۵', 'city': 'شهرک', 'zip': '12345'})
+        order.invalidate_recordset()
+        self.assertEqual(order._sipanel_project_site_address_lines(), ['جاده اصلی، کیلومتر ۵', '12345 شهرک'])
+        other = self.env['res.country'].search([('id', '!=', company_country.id)], limit=1)
+        site.country_id = other
+        self.assertEqual(order._sipanel_project_site_address_lines()[-1], other.name, 'a foreign country is printed')
