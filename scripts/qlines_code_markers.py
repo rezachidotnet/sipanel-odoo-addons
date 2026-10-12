@@ -42,7 +42,12 @@ MARKERS = [
     ('p9_SI-26-2546_fa_IR.pdf', 'متر طول', 'meter fa_IR name'),
     ('p9_SI-26-2546_fa_IR.pdf', 'طالقان', 'project site'),
     ('p9_SI-26-2546_fa_IR.pdf', 'استندینگ سیم', 'Requested System in Persian (account 2316 fa_IR)'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'EXW', 'incoterm'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'شهرستان طالقان', 'project site city (owner review 2026-10-12)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'باقیمانده قبل از بارگیری', 'payment term name (owner review 2026-10-12)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'طالقانی', 'Persian salesperson name (owner review 2026-10-12)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'www.sipanelco.com', 'footer website (owner review 2026-10-12)'),
+    ('p9_SI-26-2546_en_US.pdf', 'www.sipanelco.com', 'footer website (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Taleghani', 'salesperson user name (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'جناب آقای', 'contact name typo fixed'),
     ('p9_SI-26-2546_en_US.pdf', 'Payment terms:', 'payment terms (en_US)'),
     ('p9_SI-26-2546_en_US.pdf', 'Delivery time: 45 working days after receipt of the down payment', 'delivery time (en_US)'),
@@ -65,6 +70,14 @@ ABSENT = [
     ('p9_SI-26-2546_fa_IR.pdf', 'DAP', 'old incoterm'),
     ('p9_SI-26-2546_fa_IR.pdf', 'جناب اقای', 'contact name typo'),
     ('p9_SI-26-2546_fa_IR.pdf', 'Standing Seam Roof System', 'first section is Persian (owner 2026-10-11)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'EXW', 'Incoterm not printed (owner review 2026-10-12)'),
+    ('p9_SI-26-2546_en_US.pdf', 'EXW', 'Incoterm not printed (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Incoterm', 'Incoterm label not printed (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'جهت شروع تولید', 'payment term note not printed'),
+    ('p9_SI-26-2546_en_US.pdf', 'required to commence production', 'payment term note not printed (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'sipanelco.ir', 'old footer website'),
+    ('p9_SI-26-2546_en_US.pdf', 'sipanelco.ir', 'old footer website (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'Taleghani', 'fa_IR prints the Persian salesperson name'),
 ]
 
 

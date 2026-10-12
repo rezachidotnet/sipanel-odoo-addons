@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Production step P6b of the quotation-lines deployment: commercial data (owner requirements 2026-10-08, items 6-12;
-decisions 2026-10-09: payment term 70/30, 45 working days, no bank line, quotation date = run date, validity + 8 days).
+decisions 2026-10-09; owner decisions 2026-10-11 and owner review 2026-10-12: payment term «۷۰٪ پیش‌پرداخت، ۳۰٪
+باقیمانده قبل از بارگیری», 45 working days and validity run date + 8 days confirmed, no bank line, quotation date =
+run date).
 
 Runs after the install (P6: it needs the new delivery-time field) and BEFORE Standing Seam v3 (P7): with ru_RU
 archived first, v3 is released without the R2 "no ru_RU translation" warning.
@@ -11,10 +13,15 @@ archived first, v3 is released without the R2 "no ru_RU translation" warning.
            it was created) gets the same text. The quotation template "Standing Seam Roof System" has no note.
   item 10  company report header tagline (res.company.report_header, fa_IR); tax group "VAT" fa_IR name
            «مالیات بر ارزش افزوده»; contact of SI-26/2546 «جناب اقای ...» -> «جناب آقای ...».
+  2026-10-12 payment term (id 11 in Production, created there on 2026-03-03 by the salesperson user, not by a
+           SIPANEL script): fa_IR name exactly «۷۰٪ پیش‌پرداخت، ۳۰٪ باقیمانده قبل از بارگیری» (the report prints the
+           name only, not its note); company report footer website www.sipanelco.com (en_US and fa_IR); Persian
+           quotation name «طالقانی» of the salesperson user "Taleghani" (res.users.name unchanged).
   item 9   unit of measure meter (uom.product_uom_meter) fa_IR name «متر طول» (every record using it - intended).
   items 7, 8, 12 + decisions, on SI-26/2546 only: incoterm EXW; Persian line descriptions without the brand; section
            «متعلقات»; note «شامل: متعلقات استاندارد سیستم»; the "Excluded: ..." note removed; Project Site «طالقان»
-           (a delivery address of the customer company); payment term 70/30; delivery time 45 working days; the
+           (a delivery address of the customer company, city «شهرستان طالقان», Iran: printed «شهرستان طالقان - ایران»);
+           payment term 70/30; delivery time 45 working days; the
            stored "Delivery Date" (commitment_date 1405/08/13, typed on this order only - nothing defaults it) cleared;
            quotation date = run date, validity = run date + 8 days.
 
@@ -36,9 +43,14 @@ from odoo import fields
 R = {'db': env.cr.dbname, 'checks': {}, 'changed': []}
 env = env(su=True)
 TZ = pytz.timezone('Asia/Tehran')
-VALIDITY_DAYS = 8                                                     # owner decision 2026-10-09
-DELIVERY_DAYS = 45                                                    # owner decision 2026-10-09
-PAYMENT_TERM_EN = '70% in advance, 30% before delivery.'              # owner decision 2026-10-09 (id 11 today)
+VALIDITY_DAYS = 8                                                     # owner, confirmed 2026-10-12
+DELIVERY_DAYS = 45                                                    # owner, confirmed 2026-10-12
+PAYMENT_TERM_EN = '70% in advance, 30% before delivery.'              # id 11 in Production (en_US name unchanged)
+PAYMENT_TERM_FA_OLD = 'پیش پرداخت ۷۰٪ و قبل از بارگیری ۳۰٪باقیمانده'
+PAYMENT_TERM_FA = '۷۰٪ پیش‌پرداخت، ۳۰٪ باقیمانده قبل از بارگیری'      # owner review 2026-10-12, exactly
+WEBSITE_OLD = ('href="https://sipanelco.ir">www.sipanelco.ir<', )
+WEBSITE_NEW = 'href="https://www.sipanelco.com">www.sipanelco.com<'  # owner review 2026-10-12 (footer, fa + en)
+SALESPERSON_EN, SALESPERSON_FA = 'Taleghani', 'طالقانی'              # owner review 2026-10-12 (fa quotations)
 OLD_PLACEHOLDERS = ('ساندویچ پانل تولید شرکت', 'شماره حساب جهت واریز پیش پرداخت')
 TERMS_LINES = ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
                'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
@@ -50,6 +62,7 @@ VAT_FA_OLD, VAT_FA_NEW = 'مالیات برارزش افزوده', 'مالیات
 METER_FA = 'متر طول'
 CONTACT_OLD, CONTACT_NEW = 'جناب اقای ', 'جناب آقای '
 SITE_NAME = 'طالقان'
+SITE_CITY = 'شهرستان طالقان'                                           # owner review 2026-10-12, country Iran
 LINE_NAMES = {'SIP-000074': 'سیستم پوشش سقف استندینگ سیم (فقط تأمین)',
               'SIP-000076': 'فلاشینگ و فیلر بلوک هم‌جنس ورق رویه (فقط تأمین)',
               'SIP-000077': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)'}
@@ -180,6 +193,27 @@ if TAGLINE_OLD in fa:
 after_header = stored(company, 'report_header')
 check('tagline_new', after_header.get('fa_IR') == fa.replace(TAGLINE_OLD, TAGLINE_NEW)
       and after_header.get('en_US') == header.get('en_US') and set(after_header) == set(header), after_header)
+# ---- owner review 2026-10-12: footer website (report_footer is term-translated Html with a separate fa_IR value)
+footer = stored(company, 'report_footer')
+check('footer_website_expected_before', set(footer) == {'en_US', 'fa_IR'} and all(
+      (WEBSITE_OLD[0] in v) != (WEBSITE_NEW in v) for v in footer.values()), footer)
+for lang, value in footer.items():
+    if WEBSITE_OLD[0] in value:
+        set_raw_lang_value(company, 'report_footer', lang, value.replace(WEBSITE_OLD[0], WEBSITE_NEW))
+        changed(f'res.company report_footer {lang} website')
+after_footer = stored(company, 'report_footer')
+check('footer_website_new', set(after_footer) == set(footer) and all(
+      after_footer[k] == v.replace(WEBSITE_OLD[0], WEBSITE_NEW) for k, v in footer.items())
+      and all('sipanelco.ir' not in v for v in after_footer.values()), after_footer)
+# ---- owner review 2026-10-12: salesperson Persian name on fa_IR quotations (report only)
+seller = ref.user_id
+check('salesperson_expected', seller.name == SALESPERSON_EN
+      and seller.sipanel_quotation_name_fa in (False, SALESPERSON_FA), [seller.id, seller.name])
+if seller.name == SALESPERSON_EN and not seller.sipanel_quotation_name_fa:
+    seller.sipanel_quotation_name_fa = SALESPERSON_FA
+    changed(f'res.users {seller.id} Persian quotation name')
+check('salesperson_fa', seller.sipanel_quotation_name_fa == SALESPERSON_FA and seller.name == SALESPERSON_EN
+      and seller.partner_id.name == SALESPERSON_EN, [seller.name, seller.sipanel_quotation_name_fa])
 groups = env['account.tax.group'].with_context(active_test=False).search([])
 vat = groups.filtered(lambda g: stored(g, 'name').get('fa_IR') in (VAT_FA_OLD, VAT_FA_NEW))
 check('vat_group_found', len(vat) == 1 and stored(vat, 'name').get('en_US') == 'VAT', [(g.id, stored(g, 'name')) for g in vat])
@@ -265,13 +299,20 @@ if not site:
     # the customer company's country (and state): the Domestic fiscal position auto-applies by country, an address
     # without one matched "Foreign Trade" and the Page 1 guard refused the change (P1 run 20261011T154052Z)
     site = Partner.create({'parent_id': commercial.id, 'type': 'delivery', 'name': SITE_NAME, 'lang': 'fa_IR',
-                           'city': SITE_NAME, 'country_id': commercial.country_id.id,
+                           'city': SITE_CITY, 'country_id': commercial.country_id.id,
                            'state_id': commercial.state_id.id})
     changed(f'res.partner {site.id} delivery address «{SITE_NAME}» under {commercial.name}')
+check('site_country_iran', commercial.country_id == env.ref('base.ir') and site.country_id == env.ref('base.ir'),
+      [commercial.country_id.code, site.country_id.code])
+if len(site) == 1 and site.city != SITE_CITY:
+    site.city = SITE_CITY                     # the address of a P1 clone created before 2026-10-12 had city «طالقان»
+    changed(f'res.partner {site.id} city «{SITE_CITY}»')
 if len(site) == 1 and ref.partner_shipping_id != site:
     ref.partner_shipping_id = site           # refused by sipanel_quotation_project_info if it moved the taxes
     changed('SI-26/2546 project site')
 check('project_site', ref._sipanel_page1_project_site() == site and site.name == SITE_NAME, ref.partner_shipping_id.display_name)
+check('project_site_line', ref.with_context(lang='fa_IR')._sipanel_project_site_line() == 'شهرستان طالقان - ایران',
+      ref.with_context(lang='fa_IR')._sipanel_project_site_line())
 if ref.sipanel_requested_system_id == system and ref.sipanel_requested_system_name_snapshot != ref._sipanel_system_print_name():
     R['system_snapshot_before'] = ref.sipanel_requested_system_name_snapshot
     ref._sipanel_refresh_system_snapshot()
@@ -282,6 +323,16 @@ check('requested_system_snapshot', ref.sipanel_requested_system_id == system and
 # commercial terms
 term = env['account.payment.term'].with_context(lang='en_US').search([('name', '=', PAYMENT_TERM_EN)])
 check('payment_term_found', len(term) == 1, term.ids)
+pterms = stored(term, 'name') if len(term) == 1 else {}
+R['payment_term_record'] = {'id': term.id, 'create_date': str(term.create_date), 'create_uid': term.create_uid.id,
+                            'name': pterms, 'orders': sorted(env['sale.order'].search(
+                                [('payment_term_id', '=', term.id)]).mapped(lambda o: (o.name, o.state)))}
+check('payment_term_expected_before', pterms.get('fa_IR') in (PAYMENT_TERM_FA_OLD, PAYMENT_TERM_FA), pterms)
+if pterms.get('fa_IR') == PAYMENT_TERM_FA_OLD:
+    set_terms(term, 'name', {'fa_IR': PAYMENT_TERM_FA})
+    changed(f'account.payment.term {term.id} fa_IR name')
+check('payment_term_fa', len(term) == 1 and stored(term, 'name') == dict(pterms, fa_IR=PAYMENT_TERM_FA),
+      stored(term, 'name') if len(term) == 1 else None)
 if len(term) == 1 and ref.payment_term_id != term:
     ref.payment_term_id = term
     changed('SI-26/2546 payment term')

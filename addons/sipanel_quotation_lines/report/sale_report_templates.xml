@@ -27,40 +27,77 @@
                 </div>
             </div>
         </xpath>
-        <!-- Items 2-4 (2026-10-08): the terms section prints, after the terms text (doc.note), the payment terms
-             (name + note, replacing the native note-only paragraph), the delivery time and, when ticked, the
-             company bank account. The quotation cannot be printed without the first two (sale_order_terms.py). -->
+        <!-- Items 2-4 (2026-10-08), owner review 2026-10-12: after the terms text (doc.note) the payment terms print
+             ONE text, the payment term name (its separate note is not printed), then the delivery time and, when
+             ticked, the company bank account. The quotation cannot be printed without the first two
+             (sale_order_terms.py). -->
         <xpath expr="//p[span[@t-field='doc.payment_term_id.note']]" position="replace">
-            <div t-if="doc.payment_term_id" class="o_sipanel_payment_term" name="sipanel_payment_term" style="margin-top: 6px;">
+            <div t-if="doc.payment_term_id" class="o_sipanel_payment_term" name="sipanel_payment_term">
                 <strong>Payment terms:</strong>
                 <span class="o_sipanel_payment_term_name" t-out="doc.payment_term_id.name"/>
-                <div t-if="not is_html_empty(doc.payment_term_id.note)" t-field="doc.payment_term_id.note"/>
             </div>
-            <div t-if="doc.sipanel_delivery_days" class="o_sipanel_delivery_time" name="sipanel_delivery_time" style="margin-top: 6px;">
+            <div t-if="doc.sipanel_delivery_days" class="o_sipanel_delivery_time" name="sipanel_delivery_time">
                 <strong>Delivery time:</strong>
                 <span class="o_sipanel_delivery_days" t-out="doc.sipanel_delivery_days"/>
                 <span>working days after receipt of the down payment</span>
             </div>
             <div t-if="doc.sipanel_show_bank_account and doc.sipanel_bank_account_id" class="o_sipanel_bank_account"
-                 name="sipanel_bank_account" style="margin-top: 6px;">
+                 name="sipanel_bank_account">
                 <t t-set="sipanel_bank" t-value="doc.sipanel_bank_account_id.sudo()"/>
                 <strong>Bank account for the down payment:</strong>
                 <span class="o_sipanel_bank_acc_number" t-out="sipanel_bank.acc_number"/>
                 <t t-if="sipanel_bank.bank_id.name"> - <span t-out="sipanel_bank.bank_id.name"/></t>
             </div>
         </xpath>
-        <!-- Owner decision 2026-10-11: the Project Site of Page 1 (sipanel_quotation_project_info) is printed once:
-             its name, then only the address parts that add something (no city repeating the name, no own country). -->
-        <xpath expr="//td[hasclass('o_sipanel_page1_project_site')]//div[@t-field='doc.partner_shipping_id']" position="replace">
-            <div t-foreach="doc._sipanel_project_site_address_lines()" t-as="sipanel_site_line" t-out="sipanel_site_line"/>
+        <!-- Owner review 2026-10-12, item 1: the Incoterm is not printed (sale_stock's header column), set or not. -->
+        <xpath expr="//div[@t-if='doc.incoterm']" position="replace"/>
+        <!-- Owner review 2026-10-12, item 5: the Salesperson of the header box prints the quotation name of the user
+             (Persian name on a fa_IR quotation, else the user name; res.users.name is not changed). -->
+        <xpath expr="//div[@id='informations']//div[@t-field='doc.user_id']" position="replace">
+            <div class="o_sipanel_salesperson" t-out="doc._sipanel_salesperson_print_name()"/>
         </xpath>
-        <!-- Item 10 (2026-10-08): the signature caption of sale_shamsi_report says "Sell Department". Located by its
-             position (first element of the signature block), not by its class: the fa_IR copy of that view's arch
-             (Odoo stores one arch per language) has the caption as <strong style=...>دپارتمان فروش</strong> without
-             the class, so a class xpath broke every fa_IR quotation render (P1 run 20261011T144037Z). The caption
-             here is translated by this module (fa_IR «دپارتمان فروش»), same text the fa_IR copy printed. -->
-        <xpath expr="//div[hasclass('o_sipanel_signature_block')]/div/*[1]" position="replace">
-            <span class="signature_title">Sales Department</span>
+        <!-- Owner review 2026-10-12, item 3: the Project Site of Page 1 (sipanel_quotation_project_info) is one line
+             «<city> - <country>» (the site name when the city is empty), nothing printed twice. -->
+        <xpath expr="//td[hasclass('o_sipanel_page1_project_site')]/t[@t-if='sipanel_site']" position="replace">
+            <t t-if="sipanel_site"><span class="o_sipanel_project_site_line" t-out="doc._sipanel_project_site_line()"/></t>
+        </xpath>
+        <!-- Owner review 2026-10-12, item 2: closing block of every quotation, right after the amount in words.
+             Signature and stamp on the LEFT of the page, the terms block (terms text, payment terms, delivery time,
+             optional bank line) on the RIGHT, side by side, in fa_IR and en_US alike (the outer block is laid out
+             left to right; the terms cell takes the document direction). sale_shamsi_report's signature block is
+             replaced by this one (its caption "Sell Department" becomes "Sales Department", item 10 of
+             2026-10-08) and the native terms <div> is moved into the right cell. display: table keeps the whole
+             block on one page: page-break-inside: avoid overflows into the footer band on wkhtmltopdf 0.12.6
+             (sale_shamsi_report report_fonts.css, L-02). -->
+        <xpath expr="//div[hasclass('o_sipanel_signature_block')]" position="replace"/>
+        <xpath expr="//div[@name='so_total_summary']" position="after">
+            <t t-set="sipanel_doc_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
+            <style>
+                .o_sipanel_closing_terms p, .o_sipanel_closing_terms div { margin: 0 !important; padding: 0 !important; }
+                .o_sipanel_closing_terms .oe_structure:empty, .o_sipanel_closing_terms p:empty { display: none; }
+                .o_sipanel_closing_terms [name=order_note] { text-align: inherit !important; }
+            </style>
+            <div class="o_sipanel_closing" name="sipanel_closing" dir="ltr"
+                 style="display: table; width: 100%; margin-top: 6px; line-height: 1.5;">
+                <div class="o_sipanel_closing_signature" name="sipanel_signature"
+                     style="display: table-cell; width: 26%; vertical-align: top; text-align: center;">
+                    <span class="signature_title">Sales Department</span>
+                    <div class="user_name_style o_sipanel_signature_name" style="border-top: 1px solid #eee; padding-top: 5px;"
+                         t-out="doc._sipanel_salesperson_print_name()"/>
+                    <div t-if="doc.user_id.sudo().signature" class="signature_container">
+                        <div t-out="doc.user_id.sudo().signature"/>
+                    </div>
+                    <div t-else="">
+                        <p class="user_name_style" style="border-bottom: 2px solid #000;" t-out="doc._sipanel_salesperson_print_name()"/>
+                    </div>
+                </div>
+                <div class="o_sipanel_closing_terms" name="sipanel_terms" t-att-dir="'rtl' if sipanel_doc_rtl else 'ltr'"
+                     t-attf-style="display: table-cell; width: 74%; vertical-align: top; text-align: #{'right' if sipanel_doc_rtl else 'left'};"/>
+            </div>
+        </xpath>
+        <!-- a moved node must be a direct child of the spec (odoo/tools/template_inheritance.py) -->
+        <xpath expr="//div[hasclass('o_sipanel_closing_terms')]" position="inside">
+            <xpath expr="//span[@name='order_note']/.." position="move"/>
         </xpath>
     </template>
 </odoo>

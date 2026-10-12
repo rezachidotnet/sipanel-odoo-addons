@@ -8,7 +8,7 @@ from lxml import etree, html as lxml_html
 
 from odoo import fields
 from odoo.exceptions import UserError, ValidationError
-from odoo.tests import Form, tagged
+from odoo.tests import Form, new_test_user, tagged
 
 from odoo.addons.sipanel_commercial_scope_core.tests.common import SipanelCoreCase, set_translation
 
@@ -759,8 +759,9 @@ class TestQuotationCommercialTerms(SipanelCoreCase):
     def test_07_terms_section(self):
         order = self._order(note='<p>Terms text line</p>')
         text = self._text(order)
-        self.assertIn(f'Terms text line Payment terms: {PT} 70/30 {PT} seventy now, thirty before loading '
+        self.assertIn(f'Terms text line Payment terms: {PT} 70/30 '
                       'Delivery time: 45 working days after receipt of the down payment', text)
+        self.assertNotIn('seventy now', text, 'owner review 2026-10-12: one text only, the payment term note is not printed')
         self.assertIn('Sales Department', text)
         self.assertNotIn('Sell Department', text)
         self.assertNotIn('Delivery Date', text, 'no commitment date, no Delivery Date column')
@@ -768,25 +769,105 @@ class TestQuotationCommercialTerms(SipanelCoreCase):
         self.assertIn('Delivery Date', self._text(order), 'printed only when filled (native)')
         fa = self._order(self.cust_fa)
         text = self._text(fa)
-        self.assertIn(f'شرایط پرداخت: {PT} ۷۰ پیش، ۳۰ قبل از بارگیری', text)
-        self.assertIn('زمان تحویل: 45 روز کاری پس از دریافت پیش‌پرداخت', text)
+        self.assertIn(f'شرایط پرداخت: {PT} ۷۰ پیش، ۳۰ قبل از بارگیری زمان تحویل: 45 روز کاری پس از دریافت پیش‌پرداخت', text)
+        self.assertNotIn('seventy now', text)
         self.assertIn('دپارتمان فروش', text)
         fa.write({'sipanel_show_bank_account': True, 'sipanel_bank_account_id': self.bank.id})
         self.assertIn(f'شماره حساب جهت واریز پیش‌پرداخت: PT-QL-IR000111222333 - {PT} Bank', self._text(fa))
 
-    # ------------------------------------------------------------------ owner decision 2026-10-11: Project Site once
-    def test_08_project_site_printed_once(self):
-        company_country = self.env.company.country_id
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 3: Project Site
+    def test_08_project_site_one_line(self):
+        iran = self.env.ref('base.ir')
+        iran_fa = iran.with_context(lang='fa_IR').name
         site = self.env['res.partner'].create({'parent_id': self.cust_fa.id, 'type': 'delivery', 'name': 'طالقان',
-                                               'city': 'طالقان', 'country_id': company_country.id})
+                                               'city': 'شهرستان طالقان', 'country_id': iran.id,
+                                               'street': 'جاده اصلی، کیلومتر ۵', 'zip': '12345'})
         order = self._order(self.cust_fa, partner_shipping_id=site.id)
-        self.assertEqual(order._sipanel_project_site_address_lines(), [], 'city = name and own country add nothing')
-        cell = lxml_html.fromstring(self._html(order)).xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
-        self.assertEqual(len(cell), 1)
-        self.assertEqual(' '.join(cell[0].text_content().split()), 'طالقان')
-        site.write({'street': 'جاده اصلی، کیلومتر ۵', 'city': 'شهرک', 'zip': '12345'})
+
+        def cell():
+            cells = lxml_html.fromstring(self._html(order)).xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
+            self.assertEqual(len(cells), 1)
+            return ' '.join(cells[0].text_content().split())
+
+        self.assertEqual(cell(), f'شهرستان طالقان - {iran_fa}', 'one line, street / zip / name not printed')
+        site.city = False
         order.invalidate_recordset()
-        self.assertEqual(order._sipanel_project_site_address_lines(), ['جاده اصلی، کیلومتر ۵', '12345 شهرک'])
-        other = self.env['res.country'].search([('id', '!=', company_country.id)], limit=1)
-        site.country_id = other
-        self.assertEqual(order._sipanel_project_site_address_lines()[-1], other.name, 'a foreign country is printed')
+        self.assertEqual(cell(), f'طالقان - {iran_fa}', 'empty city: the address name')
+        site.country_id = False
+        self.assertEqual(order._sipanel_project_site_line(), 'طالقان')
+        en = self._order(self.cust_en, partner_shipping_id=self.env['res.partner'].create({
+            'parent_id': self.cust_en.id, 'type': 'delivery', 'name': 'Site', 'city': 'Taleqan', 'country_id': iran.id}).id)
+        self.assertEqual(en._sipanel_project_site_line(), f'Taleqan - {iran.with_context(lang="en_US").name}')
+        alone = self.env['res.partner'].create({'name': f'{PT} No site', 'lang': 'en_US'})
+        self.assertFalse(self._order(alone)._sipanel_project_site_line(), 'no Project Site, nothing')
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 1: Incoterm
+    def test_09_incoterm_is_not_printed(self):
+        exw = self.env.ref('account.incoterm_EXW')
+        for partner in (self.cust_en, self.cust_fa):
+            order = self._order(partner, incoterm=exw.id, incoterm_location='PT-QL-INCO-PLACE')
+            text = self._text(order)
+            for needle in ('Incoterm', 'اینکوترم', 'EXW', 'PT-QL-INCO-PLACE'):
+                self.assertNotIn(needle, text, partner.lang)
+            self.assertEqual(order.incoterm, exw, 'the order keeps its Incoterm, only the printout leaves it out')
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 2: closing block
+    def test_10_signature_left_terms_right_after_amount_in_words(self):
+        for partner, rtl in ((self.cust_en, False), (self.cust_fa, True)):
+            order = self._order(partner, note='<p>Terms line one</p><p>Terms line two</p>')
+            doc = lxml_html.fromstring(self._html(order))
+            self.assertFalse(doc.xpath("//div[contains(@class, 'o_sipanel_signature_block')]"),
+                             'the sale_shamsi_report signature block is replaced')
+            closing = doc.xpath("//div[contains(@class, 'o_sipanel_closing')][@name='sipanel_closing']")
+            self.assertEqual(len(closing), 1, partner.lang)
+            closing = closing[0]
+            self.assertEqual(closing.get('dir'), 'ltr', 'physical left / right, same in fa_IR and en_US')
+            self.assertIn('display: table;', closing.get('style'), 'kept on one page as a whole (L-02)')
+            prev = closing.getprevious()
+            while prev is not None and prev.tag in ('style',):
+                prev = prev.getprevious()
+            self.assertEqual(prev.get('name'), 'so_total_summary', 'right after the totals and the amount in words')
+            self.assertTrue(prev.xpath(".//div[@name='sipanel_amount_in_words']"))
+            cells = [c for c in closing if c.tag == 'div']
+            self.assertEqual([c.get('name') for c in cells], ['sipanel_signature', 'sipanel_terms'],
+                             'signature / stamp first = LEFT, terms = RIGHT')
+            signature, terms = cells
+            self.assertIn('Sales Department' if not rtl else 'دپارتمان فروش', signature.text_content())
+            self.assertEqual(terms.get('dir'), 'rtl' if rtl else 'ltr')
+            self.assertIn('text-align: right' if rtl else 'text-align: left', terms.get('style'))
+            terms_text = ' '.join(' '.join(terms.itertext()).split())
+            self.assertTrue(terms_text.startswith('Terms line one Terms line two'), terms_text)
+            self.assertIn('45', terms_text)
+            self.assertTrue(terms.xpath(".//*[@name='order_note']") and terms.xpath(".//div[@name='sipanel_payment_term']")
+                            and terms.xpath(".//div[@name='sipanel_delivery_time']"), 'the whole terms block is in the cell')
+            self.assertEqual(len(doc.xpath("//*[@name='order_note']")), 1, 'moved, not copied')
+            for node in terms.xpath(".//div[@name='sipanel_payment_term' or @name='sipanel_delivery_time']"):
+                self.assertNotIn('margin', node.get('style') or '', 'no blank space between the terms lines')
+            style = ' '.join(t.text or '' for t in doc.xpath('//style') if 'o_sipanel_closing_terms' in (t.text or ''))
+            self.assertIn('margin: 0', style)
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 5: salesperson
+    def test_11_persian_salesperson_name_on_fa_quotations_only(self):
+        user = new_test_user(self.env, login='sipanel_pt_ql_taleghani', name=f'{PT} Taleghani',
+                             groups='sales_team.group_sale_salesman')
+        # the signature cell also prints the user's own signature HTML (Odoo defaults it to the user name; in
+        # Production it is the signature / stamp image): left out here so the printed names are what is tested
+        user.write({'sipanel_quotation_name_fa': 'طالقانی', 'signature': False})
+
+        def printed(order):
+            doc = lxml_html.fromstring(self._html(order))
+            box = doc.xpath("//div[@id='informations']//div[contains(@class, 'o_sipanel_salesperson')]")
+            sign = doc.xpath("//div[contains(@class, 'o_sipanel_signature_name')]")
+            self.assertEqual((len(box), len(sign)), (1, 1))
+            return box[0].text_content().strip(), sign[0].text_content().strip(), ' '.join(doc.text_content().split())
+
+        box, sign, text = printed(self._order(self.cust_fa, user_id=user.id))
+        self.assertEqual((box, sign), ('طالقانی', 'طالقانی'))
+        self.assertNotIn(f'{PT} Taleghani', text)
+        box, sign, text = printed(self._order(self.cust_en, user_id=user.id))
+        self.assertEqual((box, sign), (f'{PT} Taleghani', f'{PT} Taleghani'), 'en_US quotations: the user name')
+        self.assertEqual((user.name, user.partner_id.name), (f'{PT} Taleghani', f'{PT} Taleghani'),
+                         'the user name is not changed anywhere')
+        user.sipanel_quotation_name_fa = False
+        box, sign, _text = printed(self._order(self.cust_fa, user_id=user.id))
+        self.assertEqual((box, sign), (f'{PT} Taleghani', f'{PT} Taleghani'), 'no Persian name: the user name')

@@ -49,21 +49,25 @@ class SaleOrder(models.Model):
                 raise ValidationError(
                     f"شماره حساب «{account.display_name}» متعلق به شرکت «{order.company_id.name}» نیست.")
 
-    def _sipanel_project_site_address_lines(self):
-        """Owner decision 2026-10-11: Page 1 prints the Project Site once. Below its name only the address parts that
-        add information: street, street2, zip + city unless the city repeats the site name, state, and the country
-        unless it is the company's own. A site «طالقان» in city «طالقان», Iran prints «طالقان» alone."""
+    def _sipanel_project_site_line(self):
+        """Owner review 2026-10-12: Page 1 prints the Project Site as ONE line «<city> - <country>», the site name
+        when the city is empty, the country left out when empty. Names come in the rendering language (the report
+        renders with the customer language), e.g. «شهرستان طالقان - ایران»."""
         self.ensure_one()
         site = self._sipanel_page1_project_site()
         if not site:
-            return []
-        name = ' '.join((site.name or '').split())
-        city = ' '.join((site.city or '').split())
-        lines = [site.street, site.street2,
-                 ' '.join(p for p in (site.zip, city if city != name else '') if p),
-                 site.state_id.name,
-                 site.country_id.name if site.country_id != self.company_id.country_id else False]
-        return [line for line in (' '.join((l or '').split()) for l in lines) if line]
+            return ''
+        place = ' '.join((site.city or '').split()) or ' '.join((site.name or '').split())
+        return ' - '.join(p for p in (place, site.country_id.name) if p)
+
+    def _sipanel_salesperson_print_name(self):
+        """Owner review 2026-10-12: the salesperson printed on a fa_IR quotation is the user's Persian quotation name
+        when one is set, else the user name. Report only: res.users / res.partner name is not changed."""
+        self.ensure_one()
+        user = self.user_id.sudo()
+        if (self.partner_id.lang or self.env.lang) == 'fa_IR' and user.sipanel_quotation_name_fa:
+            return user.sipanel_quotation_name_fa
+        return user.name or ''
 
     # ------------------------------------------------------------------ gate
     def _sipanel_customer_document_problems(self):

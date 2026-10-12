@@ -33,6 +33,8 @@ EXPECTED = {  # scope code: (new version name, previous version name, fa_IR labe
 }
 # P6b archives ru_RU before P7, so v3 is released without the R2 "no ru_RU label" warning (requirements 2026-10-08)
 TERMS = {'payment_term_en': '70% in advance, 30% before delivery.', 'delivery_days': 45, 'validity_days': 8,
+         'payment_term_fa': '۷۰٪ پیش‌پرداخت، ۳۰٪ باقیمانده قبل از بارگیری', 'site_line_fa': 'شهرستان طالقان - ایران',
+         'salesperson': ('Taleghani', 'طالقانی'), 'website': 'www.sipanelco.com',
          'incoterm': 'EXW', 'site': 'طالقان', 'contact_prefix': 'جناب آقای ', 'vat_fa': 'مالیات بر ارزش افزوده',
          'meter_fa': 'متر طول', 'tagline_fa': 'طراحی، تأمین و نصب انواع سامانه‌های پوشش سالن‌های صنعتی',
          'terms_lines': ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
@@ -173,8 +175,17 @@ try:
           R['account_2316_name'])
     check('si26_2546_requested_system_fa', ref.sipanel_requested_system_name_snapshot == 'استندینگ سیم',
           ref.sipanel_requested_system_name_snapshot)
-    check('si26_2546_project_site_printed_once', ref._sipanel_project_site_address_lines() == [],
-          ref._sipanel_project_site_address_lines())
+    # owner review 2026-10-12
+    site_line = ref.with_context(lang='fa_IR')._sipanel_project_site_line()
+    check('si26_2546_project_site_one_line', site_line == TERMS['site_line_fa'], site_line)
+    check('payment_term_fa_name', stored(ref.payment_term_id, 'name').get('fa_IR') == TERMS['payment_term_fa'],
+          stored(ref.payment_term_id, 'name'))
+    seller = ref.user_id
+    check('salesperson_fa_name', (seller.name, seller.sipanel_quotation_name_fa) == TERMS['salesperson']
+          and seller.partner_id.name == TERMS['salesperson'][0], [seller.name, seller.sipanel_quotation_name_fa])
+    footer = stored(company, 'report_footer')
+    check('footer_website', all(TERMS['website'] in v and 'sipanelco.ir' not in v for v in footer.values())
+          and set(footer) == {'en_US', 'fa_IR'}, footer)
     ru = su['res.lang'].with_context(active_test=False).search([('code', '=', 'ru_RU')])
     check('ru_RU_archived', len(ru) == 1 and not ru.active)
 
@@ -198,8 +209,33 @@ try:
     # ---- PDFs
     lang0 = ref.partner_id.lang
     R['partner_lang'] = lang0
+    from lxml import html as lxml_html
     for lang in ('fa_IR', 'en_US'):
         ref.partner_id.lang = lang
+        # owner review 2026-10-12: layout of the printed quotation (HTML of the same report)
+        doc = lxml_html.fromstring(su['ir.actions.report']._render_qweb_html('sale.report_saleorder', ref.ids)[0])
+        text = ' '.join(doc.text_content().split())
+        closing = doc.xpath("//div[@name='sipanel_closing']")
+        cells = [c.get('name') for c in closing[0] if c.tag == 'div'] if len(closing) == 1 else None
+        terms = closing[0].xpath(".//div[@name='sipanel_terms']") if len(closing) == 1 else []
+        terms_text = ' '.join(terms[0].text_content().split()) if terms else ''
+        seller_name = TERMS['salesperson'][1] if lang == 'fa_IR' else TERMS['salesperson'][0]
+        box = doc.xpath("//div[@id='informations']//div[contains(@class, 'o_sipanel_salesperson')]")
+        R.setdefault('layout', {})[lang] = {'cells': cells, 'terms': terms_text,
+                                            'salesperson': box[0].text_content().strip() if box else None}
+        check(f'layout_{lang}_no_incoterm', 'EXW' not in text and 'Incoterm' not in text and 'اینکوترم' not in text)
+        check(f'layout_{lang}_signature_left_terms_right', cells == ['sipanel_signature', 'sipanel_terms']
+              and closing[0].get('dir') == 'ltr' and not doc.xpath("//div[contains(@class, 'o_sipanel_signature_block')]")
+              and closing[0].getparent().index(closing[0]) > 0, cells)
+        check(f'layout_{lang}_terms_block', terms_text.startswith(TERMS['terms_lines'][0]) and str(TERMS['delivery_days']) in terms_text and 'جهت شروع تولید' not in text
+              and 'is required to commence production' not in text, terms_text)
+        check(f'layout_{lang}_salesperson', bool(box) and box[0].text_content().strip() == seller_name
+              and (lang != 'fa_IR' or TERMS['salesperson'][0] not in text), R['layout'][lang]['salesperson'])
+        if lang == 'fa_IR':
+            check('layout_fa_IR_payment_term_one_text', f"شرایط پرداخت: {TERMS['payment_term_fa']}" in terms_text, terms_text)
+            cell = doc.xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
+            check('layout_fa_IR_project_site', len(cell) == 1 and ' '.join(cell[0].text_content().split())
+                  == TERMS['site_line_fa'], [c.text_content() for c in cell])
         pdf, _ = su['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', ref.ids)
         with open(os.path.join(OUT, f'p9_SI-26-2546_{lang}.pdf'), 'wb') as f:
             f.write(pdf)
