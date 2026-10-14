@@ -3,7 +3,8 @@
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
-#   prodsim (after evidence; in all): P1 = the Production steps P6b commercial data, P7 v3, P8 M4 + way A (dry run, then commit) and P9
+#   prodsim (after evidence; in all): P1 = the Production steps P6b commercial data, P7 v3, P8 M4 + way A, P8b technical sheet +
+#            shop drawings (2026-10-14) (dry run, then commit) and P9
 #            post-checks with the Production scripts; replaces rehearsal in all (2026-10-08)
 #   rehearsal (not in all): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
 #   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
@@ -522,6 +523,18 @@ prodsim() {
   # idempotency: a second P8 dry run changes nothing and still passes
   prod_shell p8again sipanel_si26_2546_way_a.py || true
   json_line SIPANEL_WAY_A "$EVID/prodsim_p8again.log" "d.get('all_ok') is True" || { echo "PRODSIM P8 re-run FAILED"; exit 18; }
+  # P8b: System technical sheet, shop drawings product + line, flashing split on SI-26/2546 (owner requirements
+  # 2026-10-14) - dry run, commit, idempotent re-run; after P8 (the installation line is part of the shop drawings base)
+  prod_shell p8bdry sipanel_tech_sheet_data.py || true
+  json_line SIPANEL_TECH_SHEET "$EVID/prodsim_p8bdry.log" "d.get('all_ok') is True" \
+    && grep -q '^SIPANEL_TECH_SHEET ROLLED_BACK$' "$EVID/prodsim_p8bdry.log" || { echo "PRODSIM P8b dry run FAILED ($EVID/prodsim_p8bdry.log)"; exit 21; }
+  echo "P8b dry run OK (all checks, ROLLED_BACK)"
+  prod_shell p8bcommit sipanel_tech_sheet_data.py -e SIPANEL_TECH_SHEET_COMMIT=1 || true
+  grep -q '^SIPANEL_TECH_SHEET COMMITTED' "$EVID/prodsim_p8bcommit.log" || { echo "PRODSIM P8b commit FAILED ($EVID/prodsim_p8bcommit.log)"; exit 21; }
+  echo "P8b COMMITTED"
+  prod_shell p8bagain sipanel_tech_sheet_data.py || true
+  json_line SIPANEL_TECH_SHEET "$EVID/prodsim_p8bagain.log" "d.get('all_ok') is True and not d.get('changed')" \
+    || { echo "PRODSIM P8b re-run FAILED (not idempotent)"; exit 21; }
   # P9: read-only post-checks + PDFs through the render server
   new_outdir
   render_server_start

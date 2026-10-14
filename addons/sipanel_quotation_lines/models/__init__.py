@@ -9,3 +9,4 @@ from . import sale_order_line
 from . import sale_order_terms
 from . import quote_scope_revision
 from . import scope_version
+from . import tech_sheet

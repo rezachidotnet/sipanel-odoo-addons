@@ -7,3 +7,7 @@ class ResConfigSettings(models.TransientModel):
 
     sipanel_installation_pct_default = fields.Float(
         related='company_id.sipanel_installation_pct_default', readonly=False)
+    sipanel_shop_drawing_pct_default = fields.Float(
+        related='company_id.sipanel_shop_drawing_pct_default', readonly=False)
+    sipanel_shop_drawing_discount_default = fields.Float(
+        related='company_id.sipanel_shop_drawing_discount_default', readonly=False)

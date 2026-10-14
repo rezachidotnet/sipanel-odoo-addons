@@ -18,6 +18,46 @@
                 </t>
             </div>
         </xpath>
+        <!-- Owner requirements 2026-10-14, item 1: a quotation with a technical sheet (its own snapshot of the System
+             sheet, tech_sheet.py) prints it on its own page right after Page 1 (the sale_shamsi_report cover, also
+             inserted before div.page, earlier) and before the price table: title, schematic, specification table.
+             A quotation without a sheet renders nothing here (earlier layout). Outside div.page on purpose: the
+             price-table pagination rules of sale_shamsi_report (.o_sipanel_so_print) do not apply to it. -->
+        <xpath expr="//div[hasclass('page')]" position="before">
+            <t t-if="doc.sipanel_has_tech_sheet">
+                <t t-set="sipanel_ts_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
+                <t t-set="sipanel_ts_align" t-value="'right' if sipanel_ts_rtl else 'left'"/>
+                <div class="o_sipanel_tech_sheet" name="sipanel_tech_sheet" t-att-dir="'rtl' if sipanel_ts_rtl else 'ltr'"
+                     t-attf-style="page-break-after: always; text-align: #{sipanel_ts_align}; padding-top: 6px;">
+                    <h4 class="o_sipanel_tech_sheet_title" style="text-align: center; font-weight: bold; margin: 0 0 10px 0;"
+                        t-out="doc._sipanel_tech_sheet_heading()"/>
+                    <div t-if="doc.sipanel_tech_image" class="o_sipanel_tech_sheet_image" style="text-align: center; margin: 0 0 12px 0;">
+                        <img t-att-src="image_data_uri(doc.sipanel_tech_image)" alt="schematic"
+                             style="max-width: 100%; max-height: 8.5cm;"/>
+                    </div>
+                    <table t-if="doc.sipanel_tech_spec_ids" class="o_sipanel_tech_spec o_ignore_layout_styling" name="sipanel_tech_spec"
+                           style="width: 100%; border-collapse: collapse; font-size: 0.86em; line-height: 1.45;">
+                        <thead>
+                            <tr t-attf-style="background-color: #e9ecef; text-align: #{sipanel_ts_align};">
+                                <th style="width: 7%; border: 1px solid #495057; padding: 4px 6px; text-align: center;">No.</th>
+                                <th t-attf-style="width: 22%; border: 1px solid #495057; padding: 4px 6px; text-align: #{sipanel_ts_align};">Item</th>
+                                <th t-attf-style="border: 1px solid #495057; padding: 4px 6px; text-align: #{sipanel_ts_align};">Specification</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="doc._sipanel_tech_sheet_rows()" t-as="sipanel_row" class="o_sipanel_tech_spec_row">
+                                <td style="border: 1px solid #495057; padding: 4px 6px; text-align: center; vertical-align: top;"
+                                    t-out="sipanel_row[0]"/>
+                                <td t-attf-style="border: 1px solid #495057; padding: 4px 6px; vertical-align: top; font-weight: bold; text-align: #{sipanel_ts_align};"
+                                    t-out="sipanel_row[1]"/>
+                                <td t-attf-style="border: 1px solid #495057; padding: 4px 6px; vertical-align: top; text-align: #{sipanel_ts_align};"
+                                    t-out="sipanel_row[2]"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </t>
+        </xpath>
         <!-- C: amount in words, below the totals box (native amount_to_text in the document language) -->
         <xpath expr="//div[@name='so_total_summary']" position="inside">
             <div class="row o_sipanel_amount_in_words" name="sipanel_amount_in_words">

@@ -10,12 +10,16 @@ class AccountAnalyticAccount(models.Model):
         'product.product', string='Installation product', ondelete='restrict', check_company=True,
         domain="[('type', '=', 'service'), ('sale_ok', '=', True)]",
         help="SIPANEL System only: the service product of the quotation's Installation / Execution line.")
+    sipanel_shop_drawing_product_id = fields.Many2one(
+        'product.product', string='Shop drawings product', ondelete='restrict', check_company=True,
+        domain="[('type', '=', 'service'), ('sale_ok', '=', True)]",
+        help="SIPANEL System only: the service product of the quotation's Shop Drawings line.")
 
-    @api.constrains('sipanel_installation_product_id', 'plan_id')
+    @api.constrains('sipanel_installation_product_id', 'sipanel_shop_drawing_product_id', 'plan_id')
     def _check_sipanel_installation_product(self):
-        for account in self.filtered('sipanel_installation_product_id'):
+        for account in self.filtered(lambda a: a.sipanel_installation_product_id or a.sipanel_shop_drawing_product_id):
             plan = self.env['sipanel.config'].system_plan()
             if account.plan_id != plan:
                 raise ValidationError(self.env._(
-                    "An installation product can only be set on a SIPANEL System (analytic account of the "
+                    "An installation or shop drawings product can only be set on a SIPANEL System (analytic account of the "
                     "SIPANEL System plan); \"%s\" is not one.", account.display_name))

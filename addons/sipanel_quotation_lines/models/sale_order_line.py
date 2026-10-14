@@ -29,8 +29,12 @@ class SaleOrderLine(models.Model):
     # them); the engine rebuilds them on the copy from its own percentage and base.
     sipanel_is_installation_line = fields.Boolean(
         string='Installation line', readonly=True, copy=False, index=True,
-        help="System-managed Installation / Execution line (and its section). Never part of the "
-             "installation base, never a Scope component, never in Scope costing.")
+        help="System-managed Installation / Execution or Shop Drawings line (and its section). Never part of "
+             "the installation base, never a Scope component, never in Scope costing.")
+    sipanel_managed_role = fields.Selection(
+        [('installation', 'Installation & Execution'), ('shop_drawing', 'Shop Drawings')],
+        string='Managed line role', readonly=True, copy=False,
+        help="Which engine manages this line (empty on lines made before the shop drawings option = installation).")
 
     def _sipanel_report_name_lines(self):
         """The description as printed on the customer quotation (requirements 2026-10-08, item 1): its lines,
@@ -53,7 +57,8 @@ class SaleOrderLine(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        if not guard(self.env, INSTALL_GUARD) and any(v.get('sipanel_is_installation_line') for v in vals_list):
+        if not guard(self.env, INSTALL_GUARD) and any(
+                v.get('sipanel_is_installation_line') or v.get('sipanel_managed_role') for v in vals_list):
             # a forged marker would let any line escape the base or be rewritten by the engine
             raise UserError(self.env._("The installation line marker is set by the installation engine only."))
         lines = super().create(vals_list)
@@ -62,7 +67,7 @@ class SaleOrderLine(models.Model):
         return lines
 
     def write(self, vals):
-        if 'sipanel_is_installation_line' in vals and not guard(self.env, INSTALL_GUARD):
+        if {'sipanel_is_installation_line', 'sipanel_managed_role'} & set(vals) and not guard(self.env, INSTALL_GUARD):
             raise UserError(self.env._("The installation line marker is set by the installation engine only."))
         orders = self.order_id
         res = super().write(vals)
@@ -78,7 +83,12 @@ class SaleOrderLine(models.Model):
             return
         for line in self.filtered('sipanel_is_installation_line'):
             order = line.order_id
-            if order.state in OPEN_STATES and order.sipanel_installation_pct:
+            shop = line.sipanel_managed_role == 'shop_drawing'
+            if order.state in OPEN_STATES and (order.sipanel_shop_drawing_pct if shop else order.sipanel_installation_pct):
+                if shop:
+                    raise UserError(self.env._(
+                        "The Shop Drawings lines of %s are managed by its shop drawings percentage; "
+                        "set the percentage to 0 to remove them.", order.name))
                 raise UserError(self.env._(
                     "The Installation / Execution lines of %s are managed by its installation percentage; "
                     "set the percentage to 0 to remove them.", order.name))
@@ -97,5 +107,6 @@ class SaleOrderLine(models.Model):
     def _compute_discount(self):
         managed = self.filtered('sipanel_is_installation_line')
         for line in managed:
-            line.discount = 0.0
+            line.discount = (line.order_id.sipanel_shop_drawing_discount
+                             if line.sipanel_managed_role == 'shop_drawing' and not line.display_type else 0.0)
         return super(SaleOrderLine, self - managed)._compute_discount()

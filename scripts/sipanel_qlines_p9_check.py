@@ -9,8 +9,9 @@ Writes p9_SI-26-2546_{fa_IR,en_US}.pdf and p9_summary.json to OUT; prints "SIPAN
 Checks: module installed; Standing Seam v3 (three new versions released, previous superseded with intact checksum,
 supply-only description, fa_IR label, no installation work, no release warnings - ru_RU archived by P6b); master data
 (SIP-000075 in Units, installation base flags, System mapping); SI-26/2546 after way A (quotation, totals, the
-installation line, supply lines, amount in words); the commercial terms and data of P6b; the quotation form as the Sales user uid 10 (installation line
-readonly); the two PDFs. Rendering switches the partner language inside this transaction (rolled back).
+installation line, supply lines, amount in words); the commercial terms and data of P6b; the technical sheet, shop drawings
+line and flashing split of P8b (owner requirements 2026-10-14); the quotation form as the Sales user uid 10 (installation
+line readonly); the two PDFs. Rendering switches the partner language inside this transaction (rolled back).
 """
 import json
 import os
@@ -19,7 +20,14 @@ OUT = os.environ.get('OUT', '/tmp/sipanel_p9')
 os.makedirs(OUT, exist_ok=True)
 SALES_UID = int(os.environ.get('SIPANEL_P9_SALES_UID', '10'))
 UNTAXED, TAX, TOTAL, INSTALL_10 = 27_352_380_000, 2_735_238_000, 30_087_618_000, 2_486_580_000
-SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 162.7, 34_000_000), ('SIP-000077', 18.0, 67_000_000)]
+# P8b (owner requirements 2026-10-14): the flashing line is split 2:1 (108.47 + 54.23 = 162.70 m, same price)
+SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 34_000_000), ('SIP-000076', 54.23, 34_000_000),
+                ('SIP-000077', 18.0, 67_000_000)]
+SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_047_600, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
+        'section_fa': 'نقشه‌های اجرایی', 'product_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
+SHEET = {'rows': 8, 'image_sha256': 'e64859f0257b42676a2a8d910d503e827759047b3ebe2bb9c7dee569c478dfbc',
+         'heading_fa': 'مشخصات فنی سیستم استندینگ سیم', 'row2_fa': 'ضخامت ۰.۷ میلیمتر', 'row2_en': '0.7 mm thick',
+         'liner': '0.7'}
 EXPECTED = {  # scope code: (new version name, previous version name, fa_IR label, description)
     'CS-STANDING-SEAM': ('CS-STANDING-SEAM v3', 'CS-STANDING-SEAM v2', 'سیستم پوشش سقف استندینگ سیم',
                          {'en_US': 'Supply of Standing Seam roof system (supply only).',
@@ -39,10 +47,11 @@ TERMS = {'payment_term_en': '70% in advance, 30% before delivery.', 'delivery_da
          'meter_fa': 'متر طول', 'tagline_fa': 'طراحی، تأمین و نصب انواع سامانه‌های پوشش سالن‌های صنعتی',
          'terms_lines': ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
                          'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
-                         'مقادیر نهایی بر اساس متره اجرایی و صورت‌وضعیت محاسبه می‌شود.'),
-         'lines': {'SIP-000074': 'سیستم پوشش سقف استندینگ سیم (فقط تأمین)',
-                   'SIP-000076': 'فلاشینگ و فیلر بلوک هم‌جنس ورق رویه (فقط تأمین)',
-                   'SIP-000077': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)'}}
+                         'مقادیر این پیش‌فاکتور تقریبی است. مقادیر دقیق پس از تهیه‌ی نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود.'),
+         'lines': [('SIP-000074', 'سیستم پوشش سقف استندینگ سیم (فقط تأمین)'),
+                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر'),     # P8b, 2026-10-14
+                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر'),
+                   ('SIP-000077', 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)')]}
 R = {'db': env.cr.dbname, 'checks': {}}
 su = env(su=True)
 
@@ -102,15 +111,17 @@ try:
 
     # ---- SI-26/2546 after way A
     ref = su['sale.order'].search([('name', '=', 'SI-26/2546')])
-    il = ref.order_line.filtered(lambda l: l.sipanel_is_installation_line and not l.display_type)
+    il = ref._sipanel_managed_lines('installation').filtered(lambda l: not l.display_type)
+    shop_block = ref._sipanel_managed_lines('shop_drawing').sorted(lambda l: (l.sequence, l.id))
+    sl = shop_block.filtered(lambda l: not l.display_type)
     ordered = ref.order_line.sorted(lambda l: (l.sequence, l.id))
     supply = ref.order_line.filtered(lambda l: not l.display_type and not l.sipanel_is_installation_line)
     R['si26_2546'] = {
         'state': ref.state, 'untaxed': ref.amount_untaxed, 'tax': ref.amount_tax, 'total': ref.amount_total,
         'pct': ref.sipanel_installation_pct, 'requested_system': ref.sipanel_requested_system_id.name,
         'lines': [(l.sequence, l.display_type or l.product_id.default_code, ' '.join((l.name or '').split())[:60],
-                   l.product_uom_qty, l.product_uom_id.name, l.price_unit, l.price_subtotal)
-                  for l in ordered],
+                   l.product_uom_qty, l.product_uom_id.name, l.price_unit, l.discount, l.price_subtotal,
+                   l.sipanel_managed_role) for l in ordered],
         'words_fa': ref.with_context(lang='fa_IR')._sipanel_amount_total_in_words(),
         'words_en': ref.with_context(lang='en_US')._sipanel_amount_total_in_words()}
     R['unit_name'] = {lang: unit.with_context(lang=lang).name for lang in ('en_US', 'fa_IR')}
@@ -120,9 +131,40 @@ try:
     check('si26_2546_installation_line', len(il) == 1 and il.product_id == install and il.product_uom_qty == 1.0
           and il.product_uom_id == unit and close(il.price_unit, INSTALL_10) and close(il.price_subtotal, INSTALL_10),
           R['si26_2546']['lines'][-1:])
-    check('si26_2546_installation_last', bool(il) and ordered[-1] == il)
+    # owner requirements 2026-10-14: the shop drawings block (section + line) comes right after the installation line
+    check('si26_2546_installation_last', bool(il) and len(shop_block) == 2 and ordered[-3] == il
+          and list(ordered[-2:]) == list(shop_block))
+    check('si26_2546_shop_line', len(sl) == 1 and sl.product_uom_qty == 1.0 and close(sl.price_unit, SHOP['price'])
+          and sl.discount == SHOP['discount'] and close(sl.price_subtotal, 0) and close(sl.price_tax, 0)
+          and sl.name.split('\n')[0] == SHOP['label_fa'] and shop_block[0].name == SHOP['section_fa']
+          and (ref.sipanel_shop_drawing_pct, ref.sipanel_shop_drawing_discount) == (SHOP['pct'], SHOP['discount']),
+          R['si26_2546']['lines'][-2:])
+    seam_shop = seam.sipanel_shop_drawing_product_id if len(seam) == 1 else su['product.product']
+    check('standing_seam_maps_shop_product', bool(seam_shop) and sl.product_id == seam_shop
+          and seam_shop.type == 'service' and not seam_shop.purchase_ok
+          and stored(seam_shop.product_tmpl_id, 'name').get('fa_IR') == SHOP['product_fa'],
+          stored(seam_shop.product_tmpl_id, 'name') if seam_shop else None)
     check('si26_2546_supply_lines', sorted((l.product_id.default_code, l.product_uom_qty, l.price_unit) for l in supply)
-          == sorted((c, q, float(p)) for c, q, p in SUPPLY_LINES))
+          == sorted((c, q, float(p)) for c, q, p in SUPPLY_LINES),
+          sorted((l.product_id.default_code, l.product_uom_qty, l.price_unit) for l in supply))
+    # ---- technical sheet (P8b)
+    import base64
+    import hashlib
+    sha = lambda b64: hashlib.sha256(base64.b64decode(b64)).hexdigest() if b64 else None
+    sys_rows = [(r.number, stored(r, 'title'), stored(r, 'description')) for r in seam.sipanel_tech_spec_ids.sorted(
+        lambda r: (r.sequence, r.number, r.id))] if len(seam) == 1 else []
+    so_rows = [(r.number, stored(r, 'title'), stored(r, 'description')) for r in ref.sipanel_tech_spec_ids.sorted(
+        lambda r: (r.sequence, r.number, r.id))]
+    R['tech_sheet'] = {'system_rows': sys_rows, 'printed_fa': ref.with_context(lang='fa_IR')._sipanel_tech_sheet_rows(),
+                       'printed_en': ref.with_context(lang='en_US')._sipanel_tech_sheet_rows(),
+                       'liner': ref.sipanel_liner_thickness}
+    check('system_tech_sheet', len(sys_rows) == SHEET['rows'] and [n for n, _t, _d in sys_rows] == list(range(1, 9))
+          and all(t.get('fa_IR') and t.get('en_US') and d.get('fa_IR') and d.get('en_US') for _n, t, d in sys_rows)
+          and sha(seam.sipanel_tech_image) == SHEET['image_sha256'], [n for n, _t, _d in sys_rows])
+    check('si26_2546_tech_sheet_snapshot', so_rows == sys_rows and sha(ref.sipanel_tech_image) == SHEET['image_sha256'])
+    check('si26_2546_liner_0_7', ref.sipanel_liner_thickness == SHEET['liner']
+          and SHEET['row2_fa'] in R['tech_sheet']['printed_fa'][1][2] and SHEET['row2_en'] in R['tech_sheet']['printed_en'][1][2]
+          if len(so_rows) >= 2 else False, R['tech_sheet']['printed_fa'][1:2])
     check('si26_2546_words_en', R['si26_2546']['words_en'] == 'Thirty Billion, Eighty-Seven Million, Six Hundred And '
                                                               'Eighteen Thousand Rials only', R['si26_2546']['words_en'])
     check('si26_2546_words_fa', R['si26_2546']['words_fa'] == 'سی میلیارد و هشتاد و هفت میلیون و ششصد و هجده هزار ریال',
@@ -161,10 +203,10 @@ try:
     check('company_default_terms', all(t in texts['company_terms'] for t in TERMS['terms_lines'])
           and '...' not in texts['company_terms'], texts['company_terms'])
     check('company_tagline_fa', TERMS['tagline_fa'] in (texts['header_fa'] or ''), texts['header_fa'])
-    names = {l.product_id.default_code: l.name for l in supply}
-    check('si26_2546_line_descriptions', names == TERMS['lines'] and 'ARCZIP' not in str(texts['lines']), names)
+    names = sorted((l.product_id.default_code, l.name) for l in supply)
+    check('si26_2546_line_descriptions', names == sorted(TERMS['lines']) and 'ARCZIP' not in str(texts['lines']), names)
     notes = [(l.display_type, l.name) for l in ordered if l.display_type and not l.sipanel_is_installation_line]
-    check('si26_2546_sections_notes', notes == [('line_section', 'سیستم پوشش سقف استندینگ سیم'),
+    check('si26_2546_sections_notes', notes == [('line_section', 'سیستم پوشش سقف و دیوار استندینگ سیم'),   # P8b
                                                 ('line_section', 'متعلقات'),
                                                 ('line_note', 'شامل: متعلقات استاندارد سیستم')], notes)
     vat = su['account.tax.group'].search([]).filtered(lambda g: stored(g, 'name').get('en_US') == 'VAT')
@@ -223,6 +265,20 @@ try:
         box = doc.xpath("//div[@id='informations']//div[contains(@class, 'o_sipanel_salesperson')]")
         R.setdefault('layout', {})[lang] = {'cells': cells, 'terms': terms_text,
                                             'salesperson': box[0].text_content().strip() if box else None}
+        # owner requirements 2026-10-14: the technical sheet page sits between Page 1 and the price table
+        sheet_div = doc.xpath("//div[@name='sipanel_tech_sheet']")
+        page_div = doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' page ')]")
+        cover = doc.xpath("//div[contains(@class, 'custom-full-page-cover')]")
+        order_ok = (len(sheet_div) == 1 and len(page_div) == 1 and len(cover) == 1
+                    and sheet_div[0].getparent() == page_div[0].getparent() == cover[0].getparent()
+                    and cover[0].getparent().index(cover[0]) < sheet_div[0].getparent().index(sheet_div[0])
+                    < page_div[0].getparent().index(page_div[0]))
+        spec_rows = sheet_div[0].xpath(".//tr[contains(@class, 'o_sipanel_tech_spec_row')]") if sheet_div else []
+        heading = ' '.join(sheet_div[0].xpath(".//h4")[0].text_content().split()) if sheet_div else ''
+        check(f'layout_{lang}_tech_sheet_page', order_ok and len(spec_rows) == SHEET['rows']
+              and 'page-break-after: always' in (sheet_div[0].get('style') or '')
+              and bool(sheet_div[0].xpath(".//img[starts-with(@src, 'data:image/png;base64,')]"))
+              and (lang != 'fa_IR' or heading == SHEET['heading_fa']), [order_ok, len(spec_rows), heading])
         check(f'layout_{lang}_no_incoterm', 'EXW' not in text and 'Incoterm' not in text and 'اینکوترم' not in text)
         check(f'layout_{lang}_signature_left_terms_right', cells == ['sipanel_signature', 'sipanel_terms']
               and closing[0].get('dir') == 'ltr' and not doc.xpath("//div[contains(@class, 'o_sipanel_signature_block')]")

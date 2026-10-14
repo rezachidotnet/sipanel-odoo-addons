@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Installation / Execution percentage line and amount in words (work order 2026-10-05, B + C).
+"""Installation / Execution percentage line, Shop Drawings percentage line and amount in words (work order
+2026-10-05, B + C; shop drawings: owner requirements 2026-10-14, item 5).
 
 One system-managed sale.order.line, priced as a percentage of the untaxed subtotal of the lines whose
 product is flagged `sipanel_installation_base`, always last on the quotation, recomputed while the
 order is a quotation (draft/sent) and frozen afterwards. Taxes and totals stay native: the line is an
 ordinary product line of the System's installation product, so its taxes come from the product and the
 fiscal position like any other line.
+
+The Shop Drawings line is the same kind of system-managed line (same marker, same protections), of role
+`shop_drawing`: a percentage of the installation base PLUS the installation line, with a discount percentage of
+its own (SI-26/2546: 2 %, discount 100 %, net 0), its own section, right after the installation block. Its product
+is the System's shop drawings product.
 """
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare
 from odoo.tools.misc import formatLang
 
@@ -16,6 +22,8 @@ from odoo.addons.sipanel_commercial_scope_core.models.sipanel_tools import guard
 
 INSTALL_GUARD = 'sipanel_installation_sync'
 OPEN_STATES = ('draft', 'sent')
+# order fields that drive the managed lines and are frozen once the order is no longer a quotation
+MANAGED_PCT_FIELDS = ('sipanel_installation_pct', 'sipanel_shop_drawing_pct', 'sipanel_shop_drawing_discount')
 
 
 def format_pct(pct):
@@ -39,14 +47,31 @@ class SaleOrder(models.Model):
         string='Installation base', compute='_compute_sipanel_installation_amounts', currency_field='currency_id')
     sipanel_installation_amount = fields.Monetary(
         string='Installation amount', compute='_compute_sipanel_installation_amounts', currency_field='currency_id')
+    sipanel_shop_drawing_pct = fields.Float(
+        string='Shop drawings %', digits=(16, 4), tracking=True,
+        default=lambda self: self.env.company.sipanel_shop_drawing_pct_default,
+        help="Shop drawings as a percentage of the untaxed subtotal of the installation-base items plus the "
+             "Installation / Execution line. Empty or 0 = no shop drawings line. Frozen once the order is confirmed.")
+    sipanel_shop_drawing_discount = fields.Float(
+        string='Shop drawings discount %', digits=(16, 4), tracking=True,
+        default=lambda self: self.env.company.sipanel_shop_drawing_discount_default,
+        help="Discount printed on the shop drawings line (100 = the line is shown at net 0).")
 
     @api.depends('order_line.price_subtotal', 'order_line.sipanel_is_installation_line',
-                 'order_line.product_id.sipanel_installation_base')
+                 'order_line.sipanel_managed_role', 'order_line.product_id.sipanel_installation_base')
     def _compute_sipanel_installation_amounts(self):
         for order in self:
             order.sipanel_installation_base_amount = sum(order._sipanel_installation_base_lines().mapped('price_subtotal'))
-            order.sipanel_installation_amount = sum(order.order_line.filtered(
-                lambda l: l.sipanel_is_installation_line and not l.display_type).mapped('price_subtotal'))
+            order.sipanel_installation_amount = sum(order._sipanel_managed_lines('installation').filtered(
+                lambda l: not l.display_type).mapped('price_subtotal'))
+
+    @api.constrains('sipanel_shop_drawing_pct', 'sipanel_shop_drawing_discount')
+    def _check_sipanel_shop_drawing(self):
+        for order in self:
+            if order.sipanel_shop_drawing_pct < 0:
+                raise ValidationError(self.env._("The shop drawings percentage cannot be negative."))
+            if not 0.0 <= order.sipanel_shop_drawing_discount <= 100.0:
+                raise ValidationError(self.env._("The shop drawings discount must be between 0 and 100."))
 
     # ------------------------------------------------------------------ CRUD
     @api.model_create_multi
@@ -56,20 +81,24 @@ class SaleOrder(models.Model):
         return orders
 
     def write(self, vals):
-        if 'sipanel_installation_pct' in vals and not guard(self.env, INSTALL_GUARD):
+        if not guard(self.env, INSTALL_GUARD):
             frozen = self.filtered(lambda o: o.state not in OPEN_STATES)
-            if any(float_compare(o.sipanel_installation_pct, vals['sipanel_installation_pct'] or 0.0, precision_digits=4)
-                   for o in frozen):
-                raise UserError(self.env._(
-                    "Order %s is no longer a quotation; its installation percentage is frozen.", frozen[0].name))
+            for fname in set(MANAGED_PCT_FIELDS) & set(vals):
+                if any(float_compare(o[fname], vals[fname] or 0.0, precision_digits=4) for o in frozen):
+                    raise UserError(self.env._(
+                        "Order %(o)s is no longer a quotation; its %(f)s is frozen.",
+                        o=frozen[0].name, f=self._fields[fname].string))
         res = super().write(vals)
-        if (vals.get('sipanel_installation_pct') or 0.0) > 0 and not guard(self.env, INSTALL_GUARD):
-            # an explicit percentage needs a System with an installation product (B2) - say so now,
+        if not guard(self.env, INSTALL_GUARD):
+            # an explicit percentage needs a System with the product of that line (B2) - say so now,
             # not later when the first priced item is added
             for order in self.filtered(lambda o: o.state in OPEN_STATES):
-                order._sipanel_installation_product()
-        if not guard(self.env, INSTALL_GUARD) and {'sipanel_installation_pct', 'order_line', 'partner_id',
-                                                   'sipanel_requested_system_id'} & set(vals):
+                if (vals.get('sipanel_installation_pct') or 0.0) > 0:
+                    order._sipanel_installation_product()
+                if (vals.get('sipanel_shop_drawing_pct') or 0.0) > 0:
+                    order._sipanel_shop_drawing_product()
+        if not guard(self.env, INSTALL_GUARD) and ({'order_line', 'partner_id', 'sipanel_requested_system_id'}
+                                                   | set(MANAGED_PCT_FIELDS)) & set(vals):
             self._sipanel_sync_installation()
         return res
 
@@ -87,6 +116,15 @@ class SaleOrder(models.Model):
         return super()._get_copiable_order_lines().filtered(lambda l: not l.sipanel_is_installation_line)
 
     # ------------------------------------------------------------------ installation engine
+    def _sipanel_managed_lines(self, role):
+        """The system-managed lines (section + priced line) of one role. Lines made before the shop drawings
+        option have no role: they are installation lines."""
+        self.ensure_one()
+        if role == 'installation':
+            return self.order_line.filtered(
+                lambda l: l.sipanel_is_installation_line and l.sipanel_managed_role != 'shop_drawing')
+        return self.order_line.filtered(lambda l: l.sipanel_is_installation_line and l.sipanel_managed_role == role)
+
     def _sipanel_installation_base_lines(self):
         """Eligible supply / item lines (B1): flagged products only. Never the installation line itself,
         sections, notes or down payments."""
@@ -118,6 +156,20 @@ class SaleOrder(models.Model):
                 "percentage to 0 and quote installation explicitly.",
                 o=self.name, s=', '.join(systems.mapped('name'))))
         return systems or self.sipanel_requested_system_id
+
+    def _sipanel_shop_drawing_product(self):
+        self.ensure_one()
+        system = self._sipanel_installation_system()
+        if not system:
+            raise UserError(self.env._(
+                "Order %s has a shop drawings percentage but no SIPANEL System: add a Scope or set the "
+                "Requested System, or set the shop drawings percentage to 0.", self.name))
+        product = system.sudo().sipanel_shop_drawing_product_id
+        if not product:
+            raise UserError(self.env._(
+                "SIPANEL System \"%s\" has no shop drawings product configured; no shop drawings line can be "
+                "created. Configure it on the System, or set the shop drawings percentage to 0.", system.name))
+        return product
 
     def _sipanel_installation_product(self):
         self.ensure_one()
@@ -161,13 +213,19 @@ class SaleOrder(models.Model):
         return env._("Installation & Execution (%(pct)s%% of item subtotal)", pct=format_pct(pct))
 
     def _sipanel_sync_installation(self):
-        """Idempotent: create / update / remove the installation section + line. Quotations only."""
-        Line = self.env['sale.order.line']
+        """Idempotent: create / update / remove the installation block, then the shop drawings block (its base
+        includes the installation line). Quotations only."""
         for order in self:
             if order.state not in OPEN_STATES or guard(order.env, INSTALL_GUARD):
                 continue
+            order._sipanel_sync_installation_block()
+            order._sipanel_sync_shop_drawing_block()
+
+    def _sipanel_sync_installation_block(self):
+        Line = self.env['sale.order.line']
+        for order in self:
             ctx = guard_ctx(INSTALL_GUARD)
-            managed = order.order_line.filtered('sipanel_is_installation_line')
+            managed = order._sipanel_managed_lines('installation')
             pct = order.sipanel_installation_pct or 0.0
             if pct < 0:
                 raise UserError(self.env._("The installation percentage cannot be negative."))
@@ -193,7 +251,7 @@ class SaleOrder(models.Model):
             name = order._sipanel_installation_label(lang, pct)
             if product_l.description_sale:
                 name = f"{name}\n{product_l.description_sale}"
-            others = order.order_line - managed
+            others = order.order_line.filtered(lambda l: not l.sipanel_is_installation_line)
             top = max(others.mapped('sequence') or [0])
             section_vals = {'display_type': 'line_section', 'sequence': top + 1,
                             'name': order.with_context(lang=lang).env._("Installation & Execution")}
@@ -212,13 +270,66 @@ class SaleOrder(models.Model):
                     # the Scope separately-billable projection. _compute_price_unit below is the second guard.
                     record = Line.with_context(**ctx).create(dict(
                         {f: v for f, v in vals.items() if f != 'price_unit'},
-                        order_id=order.id, sipanel_is_installation_line=True))
+                        order_id=order.id, sipanel_is_installation_line=True, sipanel_managed_role='installation'))
                 changed = {f: v for f, v in vals.items() if Line._sipanel_value_differs(record, f, v)}
                 if changed:
                     record.with_context(**ctx).write(changed)
             if rebuilt:
                 order.with_context(**ctx).sipanel_installation_removed_zero_base = False
                 order._sipanel_installation_note('rebuilt', pct, base, amount)
+
+    def _sipanel_shop_drawing_label(self, lang):
+        env = self.with_context(lang=lang).env
+        return env._("Preparation of shop drawings")
+
+    def _sipanel_sync_shop_drawing_block(self):
+        """Shop drawings section + line, right after the installation block: price = percentage of the
+        installation base plus the installation line (untaxed), discount = the order's shop drawings discount.
+        Removed when the percentage is 0 or that base is 0, rebuilt as soon as both are set again."""
+        Line = self.env['sale.order.line']
+        for order in self:
+            ctx = guard_ctx(INSTALL_GUARD)
+            managed = order._sipanel_managed_lines('shop_drawing')
+            pct = order.sipanel_shop_drawing_pct or 0.0
+            if not pct and not managed:
+                continue
+            discount = order.sipanel_shop_drawing_discount or 0.0
+            if pct < 0:
+                raise UserError(self.env._("The shop drawings percentage cannot be negative."))
+            if not 0.0 <= discount <= 100.0:
+                raise UserError(self.env._("The shop drawings discount must be between 0 and 100."))
+            installation = order._sipanel_managed_lines('installation').filtered(lambda l: not l.display_type)
+            base = (sum(order._sipanel_installation_base_lines().mapped('price_subtotal'))
+                    + sum(installation.mapped('price_subtotal')))
+            if not pct or order.currency_id.is_zero(base):
+                if managed:
+                    managed.with_context(**ctx).unlink()
+                continue
+            product = order._sipanel_shop_drawing_product()
+            lang = order.partner_id.lang or order.env.lang or 'en_US'
+            name = order._sipanel_shop_drawing_label(lang)
+            product_l = product.with_context(lang=lang)
+            if product_l.description_sale:
+                name = f"{name}\n{product_l.description_sale}"
+            others = order.order_line - managed
+            top = max(others.mapped('sequence') or [0])
+            section_vals = {'display_type': 'line_section', 'sequence': top + 1,
+                            'name': order.with_context(lang=lang).env._("Shop Drawings")}
+            line_vals = {'product_id': product.id, 'product_uom_qty': 1.0, 'product_uom_id': product.uom_id.id,
+                         'price_unit': order.currency_id.round(base * pct / 100.0), 'discount': discount,
+                         'name': name, 'sequence': top + 2}
+            section = managed.filtered(lambda l: l.display_type == 'line_section')[:1]
+            line = managed.filtered(lambda l: not l.display_type)[:1]
+            (managed - section - line).with_context(**ctx).unlink()
+            for record, vals in ((section, section_vals), (line, line_vals)):
+                if not record:
+                    # same manual-price convention as the installation line (created without the amount)
+                    record = Line.with_context(**ctx).create(dict(
+                        {f: v for f, v in vals.items() if f != 'price_unit'},
+                        order_id=order.id, sipanel_is_installation_line=True, sipanel_managed_role='shop_drawing'))
+                changed = {f: v for f, v in vals.items() if Line._sipanel_value_differs(record, f, v)}
+                if changed:
+                    record.with_context(**ctx).write(changed)
 
     def _sipanel_installation_note(self, event, pct, base, amount=0.0):
         """Internal chatter note when the ENGINE removes the installation line (item subtotal 0) or rebuilds

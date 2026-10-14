@@ -21,6 +21,37 @@
             <xpath expr="//group[@name='sipanel_project_info']/group[1]" position="inside">
                 <field name="sipanel_installation_pct" readonly="state not in ['draft', 'sent']"/>
                 <field name="sipanel_installation_amount" invisible="not sipanel_installation_pct"/>
+                <field name="sipanel_shop_drawing_pct" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_shop_drawing_discount" invisible="not sipanel_shop_drawing_pct"
+                       readonly="state not in ['draft', 'sent']"/>
+            </xpath>
+            <!-- owner requirements 2026-10-14: the quotation's own copy of the System technical sheet, editable while
+                 the quotation is a draft, frozen once it is sent or confirmed (tech_sheet.py) -->
+            <xpath expr="//notebook/page[@name='other_information']" position="before">
+                <page string="Technical sheet" name="sipanel_tech_sheet">
+                    <field name="sipanel_has_tech_sheet" invisible="1"/>
+                    <group>
+                        <group>
+                            <field name="sipanel_liner_thickness" readonly="state != 'draft'"/>
+                        </group>
+                        <group>
+                            <button name="action_sipanel_load_tech_sheet" type="object" string="Reload technical sheet from the System"
+                                    invisible="state != 'draft' or not sipanel_requested_system_id" class="btn-secondary"
+                                    confirm="The System's technical sheet replaces this quotation's copy (and its edits). Continue?"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="sipanel_tech_image" widget="image" options="{'size': [0, 180]}" readonly="state != 'draft'"/>
+                    </group>
+                    <field name="sipanel_tech_spec_ids" readonly="state != 'draft'">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="number"/>
+                            <field name="title"/>
+                            <field name="description"/>
+                        </list>
+                    </field>
+                </page>
             </xpath>
             <!-- The Installation / Execution section + line are fully computed (decision 2026-10-06, option A):
                  their content cannot be edited in the quotation, instead of being silently re-governed on save.

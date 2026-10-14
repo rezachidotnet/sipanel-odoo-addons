@@ -10,6 +10,11 @@
                          help="Default percentage of the item subtotal proposed on new quotations. Empty or 0 = no installation line; each quotation can override it.">
                     <field name="sipanel_installation_pct_default"/>
                 </setting>
+                <setting id="sipanel_shop_drawing_pct_default" company_dependent="1" string="Shop Drawings"
+                         help="Default percentage of the item subtotal plus installation proposed on new quotations, and its discount. Empty or 0 = no shop drawings line.">
+                    <div class="row"><label for="sipanel_shop_drawing_pct_default" class="col-lg-5"/><field name="sipanel_shop_drawing_pct_default"/></div>
+                    <div class="row"><label for="sipanel_shop_drawing_discount_default" class="col-lg-5"/><field name="sipanel_shop_drawing_discount_default"/></div>
+                </setting>
             </xpath>
         </field>
     </record>

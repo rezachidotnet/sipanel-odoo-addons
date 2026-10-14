@@ -52,9 +52,10 @@ WEBSITE_OLD = ('href="https://sipanelco.ir">www.sipanelco.ir<', )
 WEBSITE_NEW = 'href="https://www.sipanelco.com">www.sipanelco.com<'  # owner review 2026-10-12 (footer, fa + en)
 SALESPERSON_EN, SALESPERSON_FA = 'Taleghani', 'طالقانی'              # owner review 2026-10-12 (fa quotations)
 OLD_PLACEHOLDERS = ('ساندویچ پانل تولید شرکت', 'شماره حساب جهت واریز پیش پرداخت')
+# line 3: owner requirements 2026-10-14, item 6 (replaces «مقادیر نهایی بر اساس متره اجرایی و صورت‌وضعیت محاسبه می‌شود.»)
 TERMS_LINES = ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
                'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
-               'مقادیر نهایی بر اساس متره اجرایی و صورت‌وضعیت محاسبه می‌شود.')
+               'مقادیر این پیش‌فاکتور تقریبی است. مقادیر دقیق پس از تهیه‌ی نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود.')
 TERMS_HTML = '<div data-oe-version="2.0">' + '</div><div>'.join(TERMS_LINES) + '</div>'
 TAGLINE_OLD = 'طراحی.تامین ونصب انواع سامانه های پوشش سالنهای صنعتی'
 TAGLINE_NEW = 'طراحی، تأمین و نصب انواع سامانه‌های پوشش سالن‌های صنعتی'
