@@ -19,14 +19,19 @@ import os
 OUT = os.environ.get('OUT', '/tmp/sipanel_p9')
 os.makedirs(OUT, exist_ok=True)
 SALES_UID = int(os.environ.get('SIPANEL_P9_SALES_UID', '10'))
-UNTAXED, TAX, TOTAL, INSTALL_10 = 27_352_380_000, 2_735_238_000, 30_087_618_000, 2_486_580_000
+# owner 2026-10-14 (P8b): flashing 3:1 prices -> supply 24,876,744,000, installation 10 %, shop drawings net 0
+UNTAXED, TAX, TOTAL, INSTALL_10 = 27_364_418_400, 2_736_441_840, 30_100_860_240, 2_487_674_400
 # P8b (owner requirements 2026-10-14): the flashing line is split 2:1 (108.47 + 54.23 = 162.70 m, same price)
-SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 34_000_000), ('SIP-000076', 54.23, 34_000_000),
+SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 43_800_000), ('SIP-000076', 54.23, 14_600_000),
                 ('SIP-000077', 18.0, 67_000_000)]
-SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_047_600, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
+SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_288_368, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
         'section_fa': 'نقشه‌های اجرایی', 'product_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
 SHEET = {'rows': 8, 'image_sha256': 'e64859f0257b42676a2a8d910d503e827759047b3ebe2bb9c7dee569c478dfbc',
          'heading_fa': 'مشخصات فنی سیستم استندینگ سیم', 'row2_fa': 'ضخامت ۰.۷ میلیمتر', 'row2_en': '0.7 mm thick',
+         'heading_en': 'Technical Specification of the Standing Seam System', 'system_en': 'Standing Seam',
+         'system_fa': 'استندینگ سیم', 'material': ('Top sheet material', 'جنس ورق رویه'),
+         'row7_fa': 'ورق فولادی گالوانیزه‌ی پیش‌رنگ به ضخامت ۰.۵ میلیمتر', 'row7_en': 'Pre-painted galvanized steel sheet',
+         'row8_fa': 'سازه‌ی نگهدارنده (پرلین)',
          'liner': '0.7'}
 EXPECTED = {  # scope code: (new version name, previous version name, fa_IR label, description)
     'CS-STANDING-SEAM': ('CS-STANDING-SEAM v3', 'CS-STANDING-SEAM v2', 'سیستم پوشش سقف استندینگ سیم',
@@ -48,9 +53,10 @@ TERMS = {'payment_term_en': '70% in advance, 30% before delivery.', 'delivery_da
          'terms_lines': ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
                          'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
                          'مقادیر این پیش‌فاکتور تقریبی است. مقادیر دقیق پس از تهیه‌ی نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود.'),
-         'lines': [('SIP-000074', 'سیستم پوشش سقف استندینگ سیم (فقط تأمین)'),
-                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر'),     # P8b, 2026-10-14
-                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر'),
+         # P8b 2026-10-14: the material chosen on the line follows as the native «جنس ورق رویه: گالوانیزه» line
+         'lines': [('SIP-000074', 'سیستم پوشش سقف و دیوار استندینگ سیم (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
+                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
+                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
                    ('SIP-000077', 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)')]}
 R = {'db': env.cr.dbname, 'checks': {}}
 su = env(su=True)
@@ -165,10 +171,52 @@ try:
     check('si26_2546_liner_0_7', ref.sipanel_liner_thickness == SHEET['liner']
           and SHEET['row2_fa'] in R['tech_sheet']['printed_fa'][1][2] and SHEET['row2_en'] in R['tech_sheet']['printed_en'][1][2]
           if len(so_rows) >= 2 else False, R['tech_sheet']['printed_fa'][1:2])
-    check('si26_2546_words_en', R['si26_2546']['words_en'] == 'Thirty Billion, Eighty-Seven Million, Six Hundred And '
-                                                              'Eighteen Thousand Rials only', R['si26_2546']['words_en'])
-    check('si26_2546_words_fa', R['si26_2546']['words_fa'] == 'سی میلیارد و هشتاد و هفت میلیون و ششصد و هجده هزار ریال',
-          R['si26_2546']['words_fa'])
+    printed_fa, printed_en = R['tech_sheet']['printed_fa'], R['tech_sheet']['printed_en']
+    check('si26_2546_row7_galvanized', len(printed_fa) == 8 and printed_fa[6][2].startswith(SHEET['row7_fa'])
+          and printed_en[6][2].startswith(SHEET['row7_en']), [printed_fa[6:7], printed_en[6:7]])
+    check('si26_2546_row8_purlin', len(printed_fa) == 8 and printed_fa[7][1] == SHEET['row8_fa'], printed_fa[7:8])
+    attr = su['product.attribute'].with_context(lang='en_US').search([('name', '=', SHEET['material'][0])])
+    galv = attr.value_ids.sorted(lambda v: (v.sequence, v.id))[:1]
+    alu = attr.value_ids - galv
+    R['material'] = {'attribute': stored(attr, 'name') if len(attr) == 1 else None, 'create_variant': attr.create_variant,
+                     'values': [(stored(v, 'name'), v.sipanel_price_required) for v in attr.value_ids],
+                     'price_extras': [(p.product_tmpl_id.default_code, p.name, p.price_extra) for p in
+                                      su['product.template.attribute.value'].search([('attribute_id', 'in', attr.ids)])]}
+    check('material_attribute_native_no_variant', len(attr) == 1 and attr.create_variant == 'no_variant'
+          and stored(attr, 'name').get('fa_IR') == SHEET['material'][1] and len(attr.value_ids) == 2
+          and alu.sipanel_price_required and not galv.sipanel_price_required, R['material'])
+    priced = ref.order_line.filtered(lambda l: l.product_id.default_code in ('SIP-000074', 'SIP-000076'))
+    check('si26_2546_material_galvanized', len(priced) == 3 and all(
+        l.product_no_variant_attribute_value_ids.product_attribute_value_id == galv for l in priced)
+          and all(len(l.product_id.product_tmpl_id.with_context(active_test=False).product_variant_ids) == 1 for l in priced),
+          [(l.id, l.product_no_variant_attribute_value_ids.mapped('name')) for l in priced])
+    # aluminium with price extra 0 blocks printing (rolled back with the rest of this read-only check)
+    if alu and priced:
+        alu_ptav = priced[0].product_id.product_tmpl_id.attribute_line_ids.product_template_value_ids.filtered(
+            lambda p: p.product_attribute_value_id == alu)
+        class Probe(Exception):
+            pass
+        problems = None
+        try:
+            with su.cr.savepoint():
+                priced[0].product_no_variant_attribute_value_ids = [(6, 0, alu_ptav.ids)]
+                problems = ref._sipanel_customer_document_problems()
+                raise Probe
+        except Probe:
+            pass
+        su.invalidate_all()
+        R['aluminium_probe'] = problems
+        check('aluminium_without_price_blocks', 'قیمت گزینه‌ی آلومینیوم تعیین نشده است' in (problems or []), problems)
+        check('aluminium_probe_undone', all(l.product_no_variant_attribute_value_ids.product_attribute_value_id == galv
+                                            for l in priced))
+    names = {lang: ref.with_context(lang=lang)._sipanel_system_print_label() for lang in ('en_US', 'fa_IR')}
+    check('si26_2546_system_name_per_language', names == {'en_US': SHEET['system_en'], 'fa_IR': SHEET['system_fa']}, names)
+    # 30,100,860,240 (owner 2026-10-14): native words, reported in p9_summary.json for review
+    words_en, words_fa = R['si26_2546']['words_en'], R['si26_2546']['words_fa']
+    check('si26_2546_words_en', words_en.startswith('Thirty Billion, One Hundred Million, Eight Hundred')
+          and 'Sixty Thousand' in words_en and words_en.endswith('Forty Rials only'), words_en)
+    check('si26_2546_words_fa', words_fa.startswith('سی میلیارد') and 'شصت هزار' in words_fa and 'چهل' in words_fa
+          and words_fa.endswith('ریال'), words_fa)
 
     # ---- commercial terms and data (P6b, requirements 2026-10-08 items 2-12)
     import datetime
@@ -278,7 +326,10 @@ try:
         check(f'layout_{lang}_tech_sheet_page', order_ok and len(spec_rows) == SHEET['rows']
               and 'page-break-after: always' in (sheet_div[0].get('style') or '')
               and bool(sheet_div[0].xpath(".//img[starts-with(@src, 'data:image/png;base64,')]"))
-              and (lang != 'fa_IR' or heading == SHEET['heading_fa']), [order_ok, len(spec_rows), heading])
+              and heading == SHEET['heading_fa' if lang == 'fa_IR' else 'heading_en'], [order_ok, len(spec_rows), heading])
+        system_cell = doc.xpath("//td[contains(@class, 'o_sipanel_page1_requested_system')]")
+        check(f'layout_{lang}_page1_system_name', len(system_cell) == 1 and ' '.join(system_cell[0].text_content().split())
+              == SHEET['system_fa' if lang == 'fa_IR' else 'system_en'], [c.text_content() for c in system_cell])
         check(f'layout_{lang}_no_incoterm', 'EXW' not in text and 'Incoterm' not in text and 'اینکوترم' not in text)
         check(f'layout_{lang}_signature_left_terms_right', cells == ['sipanel_signature', 'sipanel_terms']
               and closing[0].get('dir') == 'ltr' and not doc.xpath("//div[contains(@class, 'o_sipanel_signature_block')]")

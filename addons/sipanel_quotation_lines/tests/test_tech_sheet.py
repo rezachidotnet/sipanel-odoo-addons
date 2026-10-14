@@ -281,3 +281,102 @@ class TestTechSheetAndShopDrawings(SipanelCoreCase):
         new = self._order()
         self.assertEqual((new.sipanel_shop_drawing_pct, new.sipanel_shop_drawing_discount), (2.0, 100.0),
                          'company defaults proposed on new quotations')
+
+    # ------------------------------------------------------------------ top-sheet material (native no_variant attribute)
+    def _material_fixture(self):
+        env = self.env
+        attr = env['product.attribute'].create({'name': f'{PT} Top sheet material', 'create_variant': 'no_variant',
+                                                'display_type': 'radio'})
+        set_translation(attr, 'name', en=f'{PT} Top sheet material', fa='جنس ورق رویه')
+        Value = env['product.attribute.value']
+        galv = Value.create({'attribute_id': attr.id, 'name': 'Galvanized', 'sequence': 1})
+        alu = Value.create({'attribute_id': attr.id, 'name': 'Aluminium', 'sequence': 2, 'sipanel_price_required': True})
+        set_translation(galv, 'name', en='Galvanized', fa='گالوانیزه')
+        set_translation(alu, 'name', en='Aluminium', fa='آلومینیوم')
+        set_translation(galv, 'sipanel_spec_text', en='Galvanized steel 0.5 mm', fa='ورق فولادی گالوانیزه ۰.۵')
+        set_translation(alu, 'sipanel_spec_text', en='Aluminium 3105 0.9 mm', fa='ورق آلومینیوم ۳۱۰۵')
+        product = env['product.product'].create({
+            'name': f'{PT} Material Roof', 'type': 'service', 'sale_ok': True, 'list_price': 88_000_000.0,
+            'uom_id': self.uom_m.id, 'taxes_id': [(6, 0, self.vat.ids)]})
+        variants = product.product_tmpl_id.product_variant_ids
+        product.product_tmpl_id.write({'attribute_line_ids': [(0, 0, {'attribute_id': attr.id,
+                                                                      'value_ids': [(6, 0, (galv | alu).ids)]})]})
+        self.assertEqual(product.product_tmpl_id.product_variant_ids, variants, 'no_variant: no new variant')
+        ptavs = product.product_tmpl_id.attribute_line_ids.product_template_value_ids
+        p_galv = ptavs.filtered(lambda p: p.product_attribute_value_id == galv)
+        p_alu = ptavs.filtered(lambda p: p.product_attribute_value_id == alu)
+        system = self.env['account.analytic.account'].create({'name': f'{PT} Material System',
+                                                              'plan_id': self.plan_system.id})
+        row = env['sipanel.system.spec.line'].create({'system_id': system.id, 'number': 7, 'sequence': 70,
+                                                      'title': 'Top sheet', 'attribute_id': attr.id})
+        set_translation(row, 'title', en='Top sheet', fa='ورق رویه')
+        return attr, galv, alu, product, p_galv, p_alu, system
+
+    def test_09_material_option_prices_text_and_gate(self):
+        attr, galv, alu, product, p_galv, p_alu, system = self._material_fixture()
+        order = self._order(self.cust_fa, system=system)
+        line = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': product.id,
+                                                   'product_uom_qty': 10.0})
+        line.price_unit = 80_000_000.0            # typed price (manual)
+        self.assertEqual(self._rows(order, 'fa_IR'), [('۷', 'ورق رویه', 'ورق فولادی گالوانیزه ۰.۵')],
+                         'no value chosen: the first value (galvanized) is the default')
+        self.assertEqual(order._sipanel_customer_document_problems(), [])
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_alu.ids)]
+        self.assertEqual(line.price_unit, 80_000_000.0, 'price extra 0: unchanged')
+        self.assertEqual(line.name.split('\n')[-1], 'جنس ورق رویه: آلومینیوم', 'native attribute line, order language')
+        self.assertEqual(self._rows(order, 'fa_IR')[0][2], 'ورق آلومینیوم ۳۱۰۵')
+        self.assertEqual(self._rows(order, 'en_US')[0][2], 'Aluminium 3105 0.9 mm')
+        self.assertIn('قیمت گزینه‌ی آلومینیوم تعیین نشده است', order._sipanel_customer_document_problems())
+        with self.assertRaisesRegex(UserError, 'قیمت گزینه‌ی آلومینیوم تعیین نشده است'):
+            self.env['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', order.ids)
+        with self.assertRaises(UserError):
+            order.action_quotation_send()
+        # the price is decided: the typed price moves by the price extra and stays typed
+        p_alu.price_extra = 5_000_000.0
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_galv.ids)]
+        self.assertEqual(line.price_unit, 75_000_000.0, 'typed price = galvanized base + extra: back to galvanized')
+        self.assertEqual(line.name.split('\n')[-1], 'جنس ورق رویه: گالوانیزه', 'the attribute line is replaced')
+        self.assertEqual(line.name.count('جنس ورق رویه'), 1)
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_alu.ids)]
+        self.assertEqual(line.price_unit, 80_000_000.0)
+        self.assertEqual(order._sipanel_customer_document_problems(), [], 'priced aluminium prints')
+        # two lines with different materials: refused
+        second = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': product.id,
+                                                     'product_uom_qty': 1.0})
+        second.product_no_variant_attribute_value_ids = [(6, 0, p_galv.ids)]
+        self.assertTrue(any('یکسان نیست' in p for p in order._sipanel_customer_document_problems()))
+        second.unlink()
+        self.assertEqual(len(product.product_tmpl_id.product_variant_ids), 1, 'no variants created')
+
+    def test_10_material_text_frozen_when_sent(self):
+        attr, galv, alu, product, p_galv, p_alu, system = self._material_fixture()
+        order = self._order(self.cust_fa, system=system)
+        line = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': product.id,
+                                                   'product_uom_qty': 10.0})
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_galv.ids)]
+        order.action_quotation_sent()
+        row = order.sipanel_tech_spec_ids
+        self.assertEqual(row.attribute_value_id, galv, 'the value printed at sending is kept')
+        self.assertEqual(self._stored(row, 'description'), {'en_US': 'Galvanized steel 0.5 mm', 'fa_IR': 'ورق فولادی گالوانیزه ۰.۵'})
+        set_translation(galv, 'sipanel_spec_text', en='CHANGED', fa='تغییر')
+        self.assertEqual(self._rows(order, 'fa_IR')[0][2], 'ورق فولادی گالوانیزه ۰.۵', 'later text changes do not reach it')
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_alu.ids)]
+        self.assertTrue(any('پس از ارسال' in p for p in order._sipanel_customer_document_problems()),
+                        'a material changed after sending blocks printing')
+
+    def test_11_system_name_printed_in_the_document_language(self):
+        system = self.env['account.analytic.account'].create({'name': f'{PT} Seam EN', 'plan_id': self.plan_system.id})
+        set_translation(system, 'name', en=f'{PT} Seam EN', fa='استندینگ سیم آزمایشی')
+        order = self._order(self.cust_fa, system=system)
+        self.assertEqual(order.sipanel_requested_system_name_snapshot, 'استندینگ سیم آزمایشی', 'Page 1 snapshot as before')
+        self.assertEqual(order.with_context(lang='en_US')._sipanel_system_print_label(), f'{PT} Seam EN')
+        self.assertEqual(order.with_context(lang='fa_IR')._sipanel_system_print_label(), 'استندینگ سیم آزمایشی')
+        system.name = f'{PT} Seam RENAMED'
+        self.assertEqual(order.with_context(lang='en_US')._sipanel_system_print_label(), f'{PT} Seam EN',
+                         'captured when the System was set')
+        for lang, expected in (('en_US', f'{PT} Seam EN'), ('fa_IR', 'استندینگ سیم آزمایشی')):
+            order.partner_id.lang = lang
+            cell = self._doc(order).xpath("//td[contains(@class, 'o_sipanel_page1_requested_system')]")
+            self.assertEqual(' '.join(cell[0].text_content().split()), expected, lang)
+        order.sipanel_requested_system_id = False
+        self.assertFalse(order.sipanel_system_print_name)

@@ -101,6 +101,12 @@
         <xpath expr="//td[hasclass('o_sipanel_page1_project_site')]/t[@t-if='sipanel_site']" position="replace">
             <t t-if="sipanel_site"><span class="o_sipanel_project_site_line" t-out="doc._sipanel_project_site_line()"/></t>
         </xpath>
+        <!-- Owner requirements 2026-10-14, item 3: the Requested System of Page 1 in the document language ("Standing
+             Seam" in English, «استندینگ سیم» in Persian), from the per-language name captured with the System; earlier
+             quotations print their Page 1 snapshot as before. -->
+        <xpath expr="//td[hasclass('o_sipanel_page1_requested_system')]/span[@t-if='doc.sipanel_requested_system_name_snapshot']" position="attributes">
+            <attribute name="t-out">doc._sipanel_system_print_label()</attribute>
+        </xpath>
         <!-- Owner review 2026-10-12, item 2: closing block of every quotation, right after the amount in words.
              Signature and stamp on the LEFT of the page, the terms block (terms text, payment terms, delivery time,
              optional bank line) on the RIGHT, side by side, in fa_IR and en_US alike (the outer block is laid out

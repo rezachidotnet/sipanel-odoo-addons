@@ -29,15 +29,16 @@ MARKERS = [
     ('post_synthetic_fa_IR_install40.pdf', 'نصب و اجرا', 'installation section (fa_IR)'),
     ('p9_SI-26-2546_en_US.pdf', 'Rials only', 'P9 way A: amount in words'),
     ('p9_SI-26-2546_fa_IR.pdf', 'نصب و اجرا', 'P9 way A: installation section (fa_IR)'),
-    ('p9_SI-26-2546_en_US.pdf', '30,087,618,000', 'P9 way A: total incl. VAT'),
-    ('p9_SI-26-2546_fa_IR.pdf', '30,087,618,000', 'P9 way A: total incl. VAT (fa_IR)'),
+    ('p9_SI-26-2546_en_US.pdf', '30,100,860,240', 'P9: total incl. VAT (owner 2026-10-14)'),
+    ('p9_SI-26-2546_fa_IR.pdf', '30,100,860,240', 'P9: total incl. VAT (fa_IR)'),
+    ('p9_SI-26-2546_fa_IR.pdf', '27,364,418,400', 'P9: untaxed (owner 2026-10-14)'),
     # requirements 2026-10-08 (code: items 1-4, 10; data P6b: items 6-12)
     # (Persian markers without digits / trailing punctuation: RTL extraction may move them)
     ('p9_SI-26-2546_fa_IR.pdf', 'شرایط پرداخت', 'payment terms in the terms section'),
     ('p9_SI-26-2546_fa_IR.pdf', 'زمان تحویل', 'delivery time label'),
     ('p9_SI-26-2546_fa_IR.pdf', 'روز کاری پس از دریافت پیش‌پرداخت', 'delivery time text'),
     ('p9_SI-26-2546_fa_IR.pdf', 'اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است', 'new terms text'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'سیستم پوشش سقف استندینگ سیم', 'Persian line description'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'سیستم پوشش سقف و دیوار استندینگ سیم', 'Persian line description (roof + wall, 2026-10-14)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'متعلقات', 'Persian section'),
     ('p9_SI-26-2546_fa_IR.pdf', 'متر طول', 'meter fa_IR name'),
     ('p9_SI-26-2546_fa_IR.pdf', 'طالقان', 'project site'),
@@ -61,7 +62,14 @@ MARKERS = [
     ('p9_SI-26-2546_fa_IR.pdf', 'سیستم پوشش سقف و دیوار استندینگ سیم', 'first section roof + wall'),
     ('p9_SI-26-2546_fa_IR.pdf', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا', 'flashing split into two lines'),
     ('p9_SI-26-2546_fa_IR.pdf', 'تهیه‌ی نقشه‌های اجرایی', 'shop drawings line (fa_IR)'),
-    ('p9_SI-26-2546_fa_IR.pdf', '547,047,600', 'shop drawings price = 2 % of supply + installation'),
+    ('p9_SI-26-2546_fa_IR.pdf', '547,288,368', 'shop drawings price = 2 % of supply + installation'),
+    ('p9_SI-26-2546_fa_IR.pdf', '43,800,000', 'flashing 58 cm price'),
+    ('p9_SI-26-2546_fa_IR.pdf', '14,600,000', 'flashing 20 cm price'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'جنس ورق رویه', 'material on the lines (native no_variant attribute)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'ورق فولادی گالوانیزه‌ی پیش‌رنگ', 'row 7 = galvanized text'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'سازه‌ی نگهدارنده', 'row 8 purlin'),
+    ('p9_SI-26-2546_en_US.pdf', 'Technical Specification of the Standing Seam System', 'English sheet title'),
+    ('p9_SI-26-2546_en_US.pdf', 'Pre-painted galvanized steel sheet', 'row 7 = galvanized text (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'مقادیر این پیش‌فاکتور تقریبی است', 'terms line 3 (item 6)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود', 'terms line 3 (item 6)'),
 ]
@@ -93,6 +101,7 @@ ABSENT = [
     ('p9_SI-26-2546_fa_IR.pdf', 'متره اجرایی', 'old terms line 3 replaced (item 6)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'liner_thickness', 'thickness placeholder replaced (fa_IR)'),
     ('p9_SI-26-2546_en_US.pdf', 'liner_thickness', 'thickness placeholder replaced (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'آلومینیوم پیش‌رنگ آلیاژ', 'aluminium text not printed for a galvanized quotation'),
     ('post_SI-26-2546_fa_IR.pdf', 'مشخصات فنی', 'no technical sheet page without a sheet (earlier layout)'),
     ('post_SI-26-2546_en_US.pdf', 'Technical Specification', 'no technical sheet page without a sheet (en_US)'),
 ]
@@ -150,7 +159,7 @@ def installation_rows(evid):
             continue
         layout = subprocess.run(['pdftotext', '-layout', files[0], '-'], capture_output=True, text=True,
                                 check=True).stdout
-        rows = [r for r in layout.splitlines() if r.count('2,486,580,000') == 2 and '10%' in r]
+        rows = [r for r in layout.splitlines() if r.count('2,487,674,400') == 2 and '10%' in r]
         unit = squash(names[lang])
         good = len(rows) == 1 and unit in squash(rows[0])
         qty = re.findall(r'(?<![\d,])(\d+(?:\.\d+)?)(?![\d,%])', rows[0]) if rows else []

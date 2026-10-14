@@ -23,6 +23,7 @@
                             <field name="number"/>
                             <field name="title"/>
                             <field name="description"/>
+                            <field name="attribute_id" optional="show" options="{'no_create': True}"/>
                         </list>
                     </field>
                 </page>

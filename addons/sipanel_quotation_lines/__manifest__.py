@@ -4,7 +4,8 @@
     'summary': 'Quotation lines: technical description under the item title, Installation / Execution '
                'percentage line, amount in words under the totals; commercial terms (payment terms, delivery '
                'time, bank account, validity) required before a quotation is printed or sent; System technical sheet '
-               '(schematic + specification rows) printed on its own page; Shop Drawings percentage line',
+               '(schematic + specification rows) printed on its own page; Shop Drawings percentage line; quotation options as '
+               'native no_variant attributes (top-sheet material)',
     'version': '19.0.1.3.0',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
@@ -22,6 +23,7 @@
         'views/res_config_settings_views.xml',
         'views/sale_order_views.xml',
         'views/res_users_views.xml',
+        'views/product_attribute_views.xml',
         'report/sale_report_templates.xml',
     ],
     # v1 master data (documented in the implementation report): installation base flag on the

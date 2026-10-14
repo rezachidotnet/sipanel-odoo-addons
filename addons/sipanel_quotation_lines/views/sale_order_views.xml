@@ -49,6 +49,8 @@
                             <field name="number"/>
                             <field name="title"/>
                             <field name="description"/>
+                            <field name="attribute_id" optional="hide" readonly="1"/>
+                            <field name="attribute_value_id" optional="hide"/>
                         </list>
                     </field>
                 </page>
