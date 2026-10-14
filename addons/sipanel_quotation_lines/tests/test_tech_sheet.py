@@ -380,3 +380,18 @@ class TestTechSheetAndShopDrawings(SipanelCoreCase):
             self.assertEqual(' '.join(cell[0].text_content().split()), expected, lang)
         order.sipanel_requested_system_id = False
         self.assertFalse(order.sipanel_system_print_name)
+
+    def test_12_wide_schematic_is_stored_byte_identical(self):
+        """P1 run 20261014T201714Z: ir.attachment shrinks a PNG wider than 1920 px; the schematic (1938 px) must be
+        printed exactly as delivered, on the System and on every quotation copy."""
+        buf = io.BytesIO()
+        Image.new('RGB', (1938, 20), (90, 90, 90)).save(buf, 'PNG')
+        wide = base64.b64encode(buf.getvalue())
+        system = self.env['account.analytic.account'].create({'name': f'{PT} Wide System', 'plan_id': self.plan_system.id})
+        system.with_context(image_no_postprocess=True).sipanel_tech_image = wide
+        order = self._order(system=system)
+        self.env.flush_all()
+        system.invalidate_recordset()
+        order.invalidate_recordset()
+        self.assertEqual(system.sipanel_tech_image, wide)
+        self.assertEqual(order.sipanel_tech_image, wide, 'the quotation copy is not resized')

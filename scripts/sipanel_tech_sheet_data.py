@@ -234,8 +234,12 @@ try:
         image_bytes = f.read()
     check('schematic_file_v3', hashlib.sha256(image_bytes).hexdigest() == IMAGE_SHA256, len(image_bytes))
     if not seam.sipanel_tech_image:
-        seam.sipanel_tech_image = base64.b64encode(image_bytes)
+        # as is: ir.attachment shrinks images wider than base.image_autoresize_max_px (1920; v3 is 1938 px wide) -
+        # P1 run 20261014T201714Z, the committed image differed from the file
+        seam.with_context(image_no_postprocess=True).sipanel_tech_image = base64.b64encode(image_bytes)
         changed('System schematic set')
+    env.flush_all()
+    seam.invalidate_recordset(['sipanel_tech_image'])          # checked as stored, not from the cache
     check('system_schematic', hashlib.sha256(base64.b64decode(seam.sipanel_tech_image)).hexdigest() == IMAGE_SHA256)
     if not seam.sipanel_tech_spec_ids:
         Row = env['sipanel.system.spec.line'].with_context(lang='en_US')
@@ -353,6 +357,8 @@ try:
           shop_line.name if len(shop_line) == 1 else None)
     check('liner_thickness', ref.sipanel_liner_thickness == LINER)
     snapshot = rows_of(ref.sipanel_tech_spec_ids)
+    env.flush_all()
+    ref.invalidate_recordset(['sipanel_tech_image'])
     check('si26_2546_sheet_snapshot', snapshot == sheet and bool(ref.sipanel_tech_image)
           and hashlib.sha256(base64.b64decode(ref.sipanel_tech_image)).hexdigest() == IMAGE_SHA256, snapshot)
     printed_fa = ref.with_context(lang='fa_IR')._sipanel_tech_sheet_rows()

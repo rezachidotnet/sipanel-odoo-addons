@@ -184,9 +184,11 @@ class SaleOrder(models.Model):
             system = order.sipanel_requested_system_id.sudo()
             if order.sipanel_tech_spec_ids:
                 order.sipanel_tech_spec_ids.with_context(**guard_ctx(SHEET_GUARD)).unlink()
-            # written only when it changes: a System without a sheet costs no write on every new quotation
+            # written only when it changes: a System without a sheet costs no write on every new quotation;
+            # stored byte-identical (ir.attachment would shrink an image wider than base.image_autoresize_max_px)
             if (order.sipanel_tech_image or False) != (system.sipanel_tech_image or False):
-                order.with_context(**guard_ctx(SHEET_GUARD)).sipanel_tech_image = system.sipanel_tech_image or False
+                order.with_context(image_no_postprocess=True, **guard_ctx(SHEET_GUARD)).sipanel_tech_image = (
+                    system.sipanel_tech_image or False)
             for src in system.sipanel_tech_spec_ids:
                 titles = stored_translations(src, 'title')
                 descriptions = stored_translations(src, 'description')
