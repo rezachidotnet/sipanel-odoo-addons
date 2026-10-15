@@ -159,13 +159,18 @@ try:
     sha = lambda b64: hashlib.sha256(base64.b64decode(b64)).hexdigest() if b64 else None
     sys_rows = [(r.number, stored(r, 'title'), stored(r, 'description')) for r in seam.sipanel_tech_spec_ids.sorted(
         lambda r: (r.sequence, r.number, r.id))] if len(seam) == 1 else []
+    sys_linked = [bool(r.attribute_id) for r in seam.sipanel_tech_spec_ids.sorted(
+        lambda r: (r.sequence, r.number, r.id))] if len(seam) == 1 else []
     so_rows = [(r.number, stored(r, 'title'), stored(r, 'description')) for r in ref.sipanel_tech_spec_ids.sorted(
         lambda r: (r.sequence, r.number, r.id))]
     R['tech_sheet'] = {'system_rows': sys_rows, 'printed_fa': ref.with_context(lang='fa_IR')._sipanel_tech_sheet_rows(),
                        'printed_en': ref.with_context(lang='en_US')._sipanel_tech_sheet_rows(),
                        'liner': ref.sipanel_liner_thickness}
     check('system_tech_sheet', len(sys_rows) == SHEET['rows'] and [n for n, _t, _d in sys_rows] == list(range(1, 9))
-          and all(t.get('fa_IR') and t.get('en_US') and d.get('fa_IR') and d.get('en_US') for _n, t, d in sys_rows)
+          # a row linked to an attribute (row 7, top-sheet material) has no text of its own: it prints the chosen value's
+          and all(t.get('fa_IR') and t.get('en_US') and (linked or d.get('fa_IR') and d.get('en_US'))
+                  for (_n, t, d), linked in zip(sys_rows, sys_linked))
+          and sys_linked == [n == 7 for n in range(1, 9)]
           and sha(seam.sipanel_tech_image) == SHEET['image_sha256'], [n for n, _t, _d in sys_rows])
     check('si26_2546_tech_sheet_snapshot', so_rows == sys_rows and sha(ref.sipanel_tech_image) == SHEET['image_sha256'])
     check('si26_2546_liner_0_7', ref.sipanel_liner_thickness == SHEET['liner']
