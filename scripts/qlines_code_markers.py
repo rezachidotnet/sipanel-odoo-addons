@@ -55,21 +55,20 @@ MARKERS = [
     ('p9_SI-26-2546_en_US.pdf', 'Sales Department', 'signature caption'),
     # owner requirements 2026-10-14 (code: technical sheet page, shop drawings line; data P8b + P6b item 6)
     ('p9_SI-26-2546_fa_IR.pdf', 'مشخصات فنی سیستم استندینگ سیم', 'technical sheet page title'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'لایه‌ی بخاربند', 'technical sheet row 3 (fa_IR)'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'پشم سنگ تخته‌ای بدون روکش', 'technical sheet row 6 (fa_IR)'),
-    ('p9_SI-26-2546_en_US.pdf', 'Vapour barrier', 'technical sheet row 3 (en_US translation)'),
-    ('p9_SI-26-2546_en_US.pdf', '0.7 mm thick', 'liner thickness 0.7 printed in row 2 (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'لایه‌ی بخاربند', 'technical sheet row 2 (fa_IR)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'پشم سنگ تخته‌ای بدون روکش', 'technical sheet row 5 (fa_IR)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Vapour barrier', 'technical sheet row 2 (en_US translation)'),
+    ('p9_SI-26-2546_en_US.pdf', '0.7 mm thick', 'liner thickness 0.7 printed in row 1 (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'سیستم پوشش سقف و دیوار استندینگ سیم', 'first section roof + wall'),
     ('p9_SI-26-2546_fa_IR.pdf', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا', 'flashing split into two lines'),
     ('p9_SI-26-2546_fa_IR.pdf', 'تهیه‌ی نقشه‌های اجرایی', 'shop drawings line (fa_IR)'),
     ('p9_SI-26-2546_fa_IR.pdf', '547,288,368', 'shop drawings price = 2 % of supply + installation'),
     ('p9_SI-26-2546_fa_IR.pdf', '43,800,000', 'flashing 58 cm price'),
     ('p9_SI-26-2546_fa_IR.pdf', '14,600,000', 'flashing 20 cm price'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'جنس ورق رویه', 'material on the lines (native no_variant attribute)'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'ورق فولادی گالوانیزه‌ی پیش‌رنگ', 'row 7 = galvanized text'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'سازه‌ی نگهدارنده', 'row 8 purlin'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'ورق فولادی گالوانیزه‌ی پیش‌رنگ', 'row 6 = galvanized text'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'سازه‌ی نگهدارنده', 'row 7 purlin'),
     ('p9_SI-26-2546_en_US.pdf', 'Technical Specification of the Standing Seam System', 'English sheet title'),
-    ('p9_SI-26-2546_en_US.pdf', 'Pre-painted galvanized steel sheet', 'row 7 = galvanized text (en_US)'),
+    ('p9_SI-26-2546_en_US.pdf', 'Pre-painted galvanized steel sheet', 'row 6 = galvanized text (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'مقادیر این پیش‌فاکتور تقریبی است', 'terms line 3 (item 6)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود', 'terms line 3 (item 6)'),
 ]
@@ -103,6 +102,12 @@ ABSENT = [
     ('p9_SI-26-2546_en_US.pdf', 'liner_thickness', 'thickness placeholder replaced (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'آلومینیوم پیش‌رنگ آلیاژ', 'aluminium text not printed for a galvanized quotation'),
     ('post_SI-26-2546_fa_IR.pdf', 'مشخصات فنی', 'no technical sheet page without a sheet (earlier layout)'),
+    # owner 2026-10-16: no shop drawings row in the sheet (its price line stays); no material line under the lines
+    ('p9_SI-26-2546_fa_IR.pdf', 'تهیه‌ی نقشه‌های شاپ و جزئیات اجرایی', 'shop drawings row removed from the sheet'),
+    ('p9_SI-26-2546_en_US.pdf', 'execution details of the roof and wall cladding', 'shop drawings row removed (en_US)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'جنس ورق رویه:', 'material line not printed under the lines'),
+    ('p9_SI-26-2546_fa_IR.pdf', ':جنس ورق رویه', 'material line not printed (RTL extraction order)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'رویه: گالوانیزه', 'material value not printed under the lines'),
     ('post_SI-26-2546_en_US.pdf', 'Technical Specification', 'no technical sheet page without a sheet (en_US)'),
 ]
 # owner requirements 2026-10-14, item 1: page 1 = info page, page 2 = technical sheet, page 3 = price table
@@ -113,7 +118,12 @@ PAGES = [
     ('p9_SI-26-2546_fa_IR.pdf', 3, 'سیستم پوشش سقف و دیوار استندینگ سیم', True, 'page 3 starts the price table'),
     ('p9_SI-26-2546_en_US.pdf', 2, 'Vapour barrier', True, 'page 2 is the technical sheet (en_US)'),
     ('p9_SI-26-2546_en_US.pdf', 3, 'Payment terms:', True, 'terms on page 3 (en_US)'),
+    # owner 2026-10-16: 3 pages; page 3 = price table, amount in words, terms, signature
+    ('p9_SI-26-2546_fa_IR.pdf', 3, 'مبلغ کل به حروف', True, 'amount in words on page 3'),
+    ('p9_SI-26-2546_fa_IR.pdf', 3, 'مقادیر این پیش‌فاکتور تقریبی است', True, 'terms on page 3'),
+    ('p9_SI-26-2546_fa_IR.pdf', 3, 'دپارتمان فروش', True, 'signature on page 3'),
 ]
+PAGE_COUNT = {'p9_SI-26-2546_fa_IR.pdf': 3}
 
 
 def text_of(path):
@@ -135,6 +145,12 @@ def page_checks(evid):
         print(f"{'PASS' if good else 'FAIL'} {name} page {page}: {'has' if must else 'has not'} {marker!r} ({why})")
     pages = subprocess.run(['pdfinfo', os.path.join(evid, PAGES[0][0])], capture_output=True, text=True).stdout
     print('INFO ' + PAGES[0][0] + ' ' + ' '.join(l for l in pages.splitlines() if l.startswith('Pages')))
+    for name, expected in PAGE_COUNT.items():
+        info = subprocess.run(['pdfinfo', os.path.join(evid, name)], capture_output=True, text=True).stdout
+        count = next((int(l.split()[-1]) for l in info.splitlines() if l.startswith('Pages')), None)
+        good = count == expected
+        ok &= good
+        print(f"{'PASS' if good else 'FAIL'} {name}: {count} pages (expected exactly {expected})")
     return ok
 
 

@@ -26,12 +26,13 @@ SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 43_800
                 ('SIP-000077', 18.0, 67_000_000)]
 SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_288_368, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
         'section_fa': 'نقشه‌های اجرایی', 'product_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
-SHEET = {'rows': 8, 'image_sha256': 'e64859f0257b42676a2a8d910d503e827759047b3ebe2bb9c7dee569c478dfbc',
+# owner 2026-10-16: 7 rows (shop drawings row removed), schematic v4 (PNG rendering of the SVG delivered), 3 pages
+SHEET = {'rows': 7, 'image_sha256': 'ac8b3895ad1b3b29d5848a99c34045dd10948949d909708819d6fc3d827efbc0', 'pages_fa': 3,
          'heading_fa': 'مشخصات فنی سیستم استندینگ سیم', 'row2_fa': 'ضخامت ۰.۷ میلیمتر', 'row2_en': '0.7 mm thick',
          'heading_en': 'Technical Specification of the Standing Seam System', 'system_en': 'Standing Seam',
          'system_fa': 'استندینگ سیم', 'material': ('Top sheet material', 'جنس ورق رویه'),
-         'row7_fa': 'ورق فولادی گالوانیزه‌ی پیش‌رنگ به ضخامت ۰.۵ میلیمتر', 'row7_en': 'Pre-painted galvanized steel sheet',
-         'row8_fa': 'سازه‌ی نگهدارنده (پرلین)',
+         'row6_fa': 'ورق فولادی گالوانیزه‌ی پیش‌رنگ به ضخامت ۰.۵ میلیمتر', 'row6_en': 'Pre-painted galvanized steel sheet',
+         'row7_fa': 'سازه‌ی نگهدارنده (پرلین)', 'material_line': ('جنس ورق رویه:', 'Top sheet material:'),
          'liner': '0.7'}
 EXPECTED = {  # scope code: (new version name, previous version name, fa_IR label, description)
     'CS-STANDING-SEAM': ('CS-STANDING-SEAM v3', 'CS-STANDING-SEAM v2', 'سیستم پوشش سقف استندینگ سیم',
@@ -166,20 +167,20 @@ try:
     R['tech_sheet'] = {'system_rows': sys_rows, 'printed_fa': ref.with_context(lang='fa_IR')._sipanel_tech_sheet_rows(),
                        'printed_en': ref.with_context(lang='en_US')._sipanel_tech_sheet_rows(),
                        'liner': ref.sipanel_liner_thickness}
-    check('system_tech_sheet', len(sys_rows) == SHEET['rows'] and [n for n, _t, _d in sys_rows] == list(range(1, 9))
-          # a row linked to an attribute (row 7, top-sheet material) has no text of its own: it prints the chosen value's
+    check('system_tech_sheet', len(sys_rows) == SHEET['rows'] and [n for n, _t, _d in sys_rows] == list(range(1, 8))
+          # a row linked to an attribute (row 6, top-sheet material) has no text of its own: it prints the chosen value's
           and all(t.get('fa_IR') and t.get('en_US') and (linked or d.get('fa_IR') and d.get('en_US'))
                   for (_n, t, d), linked in zip(sys_rows, sys_linked))
-          and sys_linked == [n == 7 for n in range(1, 9)]
+          and sys_linked == [n == 6 for n in range(1, 8)]
           and sha(seam.sipanel_tech_image) == SHEET['image_sha256'], [n for n, _t, _d in sys_rows])
     check('si26_2546_tech_sheet_snapshot', so_rows == sys_rows and sha(ref.sipanel_tech_image) == SHEET['image_sha256'])
     check('si26_2546_liner_0_7', ref.sipanel_liner_thickness == SHEET['liner']
-          and SHEET['row2_fa'] in R['tech_sheet']['printed_fa'][1][2] and SHEET['row2_en'] in R['tech_sheet']['printed_en'][1][2]
-          if len(so_rows) >= 2 else False, R['tech_sheet']['printed_fa'][1:2])
+          and SHEET['row2_fa'] in R['tech_sheet']['printed_fa'][0][2] and SHEET['row2_en'] in R['tech_sheet']['printed_en'][0][2]
+          if so_rows else False, R['tech_sheet']['printed_fa'][0:1])
     printed_fa, printed_en = R['tech_sheet']['printed_fa'], R['tech_sheet']['printed_en']
-    check('si26_2546_row7_galvanized', len(printed_fa) == 8 and printed_fa[6][2].startswith(SHEET['row7_fa'])
-          and printed_en[6][2].startswith(SHEET['row7_en']), [printed_fa[6:7], printed_en[6:7]])
-    check('si26_2546_row8_purlin', len(printed_fa) == 8 and printed_fa[7][1] == SHEET['row8_fa'], printed_fa[7:8])
+    check('si26_2546_row6_galvanized', len(printed_fa) == 7 and printed_fa[5][2].startswith(SHEET['row6_fa'])
+          and printed_en[5][2].startswith(SHEET['row6_en']), [printed_fa[5:6], printed_en[5:6]])
+    check('si26_2546_row7_purlin', len(printed_fa) == 7 and printed_fa[6][1] == SHEET['row7_fa'], printed_fa[6:7])
     attr = su['product.attribute'].with_context(lang='en_US').search([('name', '=', SHEET['material'][0])])
     galv = attr.value_ids.sorted(lambda v: (v.sequence, v.id))[:1]
     alu = attr.value_ids - galv
@@ -348,9 +349,21 @@ try:
             cell = doc.xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
             check('layout_fa_IR_project_site', len(cell) == 1 and ' '.join(cell[0].text_content().split())
                   == TERMS['site_line_fa'], [c.text_content() for c in cell])
+        # owner 2026-10-16, item 3: the material is stated in the sheet (row 6); the native "<attribute>: <value>"
+        # line stays in the stored description (option + price logic) but is not printed under the lines
+        material_lines = [l for l in ref.order_line if SHEET['material_line'][0] in (l.name or '')]
+        check(f'layout_{lang}_material_line_not_printed', len(material_lines) == 3
+              and not any(m in text for m in SHEET['material_line']), [len(material_lines)])
         pdf, _ = su['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', ref.ids)
         with open(os.path.join(OUT, f'p9_SI-26-2546_{lang}.pdf'), 'wb') as f:
             f.write(pdf)
+        import io
+        from odoo.tools.pdf import PdfFileReader
+        pages = len(PdfFileReader(io.BytesIO(pdf)).pages)
+        R.setdefault('pdf_pages', {})[lang] = pages
+        if lang == 'fa_IR':
+            # page 1 info, page 2 sheet, page 3 price table + amount in words + terms + signature
+            check('pdf_fa_IR_exactly_3_pages', pages == SHEET['pages_fa'], pages)
     ref.partner_id.lang = lang0
 except Exception:                                    # noqa: BLE001 - reported, then rolled back
     import traceback

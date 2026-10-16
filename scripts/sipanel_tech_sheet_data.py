@@ -3,10 +3,17 @@
 drawings product and the SI-26/2546 data of the owner requirements of 2026-10-14. Runs after P8 (way A: SI-26/2546
 has its 10 % installation line, which is part of the shop drawings base).
 
-  sheet     SIPANEL System "Standing Seam" (account 2316): technical sheet = schematic v3
-            (sipanel_quotation_lines/data/standing_seam_schematic.png, sha256 below; callouts 2-8 = rows 2-8, 8 = purlin)
-            and rows 1-8 below (fa_IR as given by the owner, en_US translation). Row 7 is linked to the material
-            attribute: it prints the text of the material chosen on the quotation.
+  sheet     SIPANEL System "Standing Seam" (account 2316): technical sheet = schematic v4 (owner 2026-10-16,
+            callouts 1-7 = rows 1-7, 7 = purlin) and rows 1-7 below (fa_IR as given by the owner, en_US translation,
+            approved 2026-10-15; the shop drawings row is removed, its price line stays). Row 6 is linked to the
+            material attribute: it prints the text of the material chosen on the quotation.
+            v4 was delivered as SVG (sipanel_quotation_lines/data/standing_seam_schematic_v4.svg, SOURCE_SHA256);
+            the image stored is its PNG rendering at native size 2800 x 1120 (data/standing_seam_schematic.png,
+            IMAGE_SHA256), made with the wkhtmltoimage of the Odoo image (deterministic) and saved losslessly
+            optimised by PIL. Odoo lets only admins store SVG, and every quotation copies the image.
+            Rendering (throwaway container, no network):
+              wkhtmltoimage --enable-local-file-access --width 2800 --height 1120 --disable-smart-width --format png
+              <html wrapper: <img src="v4.svg" width="2800" height="1120">>  ->  PIL convert('RGB').save(optimize=True)
   material  native product attribute «جنس ورق رویه» / "Top sheet material", create_variant = never, values
             «گالوانیزه» (first = default) and «آلومینیوم» (price extra required to print: undecided, 0 blocks printing),
             on the roof product SIP-000074 and the flashing product SIP-000076 (both flashing lines), price extra 0.
@@ -53,7 +60,9 @@ SYSTEM_NAMES = {'en_US': 'Standing Seam', 'fa_IR': 'استندینگ سیم'}
 SHOP_NAME = {'en_US': 'Shop Drawings', 'fa_IR': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
 LINER = '0.7'
 IMAGE = 'sipanel_quotation_lines/data/standing_seam_schematic.png'
-IMAGE_SHA256 = 'e64859f0257b42676a2a8d910d503e827759047b3ebe2bb9c7dee569c478dfbc'     # v3 (owner 2026-10-14)
+IMAGE_SHA256 = 'ac8b3895ad1b3b29d5848a99c34045dd10948949d909708819d6fc3d827efbc0'     # v4 PNG rendering
+SOURCE = 'sipanel_quotation_lines/data/standing_seam_schematic_v4.svg'
+SOURCE_SHA256 = '63c54a77b2b479e95f631e4a7e04869d0bd9adf515609489b3d7cf744577b6ec'    # v4 as delivered (2026-10-16)
 MATERIAL = {'en_US': 'Top sheet material', 'fa_IR': 'جنس ورق رویه'}
 MATERIAL_VALUES = [  # (en name, fa name, price extra required, spec text en, spec text fa) - first = default
     ('Galvanized', 'گالوانیزه', False,
@@ -70,31 +79,30 @@ MATERIAL_VALUES = [  # (en name, fa name, price extra required, spec text en, sp
      'میلیمتر؛ رنگ از کاتالوگ RAL به انتخاب کارفرما؛ بدون پیچ رویه، با قفل درزها روی کلیپس توسط دستگاه سیمر'),
 ]
 # (number, title fa, description fa, title en, description en, linked to the material attribute)
-# {liner_thickness} = the quotation's 0.5 / 0.7; row 7 prints the chosen material's text (no own description)
+# {liner_thickness} = the quotation's 0.5 / 0.7; row 6 prints the chosen material's text (no own description)
+# owner 2026-10-16: the shop drawings row is removed, rows renumbered 1-7 (same texts)
 ROWS = [
-    (1, 'نقشه‌های اجرایی', 'تهیه‌ی نقشه‌های شاپ و جزئیات اجرایی پوشش سقف و دیوار',
-     'Shop drawings', 'Preparation of the shop drawings and execution details of the roof and wall cladding', False),
-    (2, 'ورق زیرین', 'ورق گالوانیزه با پروفیل ذوزنقه‌ای یا موج‌دار کم‌ارتفاع، ضخامت {liner_thickness} میلیمتر، اتصال با '
+    (1, 'ورق زیرین', 'ورق گالوانیزه با پروفیل ذوزنقه‌ای یا موج‌دار کم‌ارتفاع، ضخامت {liner_thickness} میلیمتر، اتصال با '
                     'پیچ خودکار گالوانیزه؛ فاصله‌ی تکیه‌گاه‌های زیرسازی حداکثر ۲ متر',
      'Liner sheet', 'Galvanized steel sheet with a low trapezoidal or corrugated profile, {liner_thickness} mm thick, '
                     'fixed with galvanized self-drilling screws; substructure supports at most 2 m apart', False),
-    (3, 'لایه‌ی بخاربند', 'لایه‌ی چهارلایه‌ی کامپوزیت فویل آلومینیوم، پلی‌اتیلن و الیاف پلی‌استر، ضخامت ۲۲۰ میکرون',
+    (2, 'لایه‌ی بخاربند', 'لایه‌ی چهارلایه‌ی کامپوزیت فویل آلومینیوم، پلی‌اتیلن و الیاف پلی‌استر، ضخامت ۲۲۰ میکرون',
      'Vapour barrier', 'Four-layer composite membrane of aluminium foil, polyethylene and polyester fibres, '
                        '220 microns thick', False),
-    (4, 'فاصله‌انداز امگا', 'پروفیل امگای گالوانیزه، ضخامت ۱.۲۵ و ارتفاع ۳۰ میلیمتر، با فاصله‌ی حدود ۲ متر؛ در لبه‌ها و '
+    (3, 'فاصله‌انداز امگا', 'پروفیل امگای گالوانیزه، ضخامت ۱.۲۵ و ارتفاع ۳۰ میلیمتر، با فاصله‌ی حدود ۲ متر؛ در لبه‌ها و '
                            'گوشه‌هایی که مکش باد بیشتر است، پروفیل ۱.۵ میلیمتری با فاصله‌ی کمتر',
      'Omega spacer', 'Galvanized omega profile, 1.25 mm thick and 30 mm high, at about 2 m spacing; at the edges and '
                      'corners with higher wind suction, 1.5 mm profiles at a closer spacing', False),
-    (5, 'کلیپس نگهدارنده', 'کلیپس آلومینیومی به ارتفاع ۱۰۰ میلیمتر روی پد عایق PVC به ضخامت ۵ میلیمتر (قطع پل حرارتی)، '
+    (4, 'کلیپس نگهدارنده', 'کلیپس آلومینیومی به ارتفاع ۱۰۰ میلیمتر روی پد عایق PVC به ضخامت ۵ میلیمتر (قطع پل حرارتی)، '
                           'با پیچ‌های گالوانیزه',
      'Holding clip', 'Aluminium clip, 100 mm high, on a 5 mm PVC insulating pad (thermal break), fixed with '
                      'galvanized screws', False),
-    (6, 'عایق حرارتی و صوتی', 'پشم سنگ تخته‌ای بدون روکش، دانسیته‌ی ۵۰ کیلوگرم بر مترمکعب، دو لایه‌ی ۵۰ میلیمتری '
+    (5, 'عایق حرارتی و صوتی', 'پشم سنگ تخته‌ای بدون روکش، دانسیته‌ی ۵۰ کیلوگرم بر مترمکعب، دو لایه‌ی ۵۰ میلیمتری '
                              '(مجموع ۱۰۰ میلیمتر)',
      'Thermal and acoustic insulation', 'Unfaced rock wool boards, density 50 kg/m³, two 50 mm layers '
                                         '(100 mm in total)', False),
-    (7, 'ورق رویه‌ی استندینگ سیم', None, 'Standing seam top sheet', None, True),
-    (8, 'سازه‌ی نگهدارنده (پرلین)', 'پرلین فولادی سقف و دیوار با فاصله‌ی حداکثر ۲ متر؛ طراحی، تأمین و اجرای آن بر عهده‌ی '
+    (6, 'ورق رویه‌ی استندینگ سیم', None, 'Standing seam top sheet', None, True),
+    (7, 'سازه‌ی نگهدارنده (پرلین)', 'پرلین فولادی سقف و دیوار با فاصله‌ی حداکثر ۲ متر؛ طراحی، تأمین و اجرای آن بر عهده‌ی '
                                    'کارفرما و خارج از محدوده‌ی این پیش‌فاکتور است.',
      'Supporting structure (purlins)', 'Steel roof and wall purlins at a maximum spacing of 2 m; their design, supply '
                                        'and installation are by the client and outside the scope of this quotation.',
@@ -232,9 +240,12 @@ try:
     # ---- technical sheet of the System
     with open(file_path(IMAGE), 'rb') as f:
         image_bytes = f.read()
-    check('schematic_file_v3', hashlib.sha256(image_bytes).hexdigest() == IMAGE_SHA256, len(image_bytes))
+    with open(file_path(SOURCE), 'rb') as f:
+        source_bytes = f.read()
+    check('schematic_source_v4', hashlib.sha256(source_bytes).hexdigest() == SOURCE_SHA256, len(source_bytes))
+    check('schematic_file_v4', hashlib.sha256(image_bytes).hexdigest() == IMAGE_SHA256, len(image_bytes))
     if not seam.sipanel_tech_image:
-        # as is: ir.attachment shrinks images wider than base.image_autoresize_max_px (1920; v3 is 1938 px wide) -
+        # as is: ir.attachment shrinks images wider than base.image_autoresize_max_px (1920; v4 is 2800 px wide) -
         # P1 run 20261014T201714Z, the committed image differed from the file
         seam.with_context(image_no_postprocess=True).sipanel_tech_image = base64.b64encode(image_bytes)
         changed('System schematic set')
@@ -364,10 +375,10 @@ try:
     printed_fa = ref.with_context(lang='fa_IR')._sipanel_tech_sheet_rows()
     printed_en = ref.with_context(lang='en_US')._sipanel_tech_sheet_rows()
     R['printed_rows'] = {'fa_IR': printed_fa, 'en_US': printed_en}
-    check('row2_prints_0_7', len(printed_fa) == 8 and 'ضخامت ۰.۷ میلیمتر' in printed_fa[1][2]
-          and '0.7 mm thick' in printed_en[1][2], printed_fa[1:2])
-    check('row7_prints_galvanized', len(printed_fa) == 8 and printed_fa[6][2] == MATERIAL_VALUES[0][4]
-          and printed_en[6][2] == MATERIAL_VALUES[0][3], [printed_fa[6:7], printed_en[6:7]])
+    check('row1_prints_0_7', len(printed_fa) == len(ROWS) == 7 and 'ضخامت ۰.۷ میلیمتر' in printed_fa[0][2]
+          and '0.7 mm thick' in printed_en[0][2], printed_fa[0:1])
+    check('row6_prints_galvanized', len(printed_fa) == 7 and printed_fa[5][2] == MATERIAL_VALUES[0][4]
+          and printed_en[5][2] == MATERIAL_VALUES[0][3], [printed_fa[5:6], printed_en[5:6]])
     check('system_print_name', stored(ref, 'sipanel_system_print_name') == SYSTEM_NAMES
           and ref.with_context(lang='en_US')._sipanel_system_print_label() == SYSTEM_NAMES['en_US']
           and ref.with_context(lang='fa_IR')._sipanel_system_print_label() == SYSTEM_NAMES['fa_IR'],

@@ -31,6 +31,8 @@
     # Quotations are never touched: no installation line is added to an existing order.
     # data/standing_seam_schematic.png is not loaded by the module: the Production data step
     # scripts/sipanel_tech_sheet_data.py puts it on the Standing Seam System (owner requirements 2026-10-14).
+    # v4 (owner 2026-10-16) was delivered as SVG (data/standing_seam_schematic_v4.svg, the source); the PNG is its
+    # rendering at native size (Odoo lets only admins store SVG, and every quotation copies the image).
     'post_init_hook': 'post_init_hook',
     'installable': True,
     'auto_install': False,

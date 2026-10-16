@@ -39,12 +39,31 @@ class SaleOrderLine(models.Model):
     def _sipanel_report_name_lines(self):
         """The description as printed on the customer quotation (requirements 2026-10-08, item 1): its lines,
         the first one without the "[internal reference] " prefix Odoo puts in front of a product line's name.
-        Report level only - the stored description and the product are not changed."""
+        Report level only - the stored description and the product are not changed.
+        Owner decision 2026-10-16, item 3: the native "<attribute>: <value>" lines of the line's no_variant options
+        (top-sheet material) are not printed either; the material is stated in the technical sheet. The stored
+        description, the option and its price are not changed."""
         self.ensure_one()
         lines = (self.name or '').split('\n')
         if self.product_id and not self.display_type:
             lines[0] = INTERNAL_CODE_PREFIX.sub('', lines[0], count=1)
+            options = self._sipanel_option_print_texts()
+            if options:
+                lines = lines[:1] + [l for l in lines[1:] if l.strip() not in options]
         return lines
+
+    def _sipanel_option_print_texts(self):
+        """The "<attribute>: <value>" texts of the line's no_variant values, in every installed language (the
+        description is written in the order language, which may have changed since)."""
+        self.ensure_one()
+        ptavs = self.product_no_variant_attribute_value_ids
+        if not ptavs:
+            return set()
+        texts = set()
+        for code, _name in self.env['res.lang'].get_installed():
+            for ptav in ptavs.with_context(lang=code):
+                texts.add(f'{ptav.attribute_id.name}: {ptav.name}'.strip())
+        return texts
 
     @api.model
     def _sipanel_value_differs(self, record, field_name, value):

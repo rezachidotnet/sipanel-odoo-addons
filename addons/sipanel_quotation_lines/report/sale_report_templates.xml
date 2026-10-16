@@ -58,6 +58,20 @@
                 </div>
             </t>
         </xpath>
+        <!-- Owner decision 2026-10-16, item 3: a quotation with a technical sheet has 3 pages; its price table, amount
+             in words, terms and signature share page 3. After the material line was taken out of the printed
+             descriptions it still did not fit (measured on P1 run 20261015T050216Z: ~36 pt freed of ~140 pt), so
+             the owner's fallbacks apply, to these quotations only: cell padding 0.5rem -> 0.25rem (top/bottom)
+             and the price/total table font one step smaller (0.875rem). Quotations without a sheet are unchanged. -->
+        <xpath expr="//table[hasclass('o_main_table')]" position="before">
+            <style t-if="doc.sipanel_has_tech_sheet" class="o_sipanel_compact_table">
+                .o_sipanel_so_print table.o_main_table, .o_sipanel_so_print table.o_total_table { font-size: 0.875rem !important; }
+                .o_sipanel_so_print table.o_main_table > thead > tr > th,
+                .o_sipanel_so_print table.o_main_table > tbody > tr > td,
+                .o_sipanel_so_print table.o_total_table > tbody > tr > td,
+                .o_sipanel_so_print table.o_total_table > tr > td { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+            </style>
+        </xpath>
         <!-- C: amount in words, below the totals box (native amount_to_text in the document language) -->
         <xpath expr="//div[@name='so_total_summary']" position="inside">
             <div class="row o_sipanel_amount_in_words" name="sipanel_amount_in_words">

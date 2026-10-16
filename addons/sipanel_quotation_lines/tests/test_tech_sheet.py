@@ -208,9 +208,15 @@ class TestTechSheetAndShopDrawings(SipanelCoreCase):
             self.assertEqual(len(rows), 3)
             self.assertIn(row2, rows[1].text_content())
             self.assertFalse(page[0].xpath(".//div[@name='sipanel_tech_sheet']"), 'not inside the price table page')
+            compact = page[0].xpath(".//style[contains(@class, 'o_sipanel_compact_table')]")
+            self.assertEqual(len(compact), 1, 'owner 2026-10-16: compact price table so page 3 holds the terms')
+            self.assertIn('font-size: 0.875rem', compact[0].text)
         plain = self._order(self.cust_fa, system=self.system_plain)
-        self.assertFalse(self._doc(plain).xpath("//div[@name='sipanel_tech_sheet']"),
+        plain_doc = self._doc(plain)
+        self.assertFalse(plain_doc.xpath("//div[@name='sipanel_tech_sheet']"),
                          'a quotation without a sheet keeps the earlier layout')
+        self.assertFalse(plain_doc.xpath("//style[contains(@class, 'o_sipanel_compact_table')]"),
+                         'and the earlier table spacing')
 
     # ------------------------------------------------------------------ shop drawings line
     def test_06_shop_drawings_2pct_of_supply_and_installation_discount_100(self):
@@ -395,3 +401,26 @@ class TestTechSheetAndShopDrawings(SipanelCoreCase):
         order.invalidate_recordset()
         self.assertEqual(system.sipanel_tech_image, wide)
         self.assertEqual(order.sipanel_tech_image, wide, 'the quotation copy is not resized')
+
+    def test_13_material_line_not_printed_under_the_lines(self):
+        """Owner decision 2026-10-16, item 3: the material is stated in the technical sheet; the native
+        "<attribute>: <value>" line stays in the stored description (option and price logic) but is not printed."""
+        attr, galv, alu, product, p_galv, p_alu, system = self._material_fixture()
+        order = self._order(self.cust_fa, system=system)
+        line = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': product.id,
+                                                   'product_uom_qty': 10.0})
+        line.name = f'{PT} Roof title\nSupply only'
+        line.product_no_variant_attribute_value_ids = [(6, 0, p_galv.ids)]
+        self.assertEqual(line.name, f'{PT} Roof title\nSupply only\nجنس ورق رویه: گالوانیزه', 'stored as before')
+        self.assertEqual(line._sipanel_report_name_lines(), [f'{PT} Roof title', 'Supply only'])
+        for lang in ('fa_IR', 'en_US'):          # the description stays Persian when the document language changes
+            order.partner_id.lang = lang
+            text = ' '.join(self._doc(order).text_content().split())
+            self.assertIn('Supply only', text, lang)
+            self.assertNotIn('جنس ورق رویه:', text, lang)
+            self.assertNotIn(f'{PT} Top sheet material:', text, lang)
+        self.assertEqual(self._rows(order, 'fa_IR')[0][2], 'ورق فولادی گالوانیزه ۰.۵', 'stated in the sheet row')
+        plain = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.p_gut.id,
+                                                    'product_uom_qty': 1.0, 'name': f'{PT} Gutter\nجنس ورق رویه: گالوانیزه'})
+        self.assertEqual(plain._sipanel_report_name_lines(), [f'{PT} Gutter', 'جنس ورق رویه: گالوانیزه'],
+                         'typed text on a line without the option is printed as typed')
