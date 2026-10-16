@@ -3,6 +3,7 @@
 # Derived from scripts/sipanel_page1_clone_validate.sh (same clone, ownership and neutralization contract).
 # Production DB `sipanel` is only READ (pg_dump streamed into the clone). Nothing is installed on `sipanel`.
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
+#        |uiserver|uirun|uistop (UI acceptance test, owner 2026-10-16; on an existing clone, CLONE=... required)
 #   prodsim (after evidence; in all): P1 = the Production steps P6b commercial data, P7 v3, P8 M4 + way A, P8b technical sheet +
 #            shop drawings (2026-10-14) (dry run, then commit) and P9
 #            post-checks with the Production scripts; replaces rehearsal in all (2026-10-08)
@@ -643,6 +644,44 @@ if [[ "$MODE" =~ ^(all|clone|pre|install|test|post|rehearsal|prodsim|proof)$ ]];
   res_monitor $$ &
   MON_PID=$!
 fi
+# ------------------------------------------------------------------ UI acceptance test (owner 2026-10-16)
+# The render server doubles as the UI server (same contract: clone only, 127.0.0.1 inside its own network namespace,
+# no published port, workers 0, no cron). The browser is a throwaway Playwright container that joins that network
+# namespace; nothing is installed on the host. Test users come from scripts/ui/sipanel_ui_test_users.py (clone only,
+# fresh random password per run, never stored); the quotation and the manager tasks are done in the web UI by
+# scripts/ui/sipanel_ui_acceptance.py. Screenshots, PDFs and the step report go to $EVID/ui.
+PW_IMAGE=${PW_IMAGE:-mcr.microsoft.com/playwright/python:v1.48.0-noble}
+ui_server() {
+  assert_exclusive uiserver
+  container_setup
+  render_server_start
+  echo "UI_SERVER_UP $ISO-render"
+}
+ui_run() {
+  local pw rc=
+  [ -n "$(docker ps -q --filter "name=^/$ISO-render\$")" ] || refuse "no UI server for $CLONE (run uiserver first)"
+  container_setup
+  OUTDIR=$EVID/ui; mkdir -p "$OUTDIR"
+  local uidir=${UI_DIR:-$WT/scripts/ui}
+  # development iterations only: UI_PASSWORD_FILE (0600, outside the evidence) reuses the users of an earlier run
+  if [ -n "${UI_PASSWORD_FILE:-}" ] && [ -s "$UI_PASSWORD_FILE" ]; then
+    pw=$(cat "$UI_PASSWORD_FILE"); echo "UI users reused (development run)"
+  else
+  pw=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
+  [ -z "${UI_PASSWORD_FILE:-}" ] || (umask 077; printf '%s' "$pw" > "$UI_PASSWORD_FILE")
+  docker run --rm -i --name "$ISO-shell" --network "container:$ISO-render" "${LIMITS[@]}" \
+    --label "sipanel.qlines.clone=$CLONE" "${MOUNTS[@]}" -e UI_PASSWORD="$pw" "$IMAGE_ID" \
+    odoo shell -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http \
+    < "$uidir/sipanel_ui_test_users.py" > "$OUTDIR/users.log" 2>&1 \
+    && grep -q '^SIPANEL_UI_USERS' "$OUTDIR/users.log" || { echo "UI_USERS FAILED ($OUTDIR/users.log)"; exit 22; }
+  fi
+  docker run --rm --name "$ISO-browser" --network "container:$ISO-render" --memory 1000m --memory-swap 2000m \
+    --cpus 1.0 --oom-score-adj 800 --shm-size 512m --label "sipanel.qlines.clone=$CLONE" -u "$(id -u):$(id -g)" \
+    -e HOME=/tmp -v "$uidir:/mnt/ui:ro" -v "$OUTDIR:/out" -e UI_URL="http://127.0.0.1:${RPORT}" \
+    -e UI_PASSWORD="$pw" -e UI_DB="$CLONE" -e UI_STEPS="${UI_STEPS:-all}" -e UI_USER="${UI_USER:-}" \
+    -e UI_PATHS="${UI_PATHS:-}" -e UI_STOP_ON_FAIL="${UI_STOP_ON_FAIL:-}" "$PW_IMAGE" python3 "/mnt/ui/${UI_SCRIPT:-sipanel_ui_acceptance.py}" || rc=$?
+  echo "UI_RUN rc=${rc:-0} (report $OUTDIR/ui_report.json)"; return "${rc:-0}"
+}
 case "$MODE" in
   clone)    clone ;;
   pre)      render pre ;;
@@ -654,6 +693,9 @@ case "$MODE" in
   proof)    proof ;;
   all)      clone; render pre; install; run_tests; render post; (evidence); prodsim; proof ;;
   prodsim)  prodsim ;;
+  uiserver) ui_server ;;
+  uirun)    ui_run ;;
+  uistop)   render_server_stop; echo UI_SERVER_STOPPED ;;
   drop)     # DESTRUCTIVE, clone only; the clone must be named explicitly
             [ -n "$CLONE_GIVEN" ] || { echo "set CLONE=sipanel_qlines_clone_..."; exit 2; }
             drop_clone ;;
