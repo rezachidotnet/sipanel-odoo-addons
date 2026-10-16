@@ -70,7 +70,9 @@ MARKERS = [
     ('p9_SI-26-2546_en_US.pdf', 'Technical Specification of the Standing Seam System', 'English sheet title'),
     ('p9_SI-26-2546_en_US.pdf', 'Pre-painted galvanized steel sheet', 'row 6 = galvanized text (en_US)'),
     ('p9_SI-26-2546_fa_IR.pdf', 'مقادیر این پیش‌فاکتور تقریبی است', 'terms line 3 (item 6)'),
-    ('p9_SI-26-2546_fa_IR.pdf', 'نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود', 'terms line 3 (item 6)'),
+    # split around the line wrap: a marker spanning a wrapped RTL line is extracted out of order (P1 20261016T171158Z)
+    ('p9_SI-26-2546_fa_IR.pdf', 'مقادیر دقیق پس از تهیه‌ی نقشه‌های اجرایی', 'terms line 3 (item 6)'),
+    ('p9_SI-26-2546_fa_IR.pdf', 'ملاک محاسبه خواهد بود', 'terms line 3 (item 6), end'),
 ]
 # old wording that must NOT appear where the new model is printed
 ABSENT = [
