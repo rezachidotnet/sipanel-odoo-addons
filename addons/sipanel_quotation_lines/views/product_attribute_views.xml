@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- owner requirements 2026-10-14: quotation options as native no_variant attributes (top-sheet material) -->
+    <record id="product_attribute_view_form_sipanel_options" model="ir.ui.view">
+        <field name="name">product.attribute.form.sipanel.options</field>
+        <field name="model">product.attribute</field>
+        <field name="inherit_id" ref="product.product_attribute_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='value_ids']/list/field[@name='name']" position="after">
+                <field name="sipanel_price_required" optional="show"/>
+                <field name="sipanel_spec_text" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

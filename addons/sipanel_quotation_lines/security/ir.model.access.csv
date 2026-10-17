@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_sipanel_system_spec_line_user,sipanel.system.spec.line salesman,model_sipanel_system_spec_line,sales_team.group_sale_salesman,1,0,0,0
+access_sipanel_system_spec_line_manager,sipanel.system.spec.line sales manager,model_sipanel_system_spec_line,sales_team.group_sale_manager,1,1,1,1
+access_sipanel_quotation_spec_line_user,sipanel.quotation.spec.line salesman,model_sipanel_quotation_spec_line,sales_team.group_sale_salesman,1,1,1,1

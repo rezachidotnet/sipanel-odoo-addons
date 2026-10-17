@@ -46,8 +46,10 @@ echo "Excluded from ZIP: secrets, private keys, database dumps, filestore, perso
 } > $R/REPORT_BUNDLE_MANIFEST.txt
 # zip: source + tests + docs + reports
 ZIP=$R/SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip
-rm -f "$ZIP" "$ZIP.sha256" $R/SHA256SUMS
+rm -f -- "$ZIP" "$ZIP.sha256" "$R/SHA256SUMS"          # three exact files, no glob
 STAGE=$(mktemp -d)
+: "${STAGE:?mktemp failed}"
+case "$STAGE" in /tmp/tmp.??????????) ;; *) echo "refusing: unexpected staging dir $STAGE"; exit 2;; esac
 mkdir -p $STAGE/bundle/reports/$RUN
 rsync -a --exclude '__pycache__' --exclude '*.pyc' addons test_addons scripts .gitignore $STAGE/bundle/
 rsync -a --exclude 'SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip*' --exclude SHA256SUMS $R/ $STAGE/bundle/reports/$RUN/
@@ -66,6 +68,6 @@ with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as z:
             p=os.path.join(root, f); z.write(p, os.path.relpath(p, '.'))
 PYZ
 )
-rm -rf $STAGE
+rm -rf --one-file-system -- "$STAGE"                    # the mktemp staging dir checked above
 (cd $R && sha256sum SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip > SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip.sha256)
 echo "ZIP: $ZIP"; cat $R/SIPANEL_PRODUCTION_IMPLEMENTATION_BUNDLE.zip.sha256; ls -la $R

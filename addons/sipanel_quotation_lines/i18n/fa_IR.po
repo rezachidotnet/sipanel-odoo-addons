@@ -1,0 +1,418 @@
+# Persian (Iran) translation of sipanel_quotation_lines.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: fa_IR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_pct
+msgid "Installation %"
+msgstr "درصد نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_amount
+msgid "Installation amount"
+msgstr "مبلغ نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_installation_base_amount
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_template__sipanel_installation_base
+msgid "Installation base"
+msgstr "مبنای نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order_line__sipanel_is_installation_line
+msgid "Installation line"
+msgstr "سطر نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_installation_product_id
+msgid "Installation product"
+msgstr "محصول نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_installation_pct_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_installation_pct_default
+msgid "Default installation %"
+msgstr "درصد پیش‌فرض نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Amount in words:</strong>"
+msgstr "<strong>مبلغ کل به حروف:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.res_config_settings_view_form_sipanel_installation
+msgid "Installation / Execution"
+msgstr "نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.res_config_settings_view_form_sipanel_installation
+msgid "Default percentage of the item subtotal proposed on new quotations. Empty or 0 = no installation line; each quotation can override it."
+msgstr "درصد پیش‌فرض نصب و اجرا از مبلغ اقلام برای پیش‌فاکتورهای جدید. خالی یا ۰ = بدون سطر نصب و اجرا؛ هر پیش‌فاکتور می‌تواند آن را تغییر دهد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution (%(pct)s%% of item subtotal)"
+msgstr "نصب و اجرا (%(pct)s٪ مبلغ اقلام)"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Order %s has an installation percentage but no SIPANEL System: add a Scope or set the Requested System, or set the installation percentage to 0."
+msgstr "سفارش %s درصد نصب و اجرا دارد اما سیستم SIPANEL ندارد: یک Scope اضافه کنید یا سیستم درخواستی را تعیین کنید، یا درصد نصب و اجرا را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "SIPANEL System \"%s\" has no installation product configured; no installation line can be created. Configure it on the System, or set the installation percentage to 0."
+msgstr "برای سیستم SIPANEL «%s» محصول نصب و اجرا تعریف نشده است؛ سطر نصب و اجرا ایجاد نمی‌شود. آن را روی سیستم تعریف کنید یا درصد نصب و اجرا را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order_line__sipanel_managed_role__installation
+msgid "Installation & Execution"
+msgstr "نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Scope %(s)s (version %(v)s) already includes %(p)s in its price. This quotation was made on a Scope version older than the separate installation line; setting an installation percentage would charge installation twice. Keep the percentage at 0, or quote on the current Scope version."
+msgstr "Scope %(s)s (نسخه %(v)s) هم‌اکنون %(p)s را در قیمت خود دارد. این پیش‌فاکتور بر اساس نسخه‌ای قدیمی‌تر از مدل سطر جداگانه نصب و اجرا تهیه شده است و تعیین درصد نصب و اجرا، هزینه نصب را دو بار محاسبه می‌کند. درصد را ۰ نگه دارید یا با نسخه فعلی Scope پیش‌فاکتور تهیه کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "The installation percentage cannot be negative."
+msgstr "درصد نصب و اجرا نمی‌تواند منفی باشد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order_line.py:0
+msgid "The Installation / Execution lines of %s are managed by its installation percentage; set the percentage to 0 to remove them."
+msgstr "سطرهای نصب و اجرای %s با درصد نصب و اجرا مدیریت می‌شوند؛ برای حذف آن‌ها درصد را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution line removed automatically: the item subtotal (installation base) is %(base)s. It is rebuilt at %(pct)s%% as soon as the item subtotal is above 0 again."
+msgstr "ردیف نصب و اجرا به‌طور خودکار حذف شد: جمع اقلام (مبنای نصب و اجرا) %(base)s است. به محض اینکه جمع اقلام بیشتر از صفر شود، با %(pct)s٪ دوباره ساخته می‌شود."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Installation & Execution line rebuilt automatically: %(pct)s%% of the item subtotal %(base)s = %(amount)s."
+msgstr "ردیف نصب و اجرا به‌طور خودکار دوباره ساخته شد: %(pct)s٪ از جمع اقلام %(base)s = %(amount)s."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/scope_version.py:0
+msgid "Anchor %(a)s is in the installation base and recipe line %(l)s is installation work (%(p)s, placement %(pl)s): installation would be charged twice. Remove the line from the recipe (installation is quoted on the Installation / Execution line) or set it to customer responsibility."
+msgstr "محصول اصلی %(a)s در مبنای نصب و اجراست و سطر دستورالعمل %(l)s کار نصب است (%(p)s، جایگاه %(pl)s): هزینه نصب دو بار دریافت می‌شود. این سطر را از دستورالعمل حذف کنید (نصب در ردیف «نصب و اجرا» قیمت داده می‌شود) یا مسئولیت آن را به کارفرما بدهید."
+
+#. module: sipanel_quotation_lines
+#: code:addons/sipanel_quotation_lines/models/scope_version.py:0
+msgid "Anchor %(a)s is in the installation base but the %(f)s (%(lang)s) mentions installation (\"%(w)s\"). Check that the text does not promise installation inside this price."
+msgstr "محصول اصلی %(a)s در مبنای نصب و اجراست اما %(f)s (%(lang)s) به نصب اشاره می‌کند («%(w)s»). بررسی کنید که متن، نصب را داخل همین قیمت وعده ندهد."
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_template__sipanel_installation_work
+msgid "Installation work"
+msgstr "کار نصب و اجرا"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,help:sipanel_quotation_lines.field_product_template__sipanel_installation_work
+msgid "This product IS installation / execution work. A Scope whose anchor is in the installation base cannot be released with a SIPANEL component of this product, and a quotation carrying such a Scope refuses the Installation / Execution percentage (it would charge installation twice). The installation products mapped on SIPANEL Systems count as installation work automatically."
+msgstr "این محصول، کار نصب و اجراست. Scopeی که محصول اصلی آن در مبنای نصب و اجراست با سطر SIPANEL از این محصول منتشر نمی‌شود، و پیش‌فاکتوری که چنین Scopeی دارد درصد نصب و اجرا را نمی‌پذیرد (هزینه نصب دو بار دریافت می‌شد). محصولات نصبِ تعریف‌شده روی سیستم‌های SIPANEL خودبه‌خود کار نصب به شمار می‌آیند."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Payment terms:</strong>"
+msgstr "<strong>شرایط پرداخت:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Delivery time:</strong>"
+msgstr "<strong>زمان تحویل:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<span>working days after receipt of the down payment</span>"
+msgstr "<span>روز کاری پس از دریافت پیش‌پرداخت</span>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<strong>Bank account for the down payment:</strong>"
+msgstr "<strong>شماره حساب جهت واریز پیش‌پرداخت:</strong>"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "<span class=\"signature_title\">Sales Department</span>"
+msgstr "<span class=\"signature_title\">دپارتمان فروش</span>"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Order %(o)s is no longer a quotation; its %(f)s is frozen."
+msgstr "سفارش %(o)s دیگر پیش‌فاکتور نیست؛ «%(f)s» آن ثابت شده است."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Preparation of shop drawings"
+msgstr "تهیه‌ی نقشه‌های اجرایی (شاپ)"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order_line__sipanel_managed_role__shop_drawing
+msgid "Shop Drawings"
+msgstr "نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "Order %s has a shop drawings percentage but no SIPANEL System: add a Scope or set the Requested System, or set the shop drawings percentage to 0."
+msgstr "سفارش %s درصد نقشه‌های اجرایی دارد اما سیستم SIPANEL ندارد: یک Scope اضافه کنید یا سیستم درخواستی را تعیین کنید، یا درصد نقشه‌های اجرایی را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "SIPANEL System \"%s\" has no shop drawings product configured; no shop drawings line can be created. Configure it on the System, or set the shop drawings percentage to 0."
+msgstr "برای سیستم SIPANEL «%s» محصول نقشه‌های اجرایی تعریف نشده است؛ سطر نقشه‌های اجرایی ایجاد نمی‌شود. آن را روی سیستم تعریف کنید یا درصد نقشه‌های اجرایی را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "The shop drawings percentage cannot be negative."
+msgstr "درصد نقشه‌های اجرایی نمی‌تواند منفی باشد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+msgid "The shop drawings discount must be between 0 and 100."
+msgstr "تخفیف نقشه‌های اجرایی باید بین ۰ و ۱۰۰ باشد."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/sale_order_line.py:0
+msgid "The Shop Drawings lines of %s are managed by its shop drawings percentage; set the percentage to 0 to remove them."
+msgstr "سطرهای نقشه‌های اجرایی %s با درصد نقشه‌های اجرایی مدیریت می‌شوند؛ برای حذف آن‌ها درصد را ۰ کنید."
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/tech_sheet.py:0
+msgid "Technical Specification"
+msgstr "مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#. odoo-python
+#: code:addons/sipanel_quotation_lines/models/tech_sheet.py:0
+msgid "Technical Specification of the %s System"
+msgstr "مشخصات فنی سیستم %s"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "No."
+msgstr "ردیف"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "Item"
+msgstr "عنوان"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.report_saleorder_document_quotation_lines
+msgid "Specification"
+msgstr "شرح"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_shop_drawing_pct
+msgid "Shop drawings %"
+msgstr "درصد نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_shop_drawing_discount
+msgid "Shop drawings discount %"
+msgstr "درصد تخفیف نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_liner_thickness
+msgid "Liner thickness"
+msgstr "ضخامت ورق زیرین"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_account_analytic_account_form_sipanel_installation
+msgid "Technical sheet"
+msgstr "مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Reload technical sheet from the System"
+msgstr "بارگذاری دوباره‌ی مشخصات فنی از سیستم"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "The System's technical sheet replaces this quotation's copy (and its edits). Continue?"
+msgstr "مشخصات فنی سیستم جایگزین نسخه‌ی این پیش‌فاکتور (و تغییرات آن) می‌شود. ادامه می‌دهید؟"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "{liner_thickness} in a row is replaced, when the quotation is printed, by the liner thickness chosen here (0.5 or 0.7 mm)."
+msgstr "عبارت {liner_thickness} در هر ردیف، هنگام چاپ پیش‌فاکتور با ضخامت ورق زیرین انتخاب‌شده در همین زبانه (۰.۵ یا ۰.۷ میلیمتر) جایگزین می‌شود."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "A row without a description (row 6, top sheet) is filled from the material chosen on the quotation lines: it prints the technical text of that material (Galvanized or Aluminium)."
+msgstr "ردیفی که شرح ندارد (ردیف ۶، ورق رویه) از جنس ورق انتخاب‌شده در سطرهای پیش‌فاکتور پر می‌شود: در چاپ، متن فنی همان جنس (گالوانیزه یا آلومینیوم) در آن می‌آید."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "The rows can be edited while the quotation is a draft; they are frozen once it is sent or confirmed."
+msgstr "این ردیف‌ها تا وقتی پیش‌فاکتور پیش‌نویس است قابل ویرایش‌اند و پس از ارسال یا تأیید ثابت می‌شوند."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Validity Date (Shamsi)"
+msgstr "تاریخ انقضا (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Order Date (Shamsi)"
+msgstr "تاریخ پیش‌فاکتور (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Delivery Date (Shamsi)"
+msgstr "تاریخ تحویل (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Expected Date (Shamsi)"
+msgstr "تاریخ مورد انتظار (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Scope line"
+msgstr "سطر محدوده‌ی کار"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Certainty"
+msgstr "قطعیت"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Invoice hold"
+msgstr "توقف صدور فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_quote_builder_label
+msgid "Quote Builder"
+msgstr "ساخت PDF پیش‌فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__number
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__number
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__number
+msgid "Row"
+msgstr "ردیف"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__title
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__title
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__title
+msgid "Title"
+msgstr "عنوان"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__description
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__description
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__description
+msgid "Description"
+msgstr "شرح"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__attribute_id
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__attribute_id
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__attribute_id
+msgid "Option attribute"
+msgstr "ویژگی گزینه"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__attribute_value_id
+msgid "Frozen option value"
+msgstr "گزینه‌ی ثبت‌شده"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__order_id
+msgid "Quotation"
+msgstr "پیش‌فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__system_id
+msgid "System"
+msgstr "سیستم"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_tech_image
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_tech_image
+msgid "Technical sheet schematic"
+msgstr "تصویر مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_tech_spec_ids
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_tech_spec_ids
+msgid "Technical specification"
+msgstr "ردیف‌های مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_system_print_name
+msgid "Requested System (printed, per language)"
+msgstr "سیستم درخواستی (چاپی، به تفکیک زبان)"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order__sipanel_liner_thickness__0_5
+msgid "0.5 mm"
+msgstr "۰.۵ میلیمتر"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order__sipanel_liner_thickness__0_7
+msgid "0.7 mm"
+msgstr "۰.۷ میلیمتر"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_shop_drawing_product_id
+msgid "Shop drawings product"
+msgstr "محصول نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_attribute_value__sipanel_spec_text
+msgid "Technical sheet text"
+msgstr "متن مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_attribute_value__sipanel_price_required
+msgid "Price extra required to print"
+msgstr "قیمت اضافه برای چاپ الزامی است"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_shop_drawing_pct_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_shop_drawing_pct_default
+msgid "Default shop drawings %"
+msgstr "درصد پیش‌فرض نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_shop_drawing_discount_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_shop_drawing_discount_default
+msgid "Default shop drawings discount %"
+msgstr "درصد پیش‌فرض تخفیف نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order_line__sipanel_managed_role
+msgid "Managed line role"
+msgstr "نقش سطر خودکار"

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_saleorder_document_quotation_lines" inherit_id="sale.report_saleorder_document">
+        <!-- A: the first line of the line description is the item title; the following lines (the native
+             description_sale Odoo appends, or the Scope note body) are printed below it, smaller and muted,
+             inside the same cell. Block elements inherit the document direction, so RTL and LTR both work;
+             the table frame / repeated header of sale_shamsi_report are untouched (same cell, same row).
+             Item 1 (2026-10-08): the "[internal reference] " prefix of a product line is not printed (report level
+             only; it also put the brackets the wrong way round in RTL). -->
+        <xpath expr="//tr[@name='tr_product']/td[@name='td_product_name']/span[@t-field='line.name']" position="replace">
+            <t t-set="sipanel_name_lines" t-value="line._sipanel_report_name_lines()"/>
+            <span class="o_sipanel_line_title" t-out="sipanel_name_lines[0]"/>
+            <t t-set="sipanel_desc_lines" t-value="sipanel_name_lines[1:]"/>
+            <div t-if="any(l.strip() for l in sipanel_desc_lines)" class="o_sipanel_line_desc text-muted"
+                 style="font-size: 0.82em; color: #6c757d; line-height: 1.35; margin-top: 1px;">
+                <t t-foreach="sipanel_desc_lines" t-as="sipanel_desc_line">
+                    <t t-out="sipanel_desc_line"/><br t-if="not sipanel_desc_line_last"/>
+                </t>
+            </div>
+        </xpath>
+        <!-- Owner requirements 2026-10-14, item 1: a quotation with a technical sheet (its own snapshot of the System
+             sheet, tech_sheet.py) prints it on its own page right after Page 1 (the sale_shamsi_report cover, also
+             inserted before div.page, earlier) and before the price table: title, schematic, specification table.
+             A quotation without a sheet renders nothing here (earlier layout). Outside div.page on purpose: the
+             price-table pagination rules of sale_shamsi_report (.o_sipanel_so_print) do not apply to it. -->
+        <xpath expr="//div[hasclass('page')]" position="before">
+            <t t-if="doc.sipanel_has_tech_sheet">
+                <t t-set="sipanel_ts_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
+                <t t-set="sipanel_ts_align" t-value="'right' if sipanel_ts_rtl else 'left'"/>
+                <div class="o_sipanel_tech_sheet" name="sipanel_tech_sheet" t-att-dir="'rtl' if sipanel_ts_rtl else 'ltr'"
+                     t-attf-style="page-break-after: always; text-align: #{sipanel_ts_align}; padding-top: 6px;">
+                    <h4 class="o_sipanel_tech_sheet_title" style="text-align: center; font-weight: bold; margin: 0 0 10px 0;"
+                        t-out="doc._sipanel_tech_sheet_heading()"/>
+                    <div t-if="doc.sipanel_tech_image" class="o_sipanel_tech_sheet_image" style="text-align: center; margin: 0 0 12px 0;">
+                        <img t-att-src="image_data_uri(doc.sipanel_tech_image)" alt="schematic"
+                             style="max-width: 100%; max-height: 8.5cm;"/>
+                    </div>
+                    <table t-if="doc.sipanel_tech_spec_ids" class="o_sipanel_tech_spec o_ignore_layout_styling" name="sipanel_tech_spec"
+                           style="width: 100%; border-collapse: collapse; font-size: 0.86em; line-height: 1.45;">
+                        <thead>
+                            <tr t-attf-style="background-color: #e9ecef; text-align: #{sipanel_ts_align};">
+                                <th style="width: 7%; border: 1px solid #495057; padding: 4px 6px; text-align: center;">No.</th>
+                                <th t-attf-style="width: 22%; border: 1px solid #495057; padding: 4px 6px; text-align: #{sipanel_ts_align};">Item</th>
+                                <th t-attf-style="border: 1px solid #495057; padding: 4px 6px; text-align: #{sipanel_ts_align};">Specification</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="doc._sipanel_tech_sheet_rows()" t-as="sipanel_row" class="o_sipanel_tech_spec_row">
+                                <td style="border: 1px solid #495057; padding: 4px 6px; text-align: center; vertical-align: top;"
+                                    t-out="sipanel_row[0]"/>
+                                <td t-attf-style="border: 1px solid #495057; padding: 4px 6px; vertical-align: top; font-weight: bold; text-align: #{sipanel_ts_align};"
+                                    t-out="sipanel_row[1]"/>
+                                <td t-attf-style="border: 1px solid #495057; padding: 4px 6px; vertical-align: top; text-align: #{sipanel_ts_align};"
+                                    t-out="sipanel_row[2]"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </t>
+        </xpath>
+        <!-- Owner decision 2026-10-16, item 3: a quotation with a technical sheet has 3 pages; its price table, amount
+             in words, terms and signature share page 3. After the material line was taken out of the printed
+             descriptions it still did not fit (measured on P1 run 20261015T050216Z: ~36 pt freed of ~140 pt), so
+             the owner's fallbacks apply, to these quotations only: cell padding 0.5rem -> 0.25rem (top/bottom)
+             and the price/total table font one step smaller (0.875rem). Quotations without a sheet are unchanged. -->
+        <xpath expr="//table[hasclass('o_main_table')]" position="before">
+            <style t-if="doc.sipanel_has_tech_sheet" class="o_sipanel_compact_table">
+                .o_sipanel_so_print table.o_main_table, .o_sipanel_so_print table.o_total_table { font-size: 0.875rem !important; }
+                .o_sipanel_so_print table.o_main_table > thead > tr > th,
+                .o_sipanel_so_print table.o_main_table > tbody > tr > td,
+                .o_sipanel_so_print table.o_total_table > tbody > tr > td,
+                .o_sipanel_so_print table.o_total_table > tr > td { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+            </style>
+        </xpath>
+        <!-- C: amount in words, below the totals box (native amount_to_text in the document language) -->
+        <xpath expr="//div[@name='so_total_summary']" position="inside">
+            <div class="row o_sipanel_amount_in_words" name="sipanel_amount_in_words">
+                <div class="col-12" style="margin-top: 4px; font-size: 0.95em;">
+                    <strong>Amount in words:</strong>
+                    <span class="o_sipanel_amount_in_words_text" t-out="doc._sipanel_amount_total_in_words()"/>
+                </div>
+            </div>
+        </xpath>
+        <!-- Items 2-4 (2026-10-08), owner review 2026-10-12: after the terms text (doc.note) the payment terms print
+             ONE text, the payment term name (its separate note is not printed), then the delivery time and, when
+             ticked, the company bank account. The quotation cannot be printed without the first two
+             (sale_order_terms.py). -->
+        <xpath expr="//p[span[@t-field='doc.payment_term_id.note']]" position="replace">
+            <div t-if="doc.payment_term_id" class="o_sipanel_payment_term" name="sipanel_payment_term">
+                <strong>Payment terms:</strong>
+                <span class="o_sipanel_payment_term_name" t-out="doc.payment_term_id.name"/>
+            </div>
+            <div t-if="doc.sipanel_delivery_days" class="o_sipanel_delivery_time" name="sipanel_delivery_time">
+                <strong>Delivery time:</strong>
+                <span class="o_sipanel_delivery_days" t-out="doc.sipanel_delivery_days"/>
+                <span>working days after receipt of the down payment</span>
+            </div>
+            <div t-if="doc.sipanel_show_bank_account and doc.sipanel_bank_account_id" class="o_sipanel_bank_account"
+                 name="sipanel_bank_account">
+                <t t-set="sipanel_bank" t-value="doc.sipanel_bank_account_id.sudo()"/>
+                <strong>Bank account for the down payment:</strong>
+                <span class="o_sipanel_bank_acc_number" t-out="sipanel_bank.acc_number"/>
+                <t t-if="sipanel_bank.bank_id.name"> - <span t-out="sipanel_bank.bank_id.name"/></t>
+            </div>
+        </xpath>
+        <!-- Owner review 2026-10-12, item 1: the Incoterm is not printed (sale_stock's header column), set or not. -->
+        <xpath expr="//div[@t-if='doc.incoterm']" position="replace"/>
+        <!-- Owner review 2026-10-12, item 5: the Salesperson of the header box prints the quotation name of the user
+             (Persian name on a fa_IR quotation, else the user name; res.users.name is not changed). -->
+        <xpath expr="//div[@id='informations']//div[@t-field='doc.user_id']" position="replace">
+            <div class="o_sipanel_salesperson" t-out="doc._sipanel_salesperson_print_name()"/>
+        </xpath>
+        <!-- Owner review 2026-10-12, item 3: the Project Site of Page 1 (sipanel_quotation_project_info) is one line
+             «<city> - <country>» (the site name when the city is empty), nothing printed twice. -->
+        <xpath expr="//td[hasclass('o_sipanel_page1_project_site')]/t[@t-if='sipanel_site']" position="replace">
+            <t t-if="sipanel_site"><span class="o_sipanel_project_site_line" t-out="doc._sipanel_project_site_line()"/></t>
+        </xpath>
+        <!-- Owner requirements 2026-10-14, item 3: the Requested System of Page 1 in the document language ("Standing
+             Seam" in English, «استندینگ سیم» in Persian), from the per-language name captured with the System; earlier
+             quotations print their Page 1 snapshot as before. -->
+        <xpath expr="//td[hasclass('o_sipanel_page1_requested_system')]/span[@t-if='doc.sipanel_requested_system_name_snapshot']" position="attributes">
+            <attribute name="t-out">doc._sipanel_system_print_label()</attribute>
+        </xpath>
+        <!-- Owner review 2026-10-12, item 2: closing block of every quotation, right after the amount in words.
+             Signature and stamp on the LEFT of the page, the terms block (terms text, payment terms, delivery time,
+             optional bank line) on the RIGHT, side by side, in fa_IR and en_US alike (the outer block is laid out
+             left to right; the terms cell takes the document direction). sale_shamsi_report's signature block is
+             replaced by this one (its caption "Sell Department" becomes "Sales Department", item 10 of
+             2026-10-08) and the native terms <div> is moved into the right cell. display: table keeps the whole
+             block on one page: page-break-inside: avoid overflows into the footer band on wkhtmltopdf 0.12.6
+             (sale_shamsi_report report_fonts.css, L-02). -->
+        <xpath expr="//div[hasclass('o_sipanel_signature_block')]" position="replace"/>
+        <xpath expr="//div[@name='so_total_summary']" position="after">
+            <t t-set="sipanel_doc_rtl" t-value="env['res.lang']._get_data(code=doc.partner_id.lang or env.lang).direction == 'rtl'"/>
+            <style>
+                .o_sipanel_closing_terms p, .o_sipanel_closing_terms div { margin: 0 !important; padding: 0 !important; }
+                .o_sipanel_closing_terms .oe_structure:empty, .o_sipanel_closing_terms p:empty { display: none; }
+                .o_sipanel_closing_terms [name=order_note] { text-align: inherit !important; }
+            </style>
+            <div class="o_sipanel_closing" name="sipanel_closing" dir="ltr"
+                 style="display: table; width: 100%; margin-top: 6px; line-height: 1.5;">
+                <div class="o_sipanel_closing_signature" name="sipanel_signature"
+                     style="display: table-cell; width: 26%; vertical-align: top; text-align: center;">
+                    <span class="signature_title">Sales Department</span>
+                    <div class="user_name_style o_sipanel_signature_name" style="border-top: 1px solid #eee; padding-top: 5px;"
+                         t-out="doc._sipanel_salesperson_print_name()"/>
+                    <div t-if="doc.user_id.sudo().signature" class="signature_container">
+                        <div t-out="doc.user_id.sudo().signature"/>
+                    </div>
+                    <div t-else="">
+                        <p class="user_name_style" style="border-bottom: 2px solid #000;" t-out="doc._sipanel_salesperson_print_name()"/>
+                    </div>
+                </div>
+                <div class="o_sipanel_closing_terms" name="sipanel_terms" t-att-dir="'rtl' if sipanel_doc_rtl else 'ltr'"
+                     t-attf-style="display: table-cell; width: 74%; vertical-align: top; text-align: #{'right' if sipanel_doc_rtl else 'left'};"/>
+            </div>
+        </xpath>
+        <!-- a moved node must be a direct child of the spec (odoo/tools/template_inheritance.py) -->
+        <xpath expr="//div[hasclass('o_sipanel_closing_terms')]" position="inside">
+            <xpath expr="//span[@name='order_note']/.." position="move"/>
+        </xpath>
+    </template>
+</odoo>

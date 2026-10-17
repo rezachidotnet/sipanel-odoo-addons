@@ -74,6 +74,16 @@ class TestQuotationPage1(TransactionCase):
         cells = block.xpath(f".//td[contains(concat(' ', normalize-space(@class), ' '), ' {cls} ')]")
         return self._text(cells[0]) if cells else None
 
+    def _assert_site_cell(self, order, cell, lang='en_US'):
+        """sipanel_quotation_lines (owner review 2026-10-12), when installed, prints the Project Site as one line
+        «<city> - <country>»; this module alone prints the site name and its formatted address."""
+        if hasattr(order, '_sipanel_project_site_line'):
+            self.assertEqual(cell, order.with_context(lang=lang)._sipanel_project_site_line())
+            self.assertEqual(cell.count(f'{PT}-Taleghan'), 1, 'City is printed once')
+            return True
+        self.assertIn(f'{PT} Taleghan Site', cell)
+        return False
+
     def _title(self, block):
         titles = block.xpath(".//div[contains(concat(' ', normalize-space(@class), ' '), ' o_sipanel_page1_title ')]")
         self.assertEqual(len(titles), 1, 'exactly one Page 1 title')
@@ -278,9 +288,9 @@ class TestQuotationPage1(TransactionCase):
         self.assertEqual(before, after, 'Project Site entry must not change fiscal position, taxes or totals')
         self.assertEqual(before[1], [tuple(tax_dom.ids)])
         cell = self._cell(self._page1(order), 'o_sipanel_page1_project_site')
-        self.assertIn(f'{PT} Taleghan Site', cell)
-        self.assertIn(f'{PT} Site Road 7', cell)
-        self.assertEqual(cell.count(f'{PT}-Taleghan'), 1, 'City is printed once, inside the formatted address')
+        if not self._assert_site_cell(order, cell):
+            self.assertIn(f'{PT} Site Road 7', cell)
+            self.assertEqual(cell.count(f'{PT}-Taleghan'), 1, 'City is printed once, inside the formatted address')
         self.assertNotIn(f'{PT}-FiscalCity', cell)
 
     def test_l03_site_changing_fiscal_position_is_blocked(self):
@@ -365,7 +375,7 @@ class TestQuotationPage1(TransactionCase):
                 self.assertEqual(self._cell(block, 'o_sipanel_page1_customer'), f'{PT} Customer Co')
                 site_cell = self._cell(block, 'o_sipanel_page1_project_site')
                 if with_site:
-                    self.assertIn(f'{PT} Taleghan Site', site_cell)
+                    self._assert_site_cell(order, site_cell, lang)
                 else:
                     self.assertIn(site_cell, ('Not specified', 'مشخص نشده'))
 

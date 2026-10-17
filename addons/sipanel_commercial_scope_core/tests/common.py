@@ -38,6 +38,12 @@ class SipanelCoreCase(TransactionCase):
         for uom, fam in ((cls.uom_m, 'length'), (cls.uom_cm, 'length'), (cls.uom_unit, 'count'), (cls.uom_hour, 'time')):
             if not Family.search([('uom_id', '=', uom.id)]):
                 Family.create({'uom_id': uom.id, 'family': fam})
+        if 'sipanel_delivery_days' in env['sale.order']._fields:
+            # sipanel_quotation_lines: a quotation is printed / sent only with a payment term and a delivery time.
+            # The fixtures of the other modules send quotations without caring about either; inside this test
+            # transaction only, new orders get both (the gate itself is tested in sipanel_quotation_lines).
+            env['ir.default'].set('sale.order', 'payment_term_id', env.ref('account.account_payment_term_immediate').id)
+            env['ir.default'].set('sale.order', 'sipanel_delivery_days', 30)
         cls.plan_system = env['account.analytic.plan'].create({'name': f'{TEST_BATCH} System'})
         cls.plan_activity = env['account.analytic.plan'].create({'name': f'{TEST_BATCH} Activity'})
         env['ir.config_parameter'].sudo().set_param('sipanel_scope.system_plan_id', cls.plan_system.id)

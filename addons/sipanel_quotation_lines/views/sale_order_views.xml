@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_sipanel_installation" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.installation</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <!-- Items 2-4 (2026-10-08): required before the quotation is printed or sent (sale_order_terms.py). The
+                 native placeholder "Immediate" (an empty term) is replaced: an empty term now blocks printing. -->
+            <xpath expr="//group[@name='order_details']//field[@name='payment_term_id']" position="attributes">
+                <attribute name="placeholder">الزامی برای چاپ و ارسال پیش‌فاکتور</attribute>
+            </xpath>
+            <xpath expr="//group[@name='order_details']//field[@name='payment_term_id']" position="after">
+                <field name="sipanel_delivery_days" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_company_partner_id" invisible="1"/>
+                <field name="sipanel_show_bank_account" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_bank_account_id" invisible="not sipanel_show_bank_account"
+                       required="sipanel_show_bank_account" readonly="state not in ['draft', 'sent']"
+                       options="{'no_create': True}"/>
+            </xpath>
+            <xpath expr="//group[@name='sipanel_project_info']/group[1]" position="inside">
+                <field name="sipanel_installation_pct" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_installation_amount" invisible="not sipanel_installation_pct"/>
+                <field name="sipanel_shop_drawing_pct" readonly="state not in ['draft', 'sent']"/>
+                <field name="sipanel_shop_drawing_discount" invisible="not sipanel_shop_drawing_pct"
+                       readonly="state not in ['draft', 'sent']"/>
+            </xpath>
+            <!-- owner requirements 2026-10-14: the quotation's own copy of the System technical sheet, editable while
+                 the quotation is a draft, frozen once it is sent or confirmed (tech_sheet.py) -->
+            <xpath expr="//notebook/page[@name='other_information']" position="before">
+                <page string="Technical sheet" name="sipanel_tech_sheet">
+                    <field name="sipanel_has_tech_sheet" invisible="1"/>
+                    <!-- owner decision 2026-10-17, item 7: what a salesperson sees in the rows is not what prints -->
+                    <div class="alert alert-info mb-2" role="status" name="sipanel_tech_sheet_help">
+                        <div>{liner_thickness} in a row is replaced, when the quotation is printed, by the liner thickness chosen here (0.5 or 0.7 mm).</div>
+                        <div>A row without a description (row 6, top sheet) is filled from the material chosen on the quotation lines: it prints the technical text of that material (Galvanized or Aluminium).</div>
+                        <div>The rows can be edited while the quotation is a draft; they are frozen once it is sent or confirmed.</div>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="sipanel_liner_thickness" readonly="state != 'draft'"/>
+                        </group>
+                        <group>
+                            <button name="action_sipanel_load_tech_sheet" type="object" string="Reload technical sheet from the System"
+                                    invisible="state != 'draft' or not sipanel_requested_system_id" class="btn-secondary"
+                                    confirm="The System's technical sheet replaces this quotation's copy (and its edits). Continue?"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="sipanel_tech_image" widget="image" options="{'size': [0, 180]}" readonly="state != 'draft'"/>
+                    </group>
+                    <field name="sipanel_tech_spec_ids" readonly="state != 'draft'">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="number"/>
+                            <field name="title"/>
+                            <field name="description"/>
+                            <field name="attribute_id" optional="hide" readonly="1"/>
+                            <field name="attribute_value_id" optional="hide"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+            <!-- owner decision 2026-10-17, item 6: Persian labels for the fields of sale_shamsi_report (no translation
+                 file of its own) and the Scope columns of sipanel_sale_scope; the label belongs to this view, so this
+                 module's fa_IR.po translates it (one module to upgrade) -->
+            <xpath expr="//field[@name='validity_date_shamsi']" position="attributes">
+                <attribute name="string">Validity Date (Shamsi)</attribute>
+            </xpath>
+            <xpath expr="//field[@name='date_order_shamsi']" position="attributes">
+                <attribute name="string">Order Date (Shamsi)</attribute>
+            </xpath>
+            <xpath expr="//field[@name='commitment_date_shamsi']" position="attributes">
+                <attribute name="string">Delivery Date (Shamsi)</attribute>
+            </xpath>
+            <xpath expr="//field[@name='expected_date_shamsi']" position="attributes">
+                <attribute name="string">Expected Date (Shamsi)</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='sipanel_placement_snapshot']" position="attributes">
+                <attribute name="string">Scope line</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='sipanel_certainty_snapshot']" position="attributes">
+                <attribute name="string">Certainty</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='sipanel_invoice_gate']" position="attributes">
+                <attribute name="string">Invoice hold</attribute>
+            </xpath>
+            <!-- The Installation / Execution section + line are fully computed (decision 2026-10-06, option A):
+                 their content cannot be edited in the quotation, instead of being silently re-governed on save.
+                 `add` + separator keeps every native readonly condition. The engine keeps the block last. -->
+            <xpath expr="//field[@name='order_line']/list" position="inside">
+                <field name="sipanel_is_installation_line" column_invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='sequence']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_template_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='name']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_qty']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='discount']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="before">
+                <field name="sipanel_is_installation_line" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='name']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_uom_qty']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_uom_id']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='price_unit']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='discount']" position="attributes">
+                <attribute name="readonly" add="sipanel_is_installation_line" separator=" or "/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- owner decision 2026-10-17, item 6: the native "Quote Builder" tab has no Persian translation in Odoo 19 -->
+    <record id="view_order_form_sipanel_quote_builder_label" model="ir.ui.view">
+        <field name="name">sale.order.form.sipanel.quote.builder.label</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_pdf_quote_builder.sale_order_form_inherit_sale_pdf_quote_builder"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='pdf_quote_builder']" position="attributes">
+                <attribute name="string">Quote Builder</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

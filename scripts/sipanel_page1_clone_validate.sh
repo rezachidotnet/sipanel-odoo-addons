@@ -9,6 +9,10 @@
 # The module directory is copied into /opt/odoo/addons (inert until installed; it is not auto_install).
 set -euo pipefail
 MODE=${1:-all}
+# RETIRED 2026-10-06: Page 1 is deployed; this script rendered through the Production container and copied
+# modules into /opt/odoo/addons, both now forbidden. Only a guarded `drop` of an old page1 clone remains.
+# New clone work: scripts/sipanel_qlines_clone_validate.sh.
+[ "$MODE" = drop ] || { echo "RETIRED: only 'drop' is available; use scripts/sipanel_qlines_clone_validate.sh"; exit 2; }
 REPO=/home/ubuntu/sipanel_odoo_addons
 MOD=sipanel_quotation_project_info
 SIPANEL_MODS=sipanel_commercial_scope_core,sipanel_sale_scope,sipanel_scope_execution,sipanel_scope_costing
@@ -43,9 +47,16 @@ capacity() {
   [ $(( (free - need) / 1048576 )) -ge 1500 ] || { echo "BLOCKED_DISK_CAPACITY"; exit 3; }
 }
 drop_clone() {  # clone only: database + its filestore copy
-  [[ "$CLONE" == sipanel_page1_clone_* ]] || { echo "refusing to drop $CLONE"; exit 2; }
+  local p r
+  : "${CLONE:?CLONE is empty}"
+  case "$CLONE" in sipanel|*/*|.*) echo "refusing to drop $CLONE"; exit 2;; esac
+  [[ "$CLONE" =~ ^sipanel_page1_clone_[0-9]{8}T[0-9]{6}Z$ ]] || { echo "refusing to drop $CLONE"; exit 2; }
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"${CLONE}\" WITH (FORCE)" || true
-  sudo rm -rf "/opt/odoo/data/filestore/${CLONE:?}"
+  p="/opt/odoo/data/filestore/$CLONE"
+  sudo test -e "$p" || return 0
+  r=$(sudo realpath -e -- "$p")
+  [ "$r" = "$p" ] || { echo "refusing: $p resolves to $r"; exit 2; }
+  sudo rm -rf --one-file-system -- "$r"
 }
 fail_clone() { echo "CLONE_FAILED: $1 -> dropping clone ${CLONE}" >&2; drop_clone; exit "${2:-4}"; }
 clone() {

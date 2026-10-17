@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_analytic_account_form_sipanel_installation" model="ir.ui.view">
+        <field name="name">account.analytic.account.form.sipanel.installation</field>
+        <field name="model">account.analytic.account</field>
+        <field name="inherit_id" ref="analytic.view_account_analytic_account_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='plan_id']" position="after">
+                <field name="sipanel_installation_product_id" options="{'no_create': True}"
+                       groups="sales_team.group_sale_manager"/>
+                <field name="sipanel_shop_drawing_product_id" options="{'no_create': True}"
+                       groups="sales_team.group_sale_manager"/>
+            </xpath>
+            <!-- owner requirements 2026-10-14: System technical sheet, copied into each new quotation of the System -->
+            <xpath expr="//sheet/notebook" position="inside">
+                <page string="Technical sheet" name="sipanel_tech_sheet" groups="sales_team.group_sale_manager">
+                    <group>
+                        <field name="sipanel_tech_image" widget="image" options="{'size': [0, 180]}"/>
+                    </group>
+                    <field name="sipanel_tech_spec_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="number"/>
+                            <field name="title"/>
+                            <field name="description"/>
+                            <field name="attribute_id" optional="show" options="{'no_create': True}"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

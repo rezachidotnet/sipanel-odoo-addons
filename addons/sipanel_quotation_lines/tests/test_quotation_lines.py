@@ -1,0 +1,873 @@
+# -*- coding: utf-8 -*-
+"""Quotation lines (work order 2026-10-05): technical description (A), Installation / Execution line (B,
+B1-B4), amount in words (C). Every record is synthetic (SIPANEL-PT-QLINES prefix) and rolled back."""
+import uuid
+from datetime import timedelta
+
+from lxml import etree, html as lxml_html
+
+from odoo import fields
+from odoo.exceptions import UserError, ValidationError
+from odoo.tests import Form, new_test_user, tagged
+
+from odoo.addons.sipanel_commercial_scope_core.tests.common import SipanelCoreCase, set_translation
+
+PT = 'SIPANEL-PT-QLINES'
+ROOF_QTY, ROOF_PRICE = 206.0, 88_000_000.0
+FLASH_QTY, FLASH_PRICE = 162.7, 34_000_000.0
+GUTTER_QTY, GUTTER_PRICE = 18.0, 67_000_000.0
+SUPPLY = 24_865_800_000.0
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_quotation_lines')
+class TestQuotationLines(SipanelCoreCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        env = cls.env
+        cls.estimator.write({'group_ids': [(4, env.ref('sipanel_sale_scope.group_scope_sales').id),
+                                           (4, env.ref('sales_team.group_sale_manager').id)]})
+        cls.vat = env['account.tax'].create({'name': f'{PT} VAT 10%', 'amount': 10.0, 'amount_type': 'percent',
+                                             'type_tax_use': 'sale', 'company_id': cls.company.id})
+        # One System plan for everything: the Requested System guard (sipanel_quotation_project_info) resolves the
+        # plan by name and requires the configured plan to agree; the core fixture configured a fresh test plan.
+        real = env['account.analytic.plan'].with_context(lang='en_US').search([('name', '=', 'SIPANEL System')])
+        if real:
+            cls.plan_system = real
+            env['ir.config_parameter'].sudo().set_param('sipanel_scope.system_plan_id', real.id)
+        else:
+            cls.plan_system.name = 'SIPANEL System'
+        Product = env['product.product']
+
+        def mk(name, ptype='service', base=False, desc_en=None, desc_fa=None, uom=None, price=0.0):
+            p = Product.create({'name': f'{PT} {name}', 'type': ptype, 'sale_ok': True, 'list_price': price,
+                                'uom_id': (uom or cls.uom_unit).id, 'taxes_id': [(6, 0, cls.vat.ids)],
+                                'sipanel_installation_base': base})
+            if desc_en is not None:
+                set_translation(p.product_tmpl_id, 'description_sale', en=desc_en, fa=desc_fa)
+            return p
+        # list price = the reference price: Odoo 19 treats a price_unit given at create as the product price
+        # (technical_price_unit) and re-prices such a line from the product on a quantity change / Update prices
+        cls.p_roof = mk('Roof Supply', base=True, uom=cls.uom_m, desc_en='Roof desc line 1\nRoof desc line 2',
+                        desc_fa='شرح سقف ۱\nشرح سقف ۲', price=ROOF_PRICE)
+        cls.p_flash = mk('Flashing', base=True, uom=cls.uom_m, price=FLASH_PRICE)
+        cls.p_gut = mk('Gutter', base=True, uom=cls.uom_m, price=GUTTER_PRICE)
+        cls.p_zero = mk('Zero list price item', base=True, uom=cls.uom_m)
+        cls.p_crane_svc = mk('Crane (not flagged)')
+        cls.p_install = mk('Installation Service', desc_en='Install desc EN', desc_fa='شرح نصب')
+        cls.p_own = mk('Own-line bracket', ptype='consu', desc_en='Bracket spec EN', desc_fa='مشخصات بست', price=5.0)
+        Account = env['account.analytic.account']
+        cls.system = Account.create({'name': f'{PT} Standing Seam', 'plan_id': cls.plan_system.id,
+                                     'sipanel_installation_product_id': cls.p_install.id})
+        cls.system_unmapped = Account.create({'name': f'{PT} Unmapped', 'plan_id': cls.plan_system.id})
+        cls.v_new = cls._make_version('NEW', include_install=False)
+        cls.v_old = cls._make_version('OLD', include_install=True, legacy=True)
+        cls.v_own = cls._make_version('OWN', include_install=False, own_line=True)
+        Partner = env['res.partner']
+        cls.cust_en = Partner.create({'name': f'{PT} Customer EN', 'lang': 'en_US'})
+        env['res.lang']._activate_lang('fa_IR')
+        cls.cust_fa = Partner.create({'name': f'{PT} Customer FA', 'lang': 'fa_IR'})
+
+    @classmethod
+    def _make_version(cls, tag, include_install, own_line=False, extra=(), legacy=False, release=True, desc=None):
+        """legacy=True: released as before rule QL1 existed (anchor not yet in the installation base at
+        release time) - the shape of the Production v2 Roof; the quotation-time guard must still refuse."""
+        env = cls.env
+        scope = env['sipanel.scope'].create({'code': f'{PT}-{tag}-{uuid.uuid4().hex[:8]}', 'name': f'{PT} Seam {tag}',
+                                             'owner_user_id': cls.steward.id})
+        v = env['sipanel.scope.version'].create({
+            'scope_id': scope.id, 'base_uom_id': cls.uom_m.id, 'dimension_family': 'length',
+            'anchor_product_id': cls.p_roof.id, 'anchor_owner_mode': 'component_bridge_owner',
+            'system_ids': [(6, 0, cls.system.ids)]})
+        set_translation(v, 'customer_label', en='Standing Seam Roof', fa='سقف استندینگ سیم')
+        if desc:
+            set_translation(v, 'customer_description', en=desc[0], fa=desc[1])
+        L = env['sipanel.scope.recipe.line']
+        L.create({'version_id': v.id, 'sequence': 10, 'product_id': cls.p_screw.id, 'uom_id': cls.uom_unit.id,
+                  'dimension_family': 'count', 'basis': 'manual', 'execution_mode': 'no_action', 'no_action_reason': 'covered_cost',
+                  'cost_policy': 'manual_estimate', 'disclosure': 'internal_only', 'customer_eligible': False})
+        if own_line:
+            own = L.create({'version_id': v.id, 'sequence': 20, 'product_id': cls.p_own.id, 'uom_id': cls.uom_unit.id,
+                            'dimension_family': 'count', 'basis': 'fixed', 'fixed_qty': 4.0, 'execution_mode': 'no_action', 'no_action_reason': 'covered_cost',
+                            'cost_policy': 'manual_estimate', 'placement': 'own_line', 'customer_eligible': True})
+            set_translation(own, 'customer_label', en='Bracket', fa='بست')
+        if include_install:
+            inst = L.create({'version_id': v.id, 'sequence': 100, 'product_id': cls.p_install.id, 'uom_id': cls.uom_unit.id,
+                             'dimension_family': 'count', 'basis': 'manual', 'execution_mode': 'no_action', 'no_action_reason': 'covered_cost',
+                             'cost_policy': 'manual_estimate', 'placement': 'included_parent', 'customer_eligible': True})
+            set_translation(inst, 'customer_label', en='Installation', fa='نصب')
+        for vals in extra:
+            line = L.create(dict(vals, version_id=v.id))
+            if line.customer_eligible:
+                set_translation(line, 'customer_label', en=f'{tag} extra', fa=f'{tag} اضافه')
+        if not release:
+            return v
+        if legacy:
+            cls.p_roof.sipanel_installation_base = False
+        v.action_release()
+        if legacy:
+            cls.p_roof.sipanel_installation_base = True
+        return v
+
+    # ------------------------------------------------------------------ helpers
+    def _order(self, partner=None, system=None, **vals):
+        return self.env['sale.order'].create(dict({
+            'partner_id': (partner or self.cust_en).id, 'origin': PT,
+            'sipanel_requested_system_id': (system or self.system).id}, **vals))
+
+    def _line(self, order, product, qty, price, **vals):
+        return self.env['sale.order.line'].create(dict({
+            'order_id': order.id, 'product_id': product.id, 'product_uom_qty': qty, 'price_unit': price}, **vals))
+
+    def _si_2546_copy(self, partner=None, scope_version=None):
+        """Synthetic copy of SI-26/2546: Roof / Flashing / Gutter at the reference quantities and prices.
+        With a scope_version, the Roof is a Commercial Scope anchor (the new or the old model)."""
+        order = self._order(partner)
+        self.env['sale.order.line'].create({'order_id': order.id, 'display_type': 'line_section',
+                                            'name': 'Standing Seam Roof System', 'sequence': 1})
+        if scope_version:
+            scope = self.env['sipanel.quote.scope']._create_from_version(
+                order, scope_version, ROOF_QTY, self.uom_m, system=self.system, sequence=20)
+            scope.anchor_line_id.write({'price_unit': ROOF_PRICE})
+        else:
+            self._line(order, self.p_roof, ROOF_QTY, ROOF_PRICE, sequence=20)
+        self.env['sale.order.line'].create({'order_id': order.id, 'display_type': 'line_section',
+                                            'name': 'Accessories', 'sequence': 40})
+        self._line(order, self.p_flash, FLASH_QTY, FLASH_PRICE, sequence=50)
+        self._line(order, self.p_gut, GUTTER_QTY, GUTTER_PRICE, sequence=60)
+        return order
+
+    @staticmethod
+    def _managed(order):
+        return order.order_line.filtered('sipanel_is_installation_line')
+
+    def _install_line(self, order):
+        lines = self._managed(order).filtered(lambda l: not l.display_type)
+        self.assertLessEqual(len(lines), 1, 'never more than one installation line')
+        return lines
+
+    def _assert_last(self, order):
+        ordered = order.order_line.sorted(lambda l: (l.sequence, l.id))
+        self.assertEqual(ordered[-1], self._install_line(order), 'installation line is the last line')
+        self.assertEqual(ordered[-2].display_type, 'line_section')
+        self.assertTrue(ordered[-2].sipanel_is_installation_line, 'its own section is right before it')
+
+    def _html(self, order):
+        return self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0].decode()
+
+    def _supply(self, order):
+        return sum(order.order_line.filtered(lambda l: l.product_id.sipanel_installation_base).mapped('price_subtotal'))
+
+    # ------------------------------------------------------------------ A. technical description
+    def test_01_description_sale_is_appended_natively_and_printed_under_the_title(self):
+        for partner, desc in ((self.cust_en, ['Roof desc line 1', 'Roof desc line 2']),
+                              (self.cust_fa, ['شرح سقف ۱', 'شرح سقف ۲'])):
+            order = self._order(partner)
+            line = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.p_roof.id,
+                                                       'product_uom_qty': 1.0})
+            parts = line.name.split('\n')
+            self.assertIn(self.p_roof.name, parts[0], 'first line is the item title (native)')
+            self.assertEqual(parts[1:], desc, 'description_sale follows in the partner language (native)')
+            doc = lxml_html.fromstring(self._html(order))
+            cell = doc.xpath("//td[@name='td_product_name'][.//span[contains(@class,'o_sipanel_line_title')]]")
+            self.assertEqual(len(cell), 1)
+            title = cell[0].xpath(".//span[contains(@class,'o_sipanel_line_title')]")[0].text_content().strip()
+            muted = cell[0].xpath(".//div[contains(@class,'o_sipanel_line_desc')]")
+            self.assertIn(self.p_roof.name, title)
+            self.assertNotIn(desc[0], title, 'the description is not part of the title')
+            self.assertEqual(len(muted), 1, 'one muted description block inside the same cell')
+            self.assertIn('text-muted', muted[0].get('class'))
+            self.assertEqual([t.strip() for t in muted[0].itertext() if t.strip()], desc)
+
+    def test_02_scope_generated_line_carries_the_description(self):
+        order = self._order(self.cust_fa)
+        scope = self.env['sipanel.quote.scope']._create_from_version(order, self.v_own, 10.0, self.uom_m,
+                                                                      system=self.system)
+        generated = order.order_line.filtered(lambda l: l.sipanel_is_generated)
+        self.assertEqual(len(generated), 1)
+        self.assertEqual(generated.name.split('\n'), ['بست', 'مشخصات بست'],
+                         'label (snapshot language) stays the title; description_sale follows')
+        # the anchor keeps the governed Scope note untouched
+        self.assertEqual(scope.anchor_line_id.name, scope.current_revision_id.final_note)
+        self.assertIn('o_sipanel_line_desc', self._html(order))
+
+    # ------------------------------------------------------------------ B. installation line
+    def test_03_acceptance_40pct_on_the_new_scope_version(self):
+        order = self._si_2546_copy(scope_version=self.v_new)
+        self.assertEqual(self._supply(order), SUPPLY)
+        self.assertFalse(self._managed(order), 'percentage 0 (company default unset): no installation line')
+        order.sipanel_installation_pct = 40.0
+        inst = self._install_line(order)
+        self.assertEqual(inst.product_id, self.p_install, 'installation product of the order System (B2)')
+        self.assertEqual((inst.product_uom_qty, inst.price_unit), (1.0, 9_946_320_000.0))
+        self.assertEqual(inst.tax_ids, self.vat, 'taxes from the product, natively')
+        self.assertEqual(order.amount_untaxed, 34_812_120_000.0)
+        self.assertEqual(order.amount_tax, 3_481_212_000.0)
+        self.assertEqual(order.amount_total, 38_293_332_000.0)
+        self.assertEqual(order.sipanel_installation_amount, 9_946_320_000.0)
+        self._assert_last(order)
+        self.assertEqual(inst.name.split('\n')[0], 'Installation & Execution (40% of item subtotal)')
+
+    def test_04_acceptance_10pct_and_fa_label(self):
+        order = self._si_2546_copy(partner=self.cust_fa)
+        order.sipanel_installation_pct = 10.0
+        inst = self._install_line(order)
+        self.assertEqual(inst.price_unit, 2_486_580_000.0)
+        self.assertEqual(order.amount_untaxed, 27_352_380_000.0)
+        self.assertEqual(order.amount_tax, 2_735_238_000.0)
+        self.assertEqual(order.amount_total, 30_087_618_000.0)
+        self.assertEqual(inst.name.split('\n'), ['نصب و اجرا (10٪ مبلغ اقلام)', 'شرح نصب'])
+        self.assertEqual(self._managed(order).filtered('display_type').name, 'نصب و اجرا')
+
+    def test_05_crane_line_is_not_in_the_base(self):
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        self._line(order, self.p_crane_svc, 1.0, 500_000_000.0, sequence=70)
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'unflagged crane line excluded (B1)')
+        self.assertEqual(order.sipanel_installation_base_amount, SUPPLY)
+        self._assert_last(order)
+
+    def test_06_recompute_while_quotation(self):
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        gutter = order.order_line.filtered(lambda l: l.product_id == self.p_gut)
+        gutter.product_uom_qty = 28.0                         # +10 x 67,000,000
+        self.assertEqual(self._install_line(order).price_unit, 10_214_320_000.0)
+        gutter.price_unit = 77_000_000.0                      # +28 x 10,000,000
+        self.assertEqual(self._install_line(order).price_unit, 10_326_320_000.0)
+        gutter.unlink()
+        self.assertEqual(self._install_line(order).price_unit, 9_463_920_000.0)
+        new = self._line(order, self.p_gut, GUTTER_QTY, GUTTER_PRICE)
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        self._assert_last(order)
+        order.sipanel_installation_pct = 12.5
+        self.assertEqual(self._install_line(order).price_unit, 3_108_225_000.0)
+        self.assertEqual(self._install_line(order).name.split('\n')[0], 'Installation & Execution (12.5% of item subtotal)')
+        order.action_quotation_sent()
+        self.assertEqual(order.state, 'sent')
+        new.product_uom_qty = 28.0
+        self.assertEqual(self._install_line(order).price_unit, 3_191_975_000.0, 'sent quotations still recompute')
+        self.assertEqual(len(self._managed(order)), 2, 'one section + one line, no duplicates')
+
+    def test_07_frozen_after_confirmation_and_cancel(self):
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        order.action_confirm()
+        self.assertEqual(order.state, 'sale')
+        roof = order.order_line.filtered(lambda l: l.product_id == self.p_roof)
+        roof.product_uom_qty = 300.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'confirmed: never recomputed')
+        with self.assertRaises(UserError):
+            order.sipanel_installation_pct = 50.0
+        order._action_cancel()
+        self.assertEqual(order.state, 'cancel')
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'cancelled: still frozen')
+        with self.assertRaises(UserError):
+            order.sipanel_installation_pct = 10.0
+
+    def test_08_zero_pct_means_no_line(self):
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 0.0
+        self.assertFalse(self._managed(order))
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(len(self._managed(order)), 2)
+        order.sipanel_installation_pct = 0.0
+        self.assertFalse(self._managed(order), 'back to 0 removes the section and the line')
+        self.assertEqual(order.amount_untaxed, SUPPLY)
+
+    def test_09_stays_last_and_single_after_scope_regeneration(self):
+        order = self._si_2546_copy(scope_version=self.v_new)
+        order.sipanel_installation_pct = 40.0
+        # a second Scope is added, its projection regenerated, and the first Scope's components resynced
+        scope2 = self.env['sipanel.quote.scope']._create_from_version(order, self.v_new, 5.0, self.uom_m,
+                                                                       system=self.system, sequence=500)
+        scope2.anchor_line_id.write({'price_unit': 1_000_000.0})
+        for scope in order.sipanel_quote_scope_ids:
+            rev = scope.current_revision_id
+            rev._sync_separately_billable_lines()
+            rev.action_generate_note()
+        self._assert_last(order)
+        self.assertEqual(len(self._managed(order)), 2)
+        self.assertEqual(self._install_line(order).price_unit, order.currency_id.round((SUPPLY + 5_000_000.0) * 0.4))
+        for scope in order.sipanel_quote_scope_ids:
+            comps = scope.current_revision_id.component_ids
+            self.assertNotIn(self.p_install, comps.mapped('product_id'), 'never a Scope component')
+            self.assertNotIn(self._install_line(order), scope.anchor_line_id | scope.current_revision_id.projected_line_ids)
+
+    def test_10_excluded_from_scope_costing(self):
+        order = self._si_2546_copy(scope_version=self.v_new)
+        revs = order.sipanel_quote_scope_ids.mapped('current_revision_id').sudo()
+        before = (revs.mapped('eligible_cost_total'), order.sudo().sipanel_total_cost)
+        order.sipanel_installation_pct = 40.0
+        revs.invalidate_recordset()
+        order.invalidate_recordset()
+        self.assertEqual((revs.mapped('eligible_cost_total'), order.sudo().sipanel_total_cost), before,
+                         'Scope cost base unchanged by the installation line')
+        inst = self._install_line(order)
+        self.assertFalse(inst.sipanel_quote_scope_id or inst.sipanel_is_generated or inst.sipanel_source_component_id)
+
+    def test_11_old_scope_version_refuses_a_percentage(self):
+        order = self._si_2546_copy(scope_version=self.v_old)
+        with self.assertRaisesRegex(UserError, 'charge installation twice'):
+            order.sipanel_installation_pct = 40.0
+        self.assertFalse(self._managed(order))
+
+    def test_12_no_mapping_refuses_and_creates_nothing(self):
+        order = self._order(system=self.system_unmapped)
+        self._line(order, self.p_roof, 1.0, 100.0)
+        with self.assertRaisesRegex(UserError, 'no installation product'):
+            order.sipanel_installation_pct = 10.0
+        no_system = self._order()
+        no_system.sipanel_requested_system_id = False
+        with self.assertRaisesRegex(UserError, 'no SIPANEL System'):
+            no_system.sipanel_installation_pct = 10.0
+
+    def test_13_company_default_and_quotation_override(self):
+        self.company.sipanel_installation_pct_default = 12.0
+        order = self._si_2546_copy()
+        self.assertEqual(order.sipanel_installation_pct, 12.0, 'new quotation proposes the company default')
+        self.assertEqual(self._install_line(order).price_unit, 2_983_896_000.0)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'quotation value overrides')
+        settings = self.env['res.config.settings'].create({})
+        self.assertEqual(settings.sipanel_installation_pct_default, 12.0)
+
+    def test_14_protection_copy_update_prices_forgery_delete(self):
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        copy = order.copy()
+        self.assertEqual(len(self._managed(copy)), 2, 'copy: rebuilt once, never duplicated')
+        self.assertEqual(self._install_line(copy).price_unit, 9_946_320_000.0)
+        order.action_update_prices()
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'pricelist update keeps the amount')
+        self._install_line(order).write({'price_unit': 1.0})
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'a manual edit is re-governed')
+        with self.assertRaises(UserError):
+            self._install_line(order).unlink()
+        roof = order.order_line.filtered(lambda l: l.product_id == self.p_roof)
+        with self.assertRaises(UserError):
+            roof.write({'sipanel_is_installation_line': True})
+        with self.assertRaises(UserError):
+            self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.p_crane_svc.id,
+                                                'sipanel_is_installation_line': True})
+        dp = self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.p_roof.id,
+                                                 'is_downpayment': True, 'price_unit': 1_000.0, 'product_uom_qty': 1.0})
+        self.assertTrue(dp)
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0, 'down payments excluded')
+
+    def test_16_update_prices_to_a_zero_base_removes_the_line_cleanly(self):
+        """Regression (clone run 2026-10-06): "Update prices" re-priced the base to 0 mid-batch, the engine
+        removed the managed lines and the native discount reset then wrote on deleted lines (MissingError)."""
+        order = self._order()
+        self._line(order, self.p_zero, 10.0, 1_000_000.0, sequence=20)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 4_000_000.0)
+        order.action_update_prices()
+        self.assertEqual(order.sipanel_installation_base_amount, 0.0)
+        self.assertFalse(self._managed(order), 'base 0 after the update: no installation line, no error')
+        self._line(order, self.p_roof, 1.0, ROOF_PRICE, sequence=30)
+        self.assertEqual(self._install_line(order).price_unit, 35_200_000.0, 'rebuilt once the base is back')
+        self._assert_last(order)
+
+    def test_17_generated_installation_price_survives_native_repricing(self):
+        """The engine-created line carries a MANUAL price in Odoo 19 terms (technical_price_unit differs), so
+        a quantity change re-prices neither it nor - through the base - anything but its computed amount."""
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        line = self._install_line(order)
+        self.assertEqual(self.p_install.list_price, 0.0)
+        self.assertEqual(line.price_unit, 9_946_320_000.0)
+        self.assertTrue(order.currency_id.compare_amounts(line.technical_price_unit, line.price_unit),
+                        'native manual-price marker set on the generated line')
+        line.product_uom_qty = 3.0                            # qty change ON the installation line
+        line = self._install_line(order)
+        self.assertEqual((line.product_uom_qty, line.price_unit), (1.0, 9_946_320_000.0),
+                         'not re-priced from the product list price; quantity re-governed')
+        roof = order.order_line.filtered(lambda l: l.product_id == self.p_roof)
+        roof.product_uom_qty = 216.0                          # qty change on an ITEM line: +10 x 88,000,000
+        self.assertEqual(self._install_line(order).price_unit, 10_298_320_000.0)
+        self.assertEqual(self._install_line(order), line, 'same record, updated in place')
+        line.invalidate_recordset()
+        line._compute_price_unit()                            # direct native recompute
+        self.assertEqual(line.price_unit, 10_298_320_000.0)
+        self._assert_last(order)
+
+    def test_18_scope_projection_and_installation_line_on_one_quotation(self):
+        """A Scope with a separately-billable (own_line) component AND the installation line: two
+        independent generated-line mechanisms on one order must not interfere."""
+        order = self._order(self.cust_fa)
+        self.env['sale.order.line'].create({'order_id': order.id, 'display_type': 'line_section',
+                                            'name': 'Standing Seam Roof System', 'sequence': 1})
+        scope = self.env['sipanel.quote.scope']._create_from_version(
+            order, self.v_own, ROOF_QTY, self.uom_m, system=self.system, sequence=20)
+        scope.anchor_line_id.write({'price_unit': ROOF_PRICE})
+        self._line(order, self.p_flash, FLASH_QTY, FLASH_PRICE, sequence=50)
+        self._line(order, self.p_gut, GUTTER_QTY, GUTTER_PRICE, sequence=60)
+        rev = scope.current_revision_id
+        generated = rev.projected_line_ids
+        self.assertEqual(len(generated), 1)
+        recon_before = (rev.reconciliation_ok, rev.separate_amount)
+        order.sipanel_installation_pct = 40.0
+        inst = self._managed(order)
+        self.assertEqual(len(inst), 2)
+        # disjoint: the installation lines are not projection lines and carry no Scope provenance
+        self.assertFalse(inst & rev.projected_line_ids)
+        self.assertFalse(any(inst.mapped('sipanel_is_generated')))
+        self.assertFalse(any(inst.mapped('sipanel_origin_key')) or inst.mapped('sipanel_source_revision_id'))
+        self.assertFalse(generated.sipanel_is_installation_line)
+        # base = flagged products only: the anchor (Roof) + Flashing + Gutter, not the unflagged bracket line
+        self.assertNotIn(generated, order._sipanel_installation_base_lines())
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        self._assert_last(order)
+        rev.invalidate_recordset()
+        self.assertEqual((rev.reconciliation_ok, rev.separate_amount), recon_before,
+                         'the Scope reconciliation ignores the installation line')
+        # Scope regeneration and installation sync, in both orders
+        rev._sync_separately_billable_lines()
+        self.assertEqual(rev.projected_line_ids, generated, 'projection upsert keeps its single line')
+        self.assertEqual(self._managed(order), inst, 'installation lines untouched by the projection sync')
+        self._assert_last(order)
+        order._sipanel_sync_installation()
+        self.assertEqual(rev.projected_line_ids, generated)
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        order.sipanel_installation_pct = 0.0
+        self.assertFalse(self._managed(order))
+        self.assertEqual(rev.projected_line_ids, generated, 'removing the installation line leaves the projection')
+
+    def test_19_installation_line_is_readonly_in_the_quotation_form(self):
+        """Decision 2026-10-06 (option A): the computed line cannot be edited in the UI at all."""
+        arch = etree.fromstring(self.env.ref('sale.view_order_form').get_combined_arch())
+        for path, names in (("//field[@name='order_line']/list/", ('sequence', 'product_id', 'product_template_id',
+                                                                  'name', 'product_uom_qty', 'product_uom_id',
+                                                                  'price_unit', 'discount')),
+                            ("//field[@name='order_line']/form//", ('product_id', 'name', 'product_uom_qty',
+                                                                  'product_uom_id', 'price_unit', 'discount'))):
+            for name in names:
+                node = arch.xpath(f"{path}field[@name='{name}']")[0]
+                self.assertIn('sipanel_is_installation_line', node.get('readonly', ''), f'{path} {name}')
+        # the native conditions are kept, not replaced
+        list_path = "//field[@name='order_line']/list"
+        for name, native in (('price_unit', 'qty_invoiced'), ('product_uom_qty', 'is_downpayment'),
+                             ('product_uom_id', 'product_uom_readonly')):
+            readonly = arch.xpath(f"{list_path}/field[@name='{name}']")[0].get('readonly')
+            self.assertIn(native, readonly, name)
+        order = self._si_2546_copy()
+        order.sipanel_installation_pct = 40.0
+        lines = list(order.order_line)
+        inst_idx = lines.index(self._install_line(order))
+        section_idx = lines.index(self._managed(order).filtered('display_type'))
+        roof_idx = lines.index(order.order_line.filtered(lambda l: l.product_id == self.p_roof))
+        with Form(order) as f:
+            with f.order_line.edit(inst_idx) as line:
+                for fname, value in (('price_unit', 1.0), ('name', 'edited'), ('product_uom_qty', 3.0)):
+                    with self.assertRaises(AssertionError, msg=f'{fname} must be readonly'):
+                        setattr(line, fname, value)
+            with f.order_line.edit(section_idx) as line:
+                with self.assertRaises(AssertionError, msg='section title must be readonly'):
+                    line.name = 'edited'
+            with f.order_line.edit(roof_idx) as line:      # positive control: ordinary lines stay editable
+                line.name = 'Roof (edited)'
+                line.product_uom_qty = ROOF_QTY
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        self._assert_last(order)
+
+    def test_20_chatter_note_on_engine_removal_and_rebuild(self):
+        order = self._order()
+        item = self._line(order, self.p_zero, 10.0, 1_000_000.0, sequence=20)
+        order.sipanel_installation_pct = 40.0
+        note = self.env.ref('mail.mt_note')
+
+        def notes():
+            return order.message_ids.filtered(lambda m: m.subtype_id == note).sorted('id').mapped(lambda m: str(m.body))
+
+        before = len(notes())
+        item.price_unit = 0.0                                 # item subtotal reaches 0
+        self.assertFalse(self._managed(order))
+        self.assertEqual(len(notes()), before + 1)
+        self.assertIn('removed automatically', notes()[-1])
+        self.assertTrue(order.sipanel_installation_removed_zero_base)
+        item.product_uom_qty = 20.0                           # still 0: no second note
+        self.assertEqual(len(notes()), before + 1)
+        item.price_unit = 500_000.0                           # back above 0: 40 % of 10,000,000
+        self.assertEqual(self._install_line(order).price_unit, 4_000_000.0)
+        self.assertEqual(len(notes()), before + 2)
+        self.assertIn('rebuilt automatically', notes()[-1])
+        self.assertFalse(order.sipanel_installation_removed_zero_base)
+        self._assert_last(order)
+        order.sipanel_installation_pct = 0.0                  # the user's choice: no engine note
+        self.assertFalse(self._managed(order))
+        self.assertEqual(len(notes()), before + 2)
+        self.assertFalse(order.sipanel_installation_removed_zero_base)
+
+    def _work_line(self, product, **vals):
+        return dict({'sequence': 30, 'product_id': product.id, 'uom_id': self.uom_unit.id, 'dimension_family': 'count',
+                     'basis': 'fixed', 'fixed_qty': 1.0, 'cost_policy': 'manual_estimate'}, **vals)
+
+    def test_21_double_charge_guard_am07(self):
+        """AM-07 / R-DC1 (owner decision 2026-10-06), quotation-time second guard on versions released before QL1."""
+        crew = self.env['product.product'].create({'name': f'{PT} Installer crew', 'type': 'service', 'sale_ok': True,
+                                                   'uom_id': self.uom_unit.id, 'sipanel_installation_work': True})
+        survey = self.env['product.product'].create({'name': f'{PT} Site survey', 'type': 'service', 'sale_ok': True,
+                                                     'uom_id': self.uom_unit.id})
+        labour = dict(execution_mode='labour', activity_id=self.act_ins.id, placement='included_parent',
+                      customer_eligible=True)
+        hidden = dict(execution_mode='no_action', no_action_reason='covered_cost', placement='no_customer_line',
+                      disclosure='internal_only', customer_eligible=False)
+        # a) unchanged: the anchor of a Scope is in the base when its product is flagged
+        order = self._si_2546_copy(scope_version=self.v_new)
+        anchor = order.sipanel_quote_scope_ids.anchor_line_id
+        self.assertIn(anchor, order._sipanel_installation_base_lines())
+        # closed gap: the mapped installation product as "no customer line" (cost inside the anchor price)
+        v_hidden = self._make_version('HIDDEN', include_install=False, legacy=True,
+                                      extra=[self._work_line(self.p_install, **hidden)])
+        # closed gap: a component flagged as installation WORK
+        v_crew = self._make_version('CREW', include_install=False, legacy=True, extra=[self._work_line(crew, **labour)])
+        for version in (v_hidden, v_crew):
+            order = self._si_2546_copy(scope_version=version)
+            with self.assertRaisesRegex(UserError, 'charge installation twice'):
+                order.sipanel_installation_pct = 40.0
+            self.assertFalse(self._managed(order))
+        # by decision: labour that is not installation work does not refuse
+        v_survey = self._make_version('SURVEY', include_install=False, extra=[self._work_line(survey, **labour)])
+        order = self._si_2546_copy(scope_version=v_survey)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+        # customer responsibility is not our charge
+        v_cust = self._make_version('CUST', include_install=False, extra=[self._work_line(
+            self.p_install, execution_mode='no_action', no_action_reason='customer_responsibility',
+            responsibility='customer', placement='own_line')])
+        order = self._si_2546_copy(scope_version=v_cust)
+        order.sipanel_installation_pct = 40.0
+        self.assertEqual(self._install_line(order).price_unit, 9_946_320_000.0)
+
+    def test_22_release_refuses_installation_work_in_an_installation_base_anchor(self):
+        """QL1 - primary enforcement at Scope Version release."""
+        crew = self.env['product.product'].create({'name': f'{PT} Installer crew R', 'type': 'service',
+                                                   'sale_ok': True, 'uom_id': self.uom_unit.id,
+                                                   'sipanel_installation_work': True})
+        cases = {
+            'mapped product included': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='included_parent',
+                customer_eligible=True)),
+            'mapped product own line': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='own_line',
+                customer_eligible=True)),
+            'mapped product no customer line': dict(product=self.p_install, vals=dict(
+                execution_mode='no_action', no_action_reason='covered_cost', placement='no_customer_line',
+                disclosure='internal_only', customer_eligible=False)),
+            'installation work labour': dict(product=crew, vals=dict(
+                execution_mode='labour', activity_id=self.act_ins.id, placement='included_parent',
+                customer_eligible=True)),
+        }
+        for i, (case, spec) in enumerate(cases.items()):
+            with self.subTest(case=case):
+                v = self._make_version(f'QL1{i}', include_install=False, release=False,
+                                       extra=[self._work_line(spec['product'], **spec['vals'])])
+                with self.assertRaisesRegex(ValidationError, r'\[QL1\]'):
+                    v.action_release()
+                self.assertEqual(v.state, 'draft')
+        # anchor NOT in the installation base: the same recipe releases (nothing to double-charge)
+        self.p_roof.sipanel_installation_base = False
+        v = self._make_version('QL1-NOBASE', include_install=False, release=False,
+                               extra=[self._work_line(crew, **cases['installation work labour']['vals'])])
+        v.action_release()
+        self.assertEqual(v.state, 'released')
+        self.p_roof.sipanel_installation_base = True
+        # customer responsibility releases
+        v = self._make_version('QL1-CUST', include_install=False, release=False, extra=[self._work_line(
+            self.p_install, execution_mode='no_action', no_action_reason='customer_responsibility',
+            responsibility='customer', placement='own_line')])
+        v.action_release()
+        self.assertEqual(v.state, 'released')
+
+    def test_23_release_warns_on_installation_wording(self):
+        """QL2 - text only: a warning in the release chatter, never a refusal."""
+        def warnings(v):
+            return [str(m.body) for m in v.message_ids if 'Release warning [QL2]' in str(m.body)]
+        v_en = self._make_version('QL2-EN', include_install=False,
+                                  desc=('Standing seam roof, supplied and installed.', 'سقف استندینگ سیم.'))
+        self.assertEqual(v_en.state, 'released')
+        self.assertEqual(len(warnings(v_en)), 1, warnings(v_en))
+        self.assertIn('install', warnings(v_en)[0])
+        v_fa = self._make_version('QL2-FA', include_install=False,
+                                  desc=('Standing seam roof supply.', 'تأمین و نصب سقف استندینگ سیم.'))
+        self.assertEqual(len(warnings(v_fa)), 1, warnings(v_fa))
+        self.assertIn('نصب', warnings(v_fa)[0])
+        v_clean = self._make_version('QL2-OK', include_install=False,
+                                     desc=('Standing seam roof supply.', 'تأمین سقف استندینگ سیم.'))
+        self.assertFalse(warnings(v_clean))
+        self.p_roof.sipanel_installation_base = False      # anchor outside the base: no warning
+        v_nobase = self._make_version('QL2-NOBASE', include_install=False,
+                                      desc=('Supplied and installed.', 'تأمین و نصب.'))
+        self.assertFalse(warnings(v_nobase))
+        self.p_roof.sipanel_installation_base = True
+
+    # ------------------------------------------------------------------ C. amount in words
+    def test_15_amount_in_words(self):
+        irr = self.env.ref('base.IRR')
+        fa = irr.with_context(lang='fa_IR')
+        self.assertEqual(' '.join(fa.amount_to_text(38_293_332_000).split()),
+                         'سی و هشت میلیارد و دویست و نود و سه میلیون و سیصد و سی و دو هزار ریال')
+        self.assertEqual(' '.join(fa.amount_to_text(27_352_380_000).split()),
+                         'بیست و هفت میلیارد و سیصد و پنجاه و دو میلیون و سیصد و هشتاد هزار ریال')
+        self.assertTrue(irr.with_context(lang='en_US').amount_to_text(38_293_332_000).startswith('Thirty-Eight Billion'))
+        for partner, label in ((self.cust_fa, 'مبلغ کل به حروف:'), (self.cust_en, 'Amount in words:')):
+            order = self._si_2546_copy(partner=partner)
+            order.sipanel_installation_pct = 40.0
+            doc = lxml_html.fromstring(self._html(order))
+            block = doc.xpath("//div[@name='so_total_summary']//div[@name='sipanel_amount_in_words']")
+            self.assertEqual(len(block), 1, 'printed once, below the totals box')
+            text = ' '.join(block[0].text_content().split())
+            words = ' '.join(order.with_context(lang=partner.lang)._sipanel_amount_total_in_words().split())
+            self.assertEqual(text, f'{label} {words}')
+            if partner == self.cust_en:     # owner decision 2026-10-06: "... Rials only", never the unit label
+                self.assertTrue(words.startswith('Thirty-Eight Billion'), words)
+                self.assertTrue(words.endswith('Thousand Rials only'), words)
+                self.assertNotIn(irr.with_context(lang='en_US').currency_unit_label, words.replace('Rials only', ''))
+            else:
+                self.assertTrue(words.endswith('هزار ریال'), words)
+
+
+@tagged('post_install', '-at_install', 'sipanel', 'sipanel_quotation_lines')
+class TestQuotationCommercialTerms(SipanelCoreCase):
+    """Requirements 2026-10-08, items 1-5: internal codes are not printed; payment terms, delivery time, the optional
+    bank account and the validity gate printing / sending a quotation. Synthetic records only, rolled back."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        env = cls.env
+        # the shared fixture gives every new order a payment term and a delivery time (for the other modules'
+        # tests); this class tests the requirement itself, so it starts from Odoo's own defaults
+        env['ir.default'].search([('field_id.model', '=', 'sale.order'),
+                                  ('field_id.name', 'in', ('payment_term_id', 'sipanel_delivery_days'))]).unlink()
+        env['res.lang']._activate_lang('fa_IR')
+        Partner = env['res.partner']
+        cls.cust_en = Partner.create({'name': f'{PT} Terms EN', 'lang': 'en_US'})
+        cls.cust_fa = Partner.create({'name': f'{PT} Terms FA', 'lang': 'fa_IR'})
+        cls.term = env['account.payment.term'].create({
+            'name': f'{PT} 70/30', 'note': f'<p>{PT} seventy now, thirty before loading</p>'})
+        set_translation(cls.term, 'name', en=f'{PT} 70/30', fa=f'{PT} ۷۰ پیش، ۳۰ قبل از بارگیری')
+        cls.product = env['product.product'].create({
+            'name': f'{PT} Coded roof', 'default_code': 'PT-QL-0074', 'type': 'service', 'list_price': 10.0})
+        cls.bank = env['res.partner.bank'].create({'acc_number': 'PT-QL-IR000111222333', 'partner_id': env.company.partner_id.id,
+                                                   'bank_id': env['res.bank'].create({'name': f'{PT} Bank'}).id})
+        cls.foreign_bank = env['res.partner.bank'].create({'acc_number': 'PT-QL-IR999', 'partner_id': cls.cust_en.id})
+
+    def _order(self, partner=None, ready=True, **vals):
+        if ready:
+            vals = dict({'payment_term_id': self.term.id, 'sipanel_delivery_days': 45}, **vals)
+        order = self.env['sale.order'].create(dict({'partner_id': (partner or self.cust_en).id, 'origin': PT}, **vals))
+        self.env['sale.order.line'].create({'order_id': order.id, 'product_id': self.product.id, 'product_uom_qty': 2.0})
+        return order
+
+    def _html(self, order):
+        return self.env['ir.actions.report']._render_qweb_html('sale.report_saleorder', order.ids)[0].decode()
+
+    def _text(self, order):
+        return ' '.join(lxml_html.fromstring(self._html(order)).text_content().split())
+
+    def _assert_blocked(self, order, *needles):
+        for call in (lambda: self.env['ir.actions.report']._render_qweb_pdf('sale.action_report_saleorder', order.ids),
+                     lambda: self.env['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', order.ids),
+                     order.action_quotation_send, order.action_quotation_sent, order.action_preview_sale_order):
+            with self.assertRaises(UserError) as err:
+                call()
+            self.assertIn(f'پیش‌فاکتور {order.name} قابل چاپ یا ارسال نیست', str(err.exception))
+            for needle in needles:
+                self.assertIn(needle, str(err.exception))
+        self.assertEqual(order.state, 'draft', 'nothing was sent')
+
+    # ------------------------------------------------------------------ item 1
+    def test_01_internal_code_is_not_printed(self):
+        for partner in (self.cust_en, self.cust_fa):
+            order = self._order(partner)
+            line = order.order_line
+            self.assertTrue(line.name.startswith('[PT-QL-0074] '), 'the stored description keeps the native prefix')
+            doc = lxml_html.fromstring(self._html(order))
+            title = doc.xpath("//span[contains(@class,'o_sipanel_line_title')]")
+            self.assertEqual(len(title), 1)
+            self.assertEqual(title[0].text_content().strip(), f'{PT} Coded roof')
+            self.assertNotIn('PT-QL-0074', self._text(order))
+            self.assertEqual(self.product.default_code, 'PT-QL-0074', 'product data unchanged')
+        self.assertEqual(line._sipanel_report_name_lines(), [f'{PT} Coded roof'])
+        line.name = 'Free text [kept]\n[second line kept]'
+        self.assertEqual(line._sipanel_report_name_lines(), ['Free text [kept]', '[second line kept]'],
+                         'only a leading code on the first line is left out')
+
+    # ------------------------------------------------------------------ items 2-5: gate
+    def test_02_no_new_defaults(self):
+        order = self.env['sale.order'].create({'partner_id': self.cust_en.id})
+        self.assertFalse(order.payment_term_id, 'no payment term default (the customer has none)')
+        self.assertEqual(order.sipanel_delivery_days, 0)
+        self.assertFalse(order.sipanel_show_bank_account)
+        self.assertFalse(order.sipanel_bank_account_id)
+        days = order.company_id.quotation_validity_days
+        self.assertEqual(order.validity_date, fields.Date.context_today(order) + timedelta(days) if days else False,
+                         'native default quotation validity')
+        self.assertFalse(order.commitment_date, 'no delivery date default')
+
+    def test_03_payment_term_and_delivery_time_required(self):
+        order = self._order(ready=False)
+        self._assert_blocked(order, '«شرایط پرداخت» انتخاب نشده است',
+                             '«زمان تحویل (روز کاری پس از دریافت پیش‌پرداخت)» وارد نشده است')
+        order.payment_term_id = self.term
+        self._assert_blocked(order, 'زمان تحویل')
+        order.sipanel_delivery_days = 45
+        order._sipanel_check_customer_document()
+        order.action_quotation_sent()
+        self.assertEqual(order.state, 'sent')
+        with self.assertRaises(ValidationError):
+            order.sipanel_delivery_days = -1
+
+    def test_04_bank_account_only_when_ticked(self):
+        order = self._order()
+        self.assertNotIn('PT-QL-IR000111222333', self._text(order))
+        order.sipanel_show_bank_account = True
+        self._assert_blocked(order, 'شماره حساب شرکت انتخاب نشده است')
+        with self.assertRaises(ValidationError):
+            order.sipanel_bank_account_id = self.foreign_bank
+        order.sipanel_bank_account_id = self.bank
+        order._sipanel_check_customer_document()
+        text = self._text(order)
+        self.assertIn(f'Bank account for the down payment: PT-QL-IR000111222333 - {PT} Bank', text)
+        order.sipanel_show_bank_account = False
+        self.assertNotIn('PT-QL-IR000111222333', self._text(order), 'kept on the order, not printed')
+
+    def test_05_expired_validity_blocks_and_nothing_moves(self):
+        order = self._order()
+        past = fields.Date.context_today(order) - timedelta(days=3)
+        order.validity_date = past
+        self.assertTrue(order.is_expired)
+        self._assert_blocked(order, 'لطفاً تاریخ پیش‌فاکتور و تاریخ اعتبار را به‌روز کنید')
+        self.assertEqual(order.validity_date, past, 'the validity is never moved silently')
+        order.validity_date = fields.Date.context_today(order)
+        order._sipanel_check_customer_document()        # not the cached native is_expired (no @api.depends)
+        order.validity_date = False
+        order._sipanel_check_customer_document()
+
+    def test_06_confirmed_orders_are_not_gated(self):
+        order = self._order()
+        order.action_confirm()
+        order.write({'payment_term_id': False, 'sipanel_delivery_days': 0,
+                     'validity_date': fields.Date.context_today(order) - timedelta(days=3)})
+        order._sipanel_check_customer_document()
+        self.assertIn(order.name, self._text(order))
+
+    # ------------------------------------------------------------------ items 2-4: printed terms
+    def test_07_terms_section(self):
+        order = self._order(note='<p>Terms text line</p>')
+        text = self._text(order)
+        self.assertIn(f'Terms text line Payment terms: {PT} 70/30 '
+                      'Delivery time: 45 working days after receipt of the down payment', text)
+        self.assertNotIn('seventy now', text, 'owner review 2026-10-12: one text only, the payment term note is not printed')
+        self.assertIn('Sales Department', text)
+        self.assertNotIn('Sell Department', text)
+        self.assertNotIn('Delivery Date', text, 'no commitment date, no Delivery Date column')
+        order.commitment_date = fields.Datetime.now()
+        self.assertIn('Delivery Date', self._text(order), 'printed only when filled (native)')
+        fa = self._order(self.cust_fa)
+        text = self._text(fa)
+        self.assertIn(f'شرایط پرداخت: {PT} ۷۰ پیش، ۳۰ قبل از بارگیری زمان تحویل: 45 روز کاری پس از دریافت پیش‌پرداخت', text)
+        self.assertNotIn('seventy now', text)
+        self.assertIn('دپارتمان فروش', text)
+        fa.write({'sipanel_show_bank_account': True, 'sipanel_bank_account_id': self.bank.id})
+        self.assertIn(f'شماره حساب جهت واریز پیش‌پرداخت: PT-QL-IR000111222333 - {PT} Bank', self._text(fa))
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 3: Project Site
+    def test_08_project_site_one_line(self):
+        iran = self.env.ref('base.ir')
+        iran_fa = iran.with_context(lang='fa_IR').name
+        site = self.env['res.partner'].create({'parent_id': self.cust_fa.id, 'type': 'delivery', 'name': 'طالقان',
+                                               'city': 'شهرستان طالقان', 'country_id': iran.id,
+                                               'street': 'جاده اصلی، کیلومتر ۵', 'zip': '12345'})
+        order = self._order(self.cust_fa, partner_shipping_id=site.id)
+
+        def cell():
+            cells = lxml_html.fromstring(self._html(order)).xpath("//td[contains(@class, 'o_sipanel_page1_project_site')]")
+            self.assertEqual(len(cells), 1)
+            return ' '.join(cells[0].text_content().split())
+
+        self.assertEqual(cell(), f'شهرستان طالقان - {iran_fa}', 'one line, street / zip / name not printed')
+        site.city = False
+        order.invalidate_recordset()
+        self.assertEqual(cell(), f'طالقان - {iran_fa}', 'empty city: the address name')
+        site.country_id = False
+        self.assertEqual(order._sipanel_project_site_line(), 'طالقان')
+        en = self._order(self.cust_en, partner_shipping_id=self.env['res.partner'].create({
+            'parent_id': self.cust_en.id, 'type': 'delivery', 'name': 'Site', 'city': 'Taleqan', 'country_id': iran.id}).id)
+        self.assertEqual(en._sipanel_project_site_line(), f'Taleqan - {iran.with_context(lang="en_US").name}')
+        alone = self.env['res.partner'].create({'name': f'{PT} No site', 'lang': 'en_US'})
+        self.assertFalse(self._order(alone)._sipanel_project_site_line(), 'no Project Site, nothing')
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 1: Incoterm
+    def test_09_incoterm_is_not_printed(self):
+        exw = self.env.ref('account.incoterm_EXW')
+        for partner in (self.cust_en, self.cust_fa):
+            order = self._order(partner, incoterm=exw.id, incoterm_location='PT-QL-INCO-PLACE')
+            text = self._text(order)
+            for needle in ('Incoterm', 'اینکوترم', 'EXW', 'PT-QL-INCO-PLACE'):
+                self.assertNotIn(needle, text, partner.lang)
+            self.assertEqual(order.incoterm, exw, 'the order keeps its Incoterm, only the printout leaves it out')
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 2: closing block
+    def test_10_signature_left_terms_right_after_amount_in_words(self):
+        for partner, rtl in ((self.cust_en, False), (self.cust_fa, True)):
+            order = self._order(partner, note='<p>Terms line one</p><p>Terms line two</p>')
+            doc = lxml_html.fromstring(self._html(order))
+            self.assertFalse(doc.xpath("//div[contains(@class, 'o_sipanel_signature_block')]"),
+                             'the sale_shamsi_report signature block is replaced')
+            closing = doc.xpath("//div[contains(@class, 'o_sipanel_closing')][@name='sipanel_closing']")
+            self.assertEqual(len(closing), 1, partner.lang)
+            closing = closing[0]
+            self.assertEqual(closing.get('dir'), 'ltr', 'physical left / right, same in fa_IR and en_US')
+            self.assertIn('display: table;', closing.get('style'), 'kept on one page as a whole (L-02)')
+            prev = closing.getprevious()
+            while prev is not None and prev.tag in ('style',):
+                prev = prev.getprevious()
+            self.assertEqual(prev.get('name'), 'so_total_summary', 'right after the totals and the amount in words')
+            self.assertTrue(prev.xpath(".//div[@name='sipanel_amount_in_words']"))
+            cells = [c for c in closing if c.tag == 'div']
+            self.assertEqual([c.get('name') for c in cells], ['sipanel_signature', 'sipanel_terms'],
+                             'signature / stamp first = LEFT, terms = RIGHT')
+            signature, terms = cells
+            self.assertIn('Sales Department' if not rtl else 'دپارتمان فروش', signature.text_content())
+            self.assertEqual(terms.get('dir'), 'rtl' if rtl else 'ltr')
+            self.assertIn('text-align: right' if rtl else 'text-align: left', terms.get('style'))
+            terms_text = ' '.join(' '.join(terms.itertext()).split())
+            self.assertTrue(terms_text.startswith('Terms line one Terms line two'), terms_text)
+            self.assertIn('45', terms_text)
+            self.assertTrue(terms.xpath(".//*[@name='order_note']") and terms.xpath(".//div[@name='sipanel_payment_term']")
+                            and terms.xpath(".//div[@name='sipanel_delivery_time']"), 'the whole terms block is in the cell')
+            self.assertEqual(len(doc.xpath("//*[@name='order_note']")), 1, 'moved, not copied')
+            for node in terms.xpath(".//div[@name='sipanel_payment_term' or @name='sipanel_delivery_time']"):
+                self.assertNotIn('margin', node.get('style') or '', 'no blank space between the terms lines')
+            style = ' '.join(t.text or '' for t in doc.xpath('//style') if 'o_sipanel_closing_terms' in (t.text or ''))
+            self.assertIn('margin: 0', style)
+
+    # ------------------------------------------------------------------ owner review 2026-10-12, item 5: salesperson
+    def test_11_persian_salesperson_name_on_fa_quotations_only(self):
+        user = new_test_user(self.env, login='sipanel_pt_ql_taleghani', name=f'{PT} Taleghani',
+                             groups='sales_team.group_sale_salesman')
+        # the signature cell also prints the user's own signature HTML (Odoo defaults it to the user name; in
+        # Production it is the signature / stamp image): left out here so the printed names are what is tested
+        user.write({'sipanel_quotation_name_fa': 'طالقانی', 'signature': False})
+
+        def printed(order):
+            doc = lxml_html.fromstring(self._html(order))
+            box = doc.xpath("//div[@id='informations']//div[contains(@class, 'o_sipanel_salesperson')]")
+            sign = doc.xpath("//div[contains(@class, 'o_sipanel_signature_name')]")
+            self.assertEqual((len(box), len(sign)), (1, 1))
+            return box[0].text_content().strip(), sign[0].text_content().strip(), ' '.join(doc.text_content().split())
+
+        box, sign, text = printed(self._order(self.cust_fa, user_id=user.id))
+        self.assertEqual((box, sign), ('طالقانی', 'طالقانی'))
+        self.assertNotIn(f'{PT} Taleghani', text)
+        box, sign, text = printed(self._order(self.cust_en, user_id=user.id))
+        self.assertEqual((box, sign), (f'{PT} Taleghani', f'{PT} Taleghani'), 'en_US quotations: the user name')
+        self.assertEqual((user.name, user.partner_id.name), (f'{PT} Taleghani', f'{PT} Taleghani'),
+                         'the user name is not changed anywhere')
+        user.sipanel_quotation_name_fa = False
+        box, sign, _text = printed(self._order(self.cust_fa, user_id=user.id))
+        self.assertEqual((box, sign), (f'{PT} Taleghani', f'{PT} Taleghani'), 'no Persian name: the user name')
