@@ -69,6 +69,9 @@ def step(name, fn, *args):
     page = args[0] if args else None
     try:
         rec['detail'] = fn(*args)
+        if isinstance(rec['detail'], tuple):            # (new page, detail): s_relogin
+            rec['page'], rec['detail'] = rec['detail']
+            page = rec['page']
     except Blocked as exc:
         rec.update(status='blocked', detail=str(exc))
     except Exception as exc:                          # noqa: BLE001 - recorded, the run goes on where it can
@@ -84,7 +87,7 @@ def step(name, fn, *args):
             rec['screenshot'] = f'{N[0]:02d}_{slug(name)}.png'
         except Exception:                              # noqa: BLE001
             pass
-    REPORT['steps'].append(rec)
+    REPORT['steps'].append({k: v for k, v in rec.items() if k != 'page'})
     print(f"STEP {rec['n']:02d} {rec['status'].upper():7} {name}: {str(rec['detail'])[:300]}", flush=True)
     if rec['status'] == 'failed' and os.environ.get('UI_STOP_ON_FAIL'):
         json.dump(REPORT, open(f'{OUT}/ui_report.json', 'w'), ensure_ascii=False, indent=1)
@@ -372,6 +375,19 @@ def s_print(page, name='ui_quotation_fa_IR_ui-fa.pdf', url=None):
     return {'pdf': path, 'suggested': dl.value.suggested_filename, 'quotation': page.url}
 
 
+def s_relogin(page, want):
+    """A fresh session (log out / in): the open session keeps the language it started with (re-test 2026-10-17).
+    Returns the new page; the step records the navigation bar as proof of the interface language."""
+    browser = page.context.browser
+    page.context.close()
+    page = login(browser, 'ui_sales')
+    nav = re.sub(r'\s+', ' ', page.locator('.o_main_navbar').inner_text())[:120]
+    ok = ('Sales' in nav or 'Discuss' in nav) if want == 'en' else bool(PERSIAN_RE.search(nav))
+    if not ok:
+        raise AssertionError(f'interface not {want}: {nav!r}')
+    return page, {'navbar': nav}
+
+
 def s_remember(page, key):
     QUOTATION[key] = page.url
     return page.url
@@ -605,6 +621,8 @@ def main():
             # 'langs' alone: from the interface switch on (the fa quotation given by UI_QUOTATION_FA)
             page = login(browser, 'ui_sales')
             step('salesperson: interface language English (Preferences)', s_ui_language, page, 'en')
+            rec = step('salesperson: log in again (English interface)', s_relogin, page, 'en')
+            page = rec.pop('page', page)
             step('salesperson: print fa PDF again (English interface)', s_print, page, 'ui_quotation_fa_IR_ui-en.pdf',
                  QUOTATION.get('fa'))
             # English customer, same products: English titles
@@ -621,6 +639,8 @@ def main():
             step('salesperson (en): lines and totals', s_lines_summary, page)
             step('salesperson (en): print en PDF (English interface)', s_print, page, 'ui_quotation_en_US_ui-en.pdf')
             step('salesperson: interface language back to Persian', s_ui_language, page, 'fa')
+            rec = step('salesperson: log in again (Persian interface)', s_relogin, page, 'fa')
+            page = rec.pop('page', page)
             step('salesperson: print en PDF again (Persian interface)', s_print, page, 'ui_quotation_en_US_ui-fa.pdf',
                  QUOTATION.get('en'))
             page.context.close()
