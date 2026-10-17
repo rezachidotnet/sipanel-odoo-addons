@@ -150,8 +150,12 @@ try:
         seqs = env['ir.sequence'].search([('prefix', '=', 'SIP-')])
         R['code_source'] = {'sip_codes': len(codes), 'max': max(numbers) if numbers else None,
                             'sequences_with_prefix_SIP': [(s.id, s.code, s.number_next_actual) for s in seqs]}
-        # no SIPANEL sequence is known for product codes: next number after the highest SIP-nnnnnn code
-        check('no_product_code_sequence', not seqs, R['code_source']['sequences_with_prefix_SIP'])
+        # the canonical SKU sequence (SIP-######, product governance policy) is behind the codes in use (P1 run
+        # 20261017T085357Z: next 18, SIP-000015..084 taken), so it would hand out a used code: the next number after
+        # the highest SIP-nnnnnn code is used, the sequence is not touched (the Product Data Steward's)
+        stale = [s.id for s in seqs if Product.search_count(
+            [('default_code', '=', f"{s.prefix}{s.number_next_actual:0{s.padding}d}")])]
+        R['code_source']['stale_sequences'] = stale
         new_code = f'SIP-{max(numbers) + 1:06d}'
         check('new_code_free', not Product.search_count([('default_code', '=', new_code)]), new_code)
         vals = {'name': NAMES['flash20']['en_US'], 'default_code': new_code, 'list_price': FLASH20_PRICE,
@@ -243,7 +247,9 @@ try:
     check('si26_2546_products', sorted(supply.product_id.mapped('default_code'))
           == sorted([ROOF_CODE, FLASH_CODE, flash20_p.default_code, GUTTER_CODE]) and len(supply) == 4, R['si26_after'])
     check('si26_2546_native_descriptions', all(l.name == native_name(l) for l in supply), R['si26_after'])
-    printed = {l.product_id.default_code: l._sipanel_report_name_lines()[0] for l in supply}
+    # whitespace-normalised: Odoo's l10n_gcc_invoice (installed) puts two spaces between a digit and an Arabic-script
+    # letter in every product display name (so «۱.۵  میلیمتر»); HTML prints them as one
+    printed = {l.product_id.default_code: ' '.join(l._sipanel_report_name_lines()[0].split()) for l in supply}
     R['printed_titles'] = printed
     check('si26_2546_printed_titles', printed == {ROOF_CODE: NAMES[ROOF_CODE]['fa_IR'], FLASH_CODE: NAMES[FLASH_CODE]['fa_IR'],
                                                  flash20_p.default_code: NAMES['flash20']['fa_IR'],

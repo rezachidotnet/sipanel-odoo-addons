@@ -33,7 +33,9 @@ def summary(order):
             'date_order': str(order.date_order), 'validity_date': str(order.validity_date),
             'totals': [order.amount_untaxed, order.amount_tax, order.amount_total],
             'supply': sorted((l.product_id.default_code, l.product_uom_qty, l.price_unit) for l in supply),
-            'titles': [l._sipanel_report_name_lines() for l in supply.sorted(lambda l: (l.sequence, l.id))],
+            # whitespace-normalised (l10n_gcc_invoice doubles the space between a digit and an Arabic-script letter)
+            'titles': [[' '.join(t.split()) for t in l._sipanel_report_name_lines()]
+                       for l in supply.sorted(lambda l: (l.sequence, l.id))],
             'native_names': all(l.name == native(l) for l in supply),
             'managed': [(l.sipanel_managed_role, l.price_unit, l.discount, l.price_subtotal)
                         for l in order._sipanel_managed_lines('installation') | order._sipanel_managed_lines('shop_drawing')
@@ -72,7 +74,7 @@ try:
         check(f'{key}_material_galvanized', R[key]['material'] == ['Galvanized'], R[key]['material'])
         check(f'{key}_tech_sheet', R[key]['sheet_rows'] == 7 and R[key]['liner'] == '0.7',
               [R[key]['sheet_rows'], R[key]['liner']])
-        expected = [[l.product_id.with_context(lang=lang).name] for l in order.order_line.filtered(
+        expected = [[' '.join(l.product_id.with_context(lang=lang).name.split())] for l in order.order_line.filtered(
             lambda l: not l.display_type and not l.sipanel_is_installation_line).sorted(lambda l: (l.sequence, l.id))]
         check(f'{key}_titles_in_{lang}', R[key]['titles'] == expected, [R[key]['titles'], expected])
         check(f'{key}_still_a_draft', order.state == 'draft', order.state)

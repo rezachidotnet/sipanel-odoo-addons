@@ -289,7 +289,9 @@ try:
     # owner 2026-10-17: the titles a salesperson gets - SI-26/2546 uses the same products, nothing typed
     names = sorted((l.product_id.default_code, l.name) for l in supply)
     native = lambda l: l.with_context(lang=l.order_id._get_lang())._get_sale_order_line_multiline_description_sale()
-    titles = {l.product_id.default_code: l._sipanel_report_name_lines() for l in supply}
+    # whitespace-normalised: l10n_gcc_invoice doubles the space between a digit and an Arabic-script letter in
+    # product display names; HTML prints one space
+    titles = {l.product_id.default_code: [' '.join(t.split()) for t in l._sipanel_report_name_lines()] for l in supply}
     R['printed_titles'] = titles
     expected = {code_of(k): [n['fa_IR']] for k, (n, _p) in PRODUCTS.items()}
     check('si26_2546_line_descriptions', all(l.name == native(l) for l in supply) and titles == expected
