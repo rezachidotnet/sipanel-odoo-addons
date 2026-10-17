@@ -35,6 +35,17 @@ PRODUCTS = {  # P8c: the line title is the product name (fa_IR exact, owner 2026
     'SIP-000077': ({'fa_IR': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)',
                     'en_US': 'Galvanized sheet gutter, 1.5 mm (supply only)'}, None),
 }
+# P10 (owner 2026-10-17, after deployment): English names, English company terms (Persian = fa_IR translation) and the
+# English payment term name - accepted as well, so P9 stays re-runnable on Production
+EN_P10 = {'SIP-000074': 'Standing Seam Roof and Wall Cladding System (Supply Only)',
+          'SIP-000076': 'Flashing, Same Material as Top Sheet, Developed Width up to 58 cm (Supply Only)',
+          'FLASH20': 'Flashing, Same Material as Top Sheet, Developed Width up to 20 cm (Supply Only)',
+          'SIP-000077': 'Gutter, Galvanized Sheet 1.5 mm (Supply Only)'}
+PAYMENT_TERM_EN_P10 = '70% advance payment, 30% balance before loading'
+TERMS_EN_P10 = ('This quotation is valid until the date stated above.',
+                'Prices exclude transport, scaffolding, crane, and accommodation and meals for the installation crew.',
+                'Quantities in this quotation are approximate. Exact quantities will be taken from the shop drawings and '
+                'will be the basis of the final calculation.')
 DEFAULTS = {'partner_lang': 'fa_IR', 'validity_days': 8}       # P8c (owner 2026-10-17, items 3 and 5)
 SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_288_368, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
         'section_fa': 'نقشه‌های اجرایی', 'product_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
@@ -115,7 +126,7 @@ try:
 
     # ---- master data
     flash20 = su['product.template'].with_context(active_test=False, lang='en_US').search(
-        [('name', '=', PRODUCTS['FLASH20'][0]['en_US'])]).product_variant_ids
+        [('name', 'in', (PRODUCTS['FLASH20'][0]['en_US'], EN_P10['FLASH20']))]).product_variant_ids
     check('flash20_product', len(flash20) == 1 and bool(flash20.default_code), flash20.mapped('default_code'))
     code_of = lambda c: (flash20.default_code if len(flash20) == 1 else 'FLASH20') if c == 'FLASH20' else c
     SUPPLY_LINES = [(code_of(c), q, p) for c, q, p in SUPPLY_LINES]
@@ -124,7 +135,8 @@ try:
         prod = su['product.product'].with_context(active_test=False).search([('default_code', '=', code_of(key))])
         tmpl_names = stored(prod.product_tmpl_id, 'name') if len(prod) == 1 else {}
         R['products'][code_of(key)] = {'name': tmpl_names, 'list_price': prod.list_price if len(prod) == 1 else None}
-        check(f'product_{key}_title', {k: tmpl_names.get(k) for k in names} == names, tmpl_names)
+        check(f'product_{key}_title', tmpl_names.get('fa_IR') == names['fa_IR']
+              and tmpl_names.get('en_US') in (names['en_US'], EN_P10[key]), tmpl_names)
         if price:
             check(f'product_{key}_list_price', len(prod) == 1 and close(prod.list_price, price), prod.mapped('list_price'))
     lang_defaults = su['ir.default'].search([('field_id', '=', su['ir.model.fields']._get('res.partner', 'lang').id)])
@@ -260,6 +272,7 @@ try:
     texts = {
         'note': ' '.join(str(ref.note or '').replace('&nbsp;', ' ').split()),
         'company_terms': ' '.join((stored(company, 'invoice_terms').get('en_US') or '').split()),
+        'company_terms_fa': ' '.join((stored(company, 'invoice_terms').get('fa_IR') or '').split()),
         'header_fa': stored(company, 'report_header').get('fa_IR'),
         'lines': [(l.display_type or l.product_id.default_code, l.name) for l in ordered]}
     R['si26_2546_terms'] = dict(texts, payment_term=ref.payment_term_id.with_context(lang='en_US').name,
@@ -270,7 +283,8 @@ try:
                                 problems=ref._sipanel_customer_document_problems())
     check('si26_2546_printable', ref._sipanel_customer_document_problems() == [],
           ref._sipanel_customer_document_problems())
-    check('si26_2546_payment_term', ref.payment_term_id.with_context(lang='en_US').name == TERMS['payment_term_en'])
+    check('si26_2546_payment_term', ref.payment_term_id.with_context(lang='en_US').name
+          in (TERMS['payment_term_en'], PAYMENT_TERM_EN_P10), ref.payment_term_id.with_context(lang='en_US').name)
     check('si26_2546_delivery_days', ref.sipanel_delivery_days == TERMS['delivery_days'])
     check('si26_2546_no_bank_line', not ref.sipanel_show_bank_account)
     check('si26_2546_incoterm_exw', ref.incoterm.code == TERMS['incoterm'], ref.incoterm.code)
@@ -283,8 +297,11 @@ try:
     check('si26_2546_contact', ref.partner_id.name.startswith(TERMS['contact_prefix']), ref.partner_id.name)
     check('si26_2546_note', all(t in texts['note'] for t in TERMS['terms_lines']) and '...' not in texts['note'],
           texts['note'])
-    check('company_default_terms', all(t in texts['company_terms'] for t in TERMS['terms_lines'])
-          and '...' not in texts['company_terms'], texts['company_terms'])
+    # P6b: Persian en_US source; after P10: English en_US source + the Persian lines as fa_IR
+    check('company_default_terms', (all(t in texts['company_terms'] for t in TERMS['terms_lines'])
+                                    or (all(t in texts['company_terms'] for t in TERMS_EN_P10)
+                                        and all(t in texts['company_terms_fa'] for t in TERMS['terms_lines'])))
+          and '...' not in texts['company_terms'], [texts['company_terms'], texts['company_terms_fa']])
     check('company_tagline_fa', TERMS['tagline_fa'] in (texts['header_fa'] or ''), texts['header_fa'])
     # owner 2026-10-17: the titles a salesperson gets - SI-26/2546 uses the same products, nothing typed
     names = sorted((l.product_id.default_code, l.name) for l in supply)

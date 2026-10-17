@@ -49,6 +49,18 @@ NAMES = {   # owner 2026-10-17 (fa_IR, exact); en_US = translation for owner rev
     GUTTER_CODE: {'fa_IR': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)',
                   'en_US': 'Galvanized sheet gutter, 1.5 mm (supply only)'},
 }
+# P10 (owner 2026-10-17, after deployment): the owner's English names - accepted as the "after" state too (an en_US name
+# already at the P10 text is kept; the step stays re-runnable on Production)
+EN_P10 = {ROOF_CODE: 'Standing Seam Roof and Wall Cladding System (Supply Only)',
+          FLASH_CODE: 'Flashing, Same Material as Top Sheet, Developed Width up to 58 cm (Supply Only)',
+          'flash20': 'Flashing, Same Material as Top Sheet, Developed Width up to 20 cm (Supply Only)',
+          GUTTER_CODE: 'Gutter, Galvanized Sheet 1.5 mm (Supply Only)'}
+
+
+def name_ok(key, names):
+    return names.get('fa_IR') == NAMES[key]['fa_IR'] and names.get('en_US') in (NAMES[key]['en_US'], EN_P10[key])
+
+
 FLASH58_PRICE, FLASH20_PRICE = 43_800_000, 14_600_000
 FLASH20_QTY = 54.23
 MATERIAL_EN = 'Top sheet material'
@@ -133,7 +145,7 @@ try:
     for code in (ROOF_CODE, FLASH_CODE, GUTTER_CODE):
         tmpl = prods[code].product_tmpl_id
         names = stored(tmpl, 'name')
-        if {k: names.get(k) for k in ('en_US', 'fa_IR')} != NAMES[code]:
+        if not name_ok(code, names):
             set_name(tmpl, NAMES[code])
             changed(f'{code} name fa_IR / en_US')
     if not close(flash_p.list_price, FLASH58_PRICE):
@@ -142,7 +154,7 @@ try:
 
     # ---- item 1: the 20 cm flashing, a product of its own
     flash_t = flash_p.product_tmpl_id
-    flash20_t = Tmpl.search([('name', '=', NAMES['flash20']['en_US'])])
+    flash20_t = Tmpl.search([('name', 'in', (NAMES['flash20']['en_US'], EN_P10['flash20']))])
     check('flash20_at_most_one', len(flash20_t) <= 1, flash20_t.ids)
     if not flash20_t:
         codes = Product.search([('default_code', '=like', 'SIP-%')]).mapped('default_code')
@@ -190,7 +202,7 @@ try:
     # ---- every product carries its title (fa_IR + en_US); installation + shop drawings: fa_IR present
     for code, p in ((ROOF_CODE, roof_p), (FLASH_CODE, flash_p), ('flash20', flash20_p), (GUTTER_CODE, gutter_p)):
         names = stored(p.product_tmpl_id, 'name')
-        check(f'name_{code}', {k: names.get(k) for k in ('en_US', 'fa_IR')} == NAMES[code], names)
+        check(f'name_{code}', name_ok(code, names), names)
     check('flash58_list_price', close(flash_p.list_price, FLASH58_PRICE), flash_p.list_price)
     plan = env['sipanel.config'].system_plan()
     seam = env['account.analytic.account'].with_context(lang='en_US').search(

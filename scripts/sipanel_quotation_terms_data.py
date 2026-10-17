@@ -46,6 +46,13 @@ TZ = pytz.timezone('Asia/Tehran')
 VALIDITY_DAYS = 8                                                     # owner, confirmed 2026-10-12
 DELIVERY_DAYS = 45                                                    # owner, confirmed 2026-10-12
 PAYMENT_TERM_EN = '70% in advance, 30% before delivery.'              # id 11 in Production (en_US name unchanged)
+# P10 (owner 2026-10-17, after deployment) gives term 11 an English name and the company terms an English source with
+# the Persian lines as the fa_IR translation: both states are accepted (the step stays re-runnable on Production)
+PAYMENT_TERM_EN_P10 = '70% advance payment, 30% balance before loading'
+TERMS_EN_P10 = ('This quotation is valid until the date stated above.',
+                'Prices exclude transport, scaffolding, crane, and accommodation and meals for the installation crew.',
+                'Quantities in this quotation are approximate. Exact quantities will be taken from the shop drawings and '
+                'will be the basis of the final calculation.')
 PAYMENT_TERM_FA_OLD = 'پیش پرداخت ۷۰٪ و قبل از بارگیری ۳۰٪باقیمانده'
 PAYMENT_TERM_FA = '۷۰٪ پیش‌پرداخت، ۳۰٪ باقیمانده قبل از بارگیری'      # owner review 2026-10-12, exactly
 WEBSITE_OLD = ('href="https://sipanelco.ir">www.sipanelco.ir<', )
@@ -113,6 +120,12 @@ def terms_done(html):
     return all(line in text for line in TERMS_LINES) and not any(p in text for p in OLD_PLACEHOLDERS)
 
 
+def company_terms_ok(terms):
+    """Approved terms in place: Persian en_US source (P6b), or English en_US source + Persian fa_IR (after P10)."""
+    en = terms.get('en_US') or ''
+    return terms_done(en) or (all(l in squash(en) for l in TERMS_EN_P10) and terms_done(terms.get('fa_IR')))
+
+
 def squash(html):
     return ' '.join((html or '').replace('&nbsp;', ' ').split())
 
@@ -148,12 +161,12 @@ check('ru_RU_archived', len(ru) == 1 and not ru.active)
 # ---- item 6: company default terms + the note of SI-26/2546
 terms = stored(company, 'invoice_terms')
 src = terms.get('en_US') or ''
-check('company_terms_expected_before', terms_done(src) or all(p in src for p in OLD_PLACEHOLDERS),
+check('company_terms_expected_before', company_terms_ok(terms) or all(p in src for p in OLD_PLACEHOLDERS),
       squash(src)[:300])
-if not terms_done(src) and all(p in src for p in OLD_PLACEHOLDERS):
+if not company_terms_ok(terms) and all(p in src for p in OLD_PLACEHOLDERS):
     company.with_context(lang='en_US').invoice_terms = TERMS_HTML
     changed('res.company invoice_terms (en_US source; no other language stored)')
-check('company_terms_new', terms_done(stored(company, 'invoice_terms').get('en_US'))
+check('company_terms_new', company_terms_ok(stored(company, 'invoice_terms'))
       and set(stored(company, 'invoice_terms')) == set(terms), stored(company, 'invoice_terms'))
 note = str(ref.note or '')
 check('si26_note_expected_before', terms_done(note) or all(p in note for p in OLD_PLACEHOLDERS),
@@ -322,7 +335,7 @@ check('requested_system_snapshot', ref.sipanel_requested_system_id == system and
       ref.sipanel_requested_system_name_snapshot == (SYSTEM_FA if ref.partner_id.lang == 'fa_IR' else SYSTEM_EN)),
       [ref.partner_id.lang, ref.sipanel_requested_system_name_snapshot])
 # commercial terms
-term = env['account.payment.term'].with_context(lang='en_US').search([('name', '=', PAYMENT_TERM_EN)])
+term = env['account.payment.term'].with_context(lang='en_US').search([('name', 'in', (PAYMENT_TERM_EN, PAYMENT_TERM_EN_P10))])
 check('payment_term_found', len(term) == 1, term.ids)
 pterms = stored(term, 'name') if len(term) == 1 else {}
 R['payment_term_record'] = {'id': term.id, 'create_date': str(term.create_date), 'create_uid': term.create_uid.id,

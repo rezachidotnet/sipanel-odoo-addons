@@ -40,7 +40,9 @@ R['production_sellers'] = {u.login: {'sales_manager': u.has_group('sales_team.gr
 # the quotation products as a salesperson finds them (owner 2026-10-17: the 20 cm flashing has its own SIP- code)
 Product = env['product.product'].with_context(active_test=False)
 flash20 = env['product.template'].with_context(lang='en_US', active_test=False).search(
-    [('name', '=', 'Flashing in the top-sheet material, developed width up to 20 cm (supply only)')]).product_variant_ids
+    [('name', 'in', ('Flashing in the top-sheet material, developed width up to 20 cm (supply only)',      # P8c
+                     'Flashing, Same Material as Top Sheet, Developed Width up to 20 cm (Supply Only)'))]  # after P10
+).product_variant_ids
 R['products'] = {code: {'id': p.id, 'code': p.default_code, 'list_price': p.list_price,
                         'fa_IR': p.with_context(lang='fa_IR').name, 'en_US': p.with_context(lang='en_US').name}
                  for code, p in (('SIP-000074', Product.search([('default_code', '=', 'SIP-000074')])),
