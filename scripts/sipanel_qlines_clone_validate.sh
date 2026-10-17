@@ -691,7 +691,7 @@ ui_run() {
     --cpus 1.0 --oom-score-adj 800 --shm-size 512m --label "sipanel.qlines.clone=$CLONE" -u "$(id -u):$(id -g)" \
     -e HOME=/tmp -v "$uidir:/mnt/ui:ro" -v "$OUTDIR:/out" -e UI_URL="http://127.0.0.1:${RPORT}" \
     -e UI_PASSWORD="$pw" -e UI_DB="$CLONE" -e UI_STEPS="${UI_STEPS:-all}" -e UI_USER="${UI_USER:-}" \
-    -e UI_PATHS="${UI_PATHS:-}" -e UI_STOP_ON_FAIL="${UI_STOP_ON_FAIL:-}" "$PW_IMAGE" python3 "/mnt/ui/${UI_SCRIPT:-sipanel_ui_acceptance.py}" || rc=$?
+    -e UI_PATHS="${UI_PATHS:-}" -e UI_QUOTATION_FA="${UI_QUOTATION_FA:-}" -e UI_STEP_START="${UI_STEP_START:-1}" -e UI_STOP_ON_FAIL="${UI_STOP_ON_FAIL:-}" "$PW_IMAGE" python3 "/mnt/ui/${UI_SCRIPT:-sipanel_ui_acceptance.py}" || rc=$?
   # read-only check of the quotations made in the UI (owner 2026-10-17; rolled back)
   docker run --rm -i --name "$ISO-shell" --network "container:$ISO-render" "${LIMITS[@]}" \
     --label "sipanel.qlines.clone=$CLONE" "${MOUNTS[@]}" "$IMAGE_ID" \

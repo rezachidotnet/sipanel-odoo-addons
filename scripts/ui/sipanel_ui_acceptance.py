@@ -24,7 +24,7 @@ URL, PW, DB, OUT = os.environ['UI_URL'], os.environ['UI_PASSWORD'], os.environ['
 STEPS = os.environ.get('UI_STEPS', 'all').split(',')
 T = 240000
 REPORT = {'steps': [], 'started': time.strftime('%Y-%m-%d %H:%M:%S')}
-N = [0]
+N = [int(os.environ.get('UI_STEP_START', '1')) - 1]   # a resumed run continues the numbering
 
 # SI-26/2546 as approved (owner 2026-10-16)
 CUSTOMER = 'شرکت آزمون رابط کاربری'
@@ -60,7 +60,7 @@ UI = {  # texts that depend on the interface language
 LANG_RE = {'fa': re.compile('فارسی|Persian'), 'en': re.compile(r'English \(US\)')}
 CUSTOMER_EN = 'UI Test English Customer'
 PROJECT_EN = 'UI English titles check'
-QUOTATION = {}
+QUOTATION = {k: v for k, v in (('fa', os.environ.get('UI_QUOTATION_FA')),) if v}
 
 
 def step(name, fn, *args):
@@ -227,8 +227,9 @@ def s_header(page, ui='fa'):
     # owner 2026-10-17, item 5: validity 8 days by default (native setting) - read, not typed
     return {'payment_term': field(page, 'payment_term_id').locator('input').first.input_value(),
             'bank_line': bank.is_checked(),
-            'date_order': field(page, 'date_order').locator('input').first.input_value(),
-            'validity_date': field(page, 'validity_date').locator('input').first.input_value(),
+            # Odoo 19 date fields are buttons (value attribute), not inputs
+            'date_order': field(page, 'date_order').locator('button, input').first.get_attribute('value'),
+            'validity_date': field(page, 'validity_date').locator('button, input').first.get_attribute('value'),
             'validity_shamsi': field(page, 'validity_date_shamsi').inner_text().strip()}
 
 
@@ -422,7 +423,8 @@ def s_ui_language(page, want='en'):
             break
     now = lang.input_value()
     page.screenshot(path=f'{OUT}/{N[0]:02d}_preferences_language.png', full_page=True)
-    page.locator('.modal-footer button.btn-primary, .modal .o_form_button_save, .o_form_button_save').first.click()
+    # the dialog's own button («Update Preferences»): the form behind it has a (hidden) save button too
+    page.locator('.modal-footer button.btn-primary:visible').first.click()
     page.wait_for_timeout(2500)
     page.wait_for_selector('.o_main_navbar')
     idle(page, 1500)
@@ -598,6 +600,10 @@ def main():
             step('salesperson: lines and totals', s_lines_summary, page)
             step('salesperson: Persian interface - labels still in English', s_english_labels, page)
             step('salesperson: print fa PDF (Persian interface)', s_print, page, 'ui_quotation_fa_IR_ui-fa.pdf')
+            page.context.close()
+        if 'all' in STEPS or 'sales' in STEPS or 'langs' in STEPS:
+            # 'langs' alone: from the interface switch on (the fa quotation given by UI_QUOTATION_FA)
+            page = login(browser, 'ui_sales')
             step('salesperson: interface language English (Preferences)', s_ui_language, page, 'en')
             step('salesperson: print fa PDF again (English interface)', s_print, page, 'ui_quotation_fa_IR_ui-en.pdf',
                  QUOTATION.get('fa'))
