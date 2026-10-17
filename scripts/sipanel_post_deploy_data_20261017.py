@@ -14,7 +14,7 @@ deleted.
   4  company Default Terms (res.company.invoice_terms): the en_US source becomes the English text of the three lines,
      the Persian text stays as the fa_IR translation (new quotations copy the terms in the customer's language);
      payment term 11 en_US name "70% advance payment, 30% balance before loading" (fa_IR unchanged).
-     Existing quotations keep their own note (SI-26/2546 unchanged).
+     Existing quotations keep their own note (SI-26/2546 unchanged: compared before / after this step, all lines).
   5  fa_IR label «شماره فرصت فروش» for the field label "Opportunity No." (cyan_crm_reference*: crm.lead, sale.order,
      account.move, account.bank.statement.line, project.project); en_US unchanged.
 
@@ -83,7 +83,19 @@ def diff(what, before, after):
         R['diff'].append({'what': what, 'before': before, 'after': after})
 
 
+def si26_2546_state(order):
+    # everything of SI-26/2546 this step could reach: totals, note, payment term, every line as stored
+    return {'totals': [order.amount_untaxed, order.amount_tax, order.amount_total], 'state': order.state,
+            'note': order.note, 'payment_term': order.payment_term_id.id,
+            'lines': [(l.id, l.display_type, l.product_id.id, l.name, l.product_uom_qty, l.price_unit, l.discount,
+                       l.price_subtotal) for l in order.order_line.sorted('id')]}
+
+
 try:
+    # SI-26/2546 as it is before this step (the owner edits the draft in the UI; its values are not fixed here)
+    ref = env['sale.order'].search([('name', '=', 'SI-26/2546')])
+    check('si26_2546_found', len(ref) == 1, ref.ids)
+    ref_before = si26_2546_state(ref) if len(ref) == 1 else {}
     Product = env['product.product'].with_context(active_test=False)
     prods = {c: Product.search([('default_code', '=', c)]) for c in EN_NAMES}
     check('products_found', all(len(p) == 1 for p in prods.values()), {c: p.ids for c, p in prods.items()})
@@ -170,11 +182,12 @@ try:
         check(f'opportunity_{model}', after == {'en_US': OPPORTUNITY_EN, 'fa_IR': OPPORTUNITY_FA}, after)
 
     # ---- untouched: SI-26/2546, contact languages
-    ref = env['sale.order'].search([('name', '=', 'SI-26/2546')])
-    R['si26_2546'] = {'totals': [ref.amount_untaxed, ref.amount_tax, ref.amount_total], 'state': ref.state,
-                      'printable': ref._sipanel_customer_document_problems()}
-    check('si26_2546_unchanged', abs(ref.amount_untaxed - 27_364_418_400) < 0.5 and abs(ref.amount_total - 30_100_860_240) < 0.5
-          and ref.state == 'draft' and not R['si26_2546']['printable'], R['si26_2546'])
+    env.invalidate_all()
+    ref_after = si26_2546_state(ref) if len(ref) == 1 else {}
+    R['si26_2546'] = {'totals': ref_after.get('totals'), 'state': ref_after.get('state'),
+                      'printable': ref._sipanel_customer_document_problems() if len(ref) == 1 else None}
+    check('si26_2546_unchanged', len(ref) == 1 and ref_after == ref_before and ref_after['state'] == 'draft'
+          and not R['si26_2546']['printable'], R['si26_2546'])
 except (AssertionError, ValueError) as exc:
     import traceback
     R['error'] = traceback.format_exc()
