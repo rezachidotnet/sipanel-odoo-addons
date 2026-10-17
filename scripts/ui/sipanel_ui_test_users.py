@@ -37,5 +37,16 @@ sellers = env['sale.order'].search([('user_id', '!=', False)]).mapped('user_id')
 R['production_sellers'] = {u.login: {'sales_manager': u.has_group('sales_team.group_sale_manager'),
                                      'settings_admin': u.has_group('base.group_system'),
                                      'lang': u.lang} for u in sellers}
+# the quotation products as a salesperson finds them (owner 2026-10-17: the 20 cm flashing has its own SIP- code)
+Product = env['product.product'].with_context(active_test=False)
+flash20 = env['product.template'].with_context(lang='en_US', active_test=False).search(
+    [('name', '=', 'Flashing in the top-sheet material, developed width up to 20 cm (supply only)')]).product_variant_ids
+R['products'] = {code: {'id': p.id, 'code': p.default_code, 'list_price': p.list_price,
+                        'fa_IR': p.with_context(lang='fa_IR').name, 'en_US': p.with_context(lang='en_US').name}
+                 for code, p in (('SIP-000074', Product.search([('default_code', '=', 'SIP-000074')])),
+                                 ('SIP-000076', Product.search([('default_code', '=', 'SIP-000076')])),
+                                 ('FLASH20', flash20),
+                                 ('SIP-000077', Product.search([('default_code', '=', 'SIP-000077')])))
+                 if len(p) == 1}
 env.cr.commit()
 print('SIPANEL_UI_USERS ' + json.dumps(R, ensure_ascii=False))

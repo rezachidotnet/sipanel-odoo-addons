@@ -5,7 +5,7 @@
 # Usage: scripts/sipanel_qlines_clone_validate.sh all|clone|pre|install|test|post|evidence|rehearsal|proof|drop
 #        |uiserver|uirun|uistop (UI acceptance test, owner 2026-10-16; on an existing clone, CLONE=... required)
 #   prodsim (after evidence; in all): P1 = the Production steps P6b commercial data, P7 v3, P8 M4 + way A, P8b technical sheet +
-#            shop drawings (2026-10-14) (dry run, then commit) and P9
+#            shop drawings (2026-10-14), P8c quotation products + defaults (2026-10-17) (dry run, then commit) and P9
 #            post-checks with the Production scripts; replaces rehearsal in all (2026-10-08)
 #   rehearsal (not in all): COMMITS on the clone - Standing Seam v3 released, SI-26/2546 itself at 10 % (way A, owner decision 2026-10-08)
 #   proof (last step of all): code_version.json + PDF content markers (scripts/qlines_code_markers.py)
@@ -536,6 +536,18 @@ prodsim() {
   prod_shell p8bagain sipanel_tech_sheet_data.py || true
   json_line SIPANEL_TECH_SHEET "$EVID/prodsim_p8bagain.log" "d.get('all_ok') is True and not d.get('changed')" \
     || { echo "PRODSIM P8b re-run FAILED (not idempotent)"; exit 21; }
+  # P8c: quotation products (Persian titles, 20 cm flashing product), default contact language fa_IR, validity 8 days
+  # (owner decisions 2026-10-17)
+  prod_shell p8cdry sipanel_quotation_products_data.py || true
+  json_line SIPANEL_PRODUCTS "$EVID/prodsim_p8cdry.log" "d.get('all_ok') is True" \
+    && grep -q '^SIPANEL_PRODUCTS ROLLED_BACK$' "$EVID/prodsim_p8cdry.log" || { echo "PRODSIM P8c dry run FAILED ($EVID/prodsim_p8cdry.log)"; exit 25; }
+  echo "P8c dry run OK (all checks, ROLLED_BACK)"
+  prod_shell p8ccommit sipanel_quotation_products_data.py -e SIPANEL_PRODUCTS_COMMIT=1 || true
+  grep -q '^SIPANEL_PRODUCTS COMMITTED' "$EVID/prodsim_p8ccommit.log" || { echo "PRODSIM P8c commit FAILED ($EVID/prodsim_p8ccommit.log)"; exit 25; }
+  echo "P8c COMMITTED"
+  prod_shell p8cagain sipanel_quotation_products_data.py || true
+  json_line SIPANEL_PRODUCTS "$EVID/prodsim_p8cagain.log" "d.get('all_ok') is True and not d.get('changed')" \
+    || { echo "PRODSIM P8c re-run FAILED (not idempotent)"; exit 25; }
   # P9: read-only post-checks + PDFs through the render server
   new_outdir
   render_server_start
@@ -680,6 +692,13 @@ ui_run() {
     -e HOME=/tmp -v "$uidir:/mnt/ui:ro" -v "$OUTDIR:/out" -e UI_URL="http://127.0.0.1:${RPORT}" \
     -e UI_PASSWORD="$pw" -e UI_DB="$CLONE" -e UI_STEPS="${UI_STEPS:-all}" -e UI_USER="${UI_USER:-}" \
     -e UI_PATHS="${UI_PATHS:-}" -e UI_STOP_ON_FAIL="${UI_STOP_ON_FAIL:-}" "$PW_IMAGE" python3 "/mnt/ui/${UI_SCRIPT:-sipanel_ui_acceptance.py}" || rc=$?
+  # read-only check of the quotations made in the UI (owner 2026-10-17; rolled back)
+  docker run --rm -i --name "$ISO-shell" --network "container:$ISO-render" "${LIMITS[@]}" \
+    --label "sipanel.qlines.clone=$CLONE" "${MOUNTS[@]}" "$IMAGE_ID" \
+    odoo shell -c /etc/odoo/odoo.conf --addons-path "$APATH" -d "$CLONE" --no-http \
+    < "$uidir/sipanel_ui_verify.py" > "$OUTDIR/verify.log" 2>&1 || true
+  grep -q '^SIPANEL_UI_VERIFY {.*"all_ok": true' "$OUTDIR/verify.log" && echo "UI_VERIFY OK" \
+    || { echo "UI_VERIFY FAILED ($OUTDIR/verify.log)"; rc=${rc:-26}; }
   echo "UI_RUN rc=${rc:-0} (report $OUTDIR/ui_report.json)"; return "${rc:-0}"
 }
 case "$MODE" in

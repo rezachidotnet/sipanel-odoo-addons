@@ -424,3 +424,53 @@ class TestTechSheetAndShopDrawings(SipanelCoreCase):
                                                     'product_uom_qty': 1.0, 'name': f'{PT} Gutter\nجنس ورق رویه: گالوانیزه'})
         self.assertEqual(plain._sipanel_report_name_lines(), [f'{PT} Gutter', 'جنس ورق رویه: گالوانیزه'],
                          'typed text on a line without the option is printed as typed')
+
+    def test_14_letterhead_frame_independent_of_the_printing_user(self):
+        """Owner decision 2026-10-17, item 4: the PDF follows the document, not the printing user's interface language.
+        The header / footer frame was rendered in the user's language (RTL under a Persian interface: mirrored
+        letterhead); a quotation's frame is the approved left-to-right one for both document languages, the bodies
+        stay in the document language."""
+        Report = self.env['ir.actions.report']
+        for partner in (self.cust_fa, self.cust_en):
+            order = self._order(partner)
+            parts = {}
+            for user_lang in ('en_US', 'fa_IR'):
+                report = Report.with_context(lang=user_lang)
+                html = report._render_qweb_html('sale.report_saleorder', order.ids)[0]
+                bodies, _ids, header, footer, _args = report._prepare_html(html, report_model='sale.order')
+                parts[user_lang] = (header, footer, bodies)
+                for frame in (header, footer):
+                    self.assertEqual(lxml_html.fromstring(frame).xpath('//body')[0].get('dir'), 'ltr',
+                                     (partner.lang, user_lang))
+                body_dir = lxml_html.fromstring(bodies[0]).xpath('//body')[0].get('dir')
+                self.assertEqual(body_dir, 'rtl' if partner.lang == 'fa_IR' else 'ltr', (partner.lang, user_lang))
+            self.assertEqual(parts['en_US'], parts['fa_IR'], f'{partner.lang}: same PDF parts whoever prints')
+        # other documents keep the native behaviour (frame in the printing user's language)
+        html = Report.with_context(lang='fa_IR')._render_qweb_html('sale.report_saleorder', self._order().ids)[0]
+        header = Report.with_context(lang='fa_IR')._prepare_html(html, report_model='res.partner')[2]
+        self.assertEqual(lxml_html.fromstring(header).xpath('//body')[0].get('dir'), 'rtl')
+
+    def test_15_sheet_tab_help_and_persian_labels(self):
+        """Owner decision 2026-10-17, items 6 and 7: the sheet tab explains {liner_thickness} and the row filled from
+        the material; the labels found in English in the Persian interface are translated."""
+        arch = self.env['sale.order'].with_context(lang='fa_IR').get_views([(False, 'form')])['views']['form']['arch']
+        doc = lxml_html.fromstring(arch)
+        page = doc.xpath("//page[@name='sipanel_tech_sheet']")
+        self.assertEqual(page[0].get('string'), 'مشخصات فنی')
+        help_text = ' '.join(page[0].xpath(".//div[@name='sipanel_tech_sheet_help']")[0].text_content().split())
+        self.assertIn('{liner_thickness}', help_text)
+        self.assertIn('ردیف ۶', help_text)
+        labels = {f: doc.xpath(f"//field[@name='{f}']")[0].get('string') for f in (
+            'validity_date_shamsi', 'date_order_shamsi')}
+        self.assertEqual(labels, {'validity_date_shamsi': 'تاریخ انقضا (شمسی)', 'date_order_shamsi': 'تاریخ پیش‌فاکتور (شمسی)'})
+        builder = doc.xpath("//page[@name='pdf_quote_builder']")
+        self.assertEqual([b.get('string') for b in builder], ['ساخت PDF پیش‌فاکتور'])
+        self.assertIn('بارگذاری دوباره‌ی مشخصات فنی از سیستم', arch)
+        line_list = doc.xpath("//field[@name='order_line']/list")[0]
+        self.assertEqual(line_list.xpath("field[@name='sipanel_invoice_gate']")[0].get('string'), 'توقف صدور فاکتور')
+        spec = self.env['sipanel.quotation.spec.line'].with_context(lang='fa_IR')
+        self.assertEqual([spec._fields[f].get_description(spec.env)['string'] for f in ('number', 'title', 'description')],
+                         ['ردیف', 'عنوان', 'شرح'])
+        selection = dict(self.env['sale.order'].with_context(lang='fa_IR')._fields['sipanel_liner_thickness']
+                         ._description_selection(self.env(context={'lang': 'fa_IR'})))
+        self.assertEqual(selection['0.7'], '۰.۷ میلیمتر')

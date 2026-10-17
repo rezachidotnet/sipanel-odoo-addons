@@ -76,6 +76,7 @@ msgstr "برای سیستم SIPANEL «%s» محصول نصب و اجرا تعر�
 #. module: sipanel_quotation_lines
 #. odoo-python
 #: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order_line__sipanel_managed_role__installation
 msgid "Installation & Execution"
 msgstr "نصب و اجرا"
 
@@ -167,6 +168,7 @@ msgstr "تهیه‌ی نقشه‌های اجرایی (شاپ)"
 #. module: sipanel_quotation_lines
 #. odoo-python
 #: code:addons/sipanel_quotation_lines/models/sale_order.py:0
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order_line__sipanel_managed_role__shop_drawing
 msgid "Shop Drawings"
 msgstr "نقشه‌های اجرایی"
 
@@ -241,3 +243,176 @@ msgstr "درصد تخفیف نقشه‌های اجرایی"
 #: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_liner_thickness
 msgid "Liner thickness"
 msgstr "ضخامت ورق زیرین"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_account_analytic_account_form_sipanel_installation
+msgid "Technical sheet"
+msgstr "مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Reload technical sheet from the System"
+msgstr "بارگذاری دوباره‌ی مشخصات فنی از سیستم"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "The System's technical sheet replaces this quotation's copy (and its edits). Continue?"
+msgstr "مشخصات فنی سیستم جایگزین نسخه‌ی این پیش‌فاکتور (و تغییرات آن) می‌شود. ادامه می‌دهید؟"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "{liner_thickness} in a row is replaced, when the quotation is printed, by the liner thickness chosen here (0.5 or 0.7 mm)."
+msgstr "عبارت {liner_thickness} در هر ردیف، هنگام چاپ پیش‌فاکتور با ضخامت ورق زیرین انتخاب‌شده در همین زبانه (۰.۵ یا ۰.۷ میلیمتر) جایگزین می‌شود."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "A row without a description (row 6, top sheet) is filled from the material chosen on the quotation lines: it prints the technical text of that material (Galvanized or Aluminium)."
+msgstr "ردیفی که شرح ندارد (ردیف ۶، ورق رویه) از جنس ورق انتخاب‌شده در سطرهای پیش‌فاکتور پر می‌شود: در چاپ، متن فنی همان جنس (گالوانیزه یا آلومینیوم) در آن می‌آید."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "The rows can be edited while the quotation is a draft; they are frozen once it is sent or confirmed."
+msgstr "این ردیف‌ها تا وقتی پیش‌فاکتور پیش‌نویس است قابل ویرایش‌اند و پس از ارسال یا تأیید ثابت می‌شوند."
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Validity Date (Shamsi)"
+msgstr "تاریخ انقضا (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Order Date (Shamsi)"
+msgstr "تاریخ پیش‌فاکتور (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Delivery Date (Shamsi)"
+msgstr "تاریخ تحویل (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Expected Date (Shamsi)"
+msgstr "تاریخ مورد انتظار (شمسی)"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Scope line"
+msgstr "سطر محدوده‌ی کار"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Certainty"
+msgstr "قطعیت"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_installation
+msgid "Invoice hold"
+msgstr "توقف صدور فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model_terms:ir.ui.view,arch_db:sipanel_quotation_lines.view_order_form_sipanel_quote_builder_label
+msgid "Quote Builder"
+msgstr "ساخت PDF پیش‌فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__number
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__number
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__number
+msgid "Row"
+msgstr "ردیف"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__title
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__title
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__title
+msgid "Title"
+msgstr "عنوان"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__description
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__description
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__description
+msgid "Description"
+msgstr "شرح"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_spec_line_mixin__attribute_id
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__attribute_id
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__attribute_id
+msgid "Option attribute"
+msgstr "ویژگی گزینه"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__attribute_value_id
+msgid "Frozen option value"
+msgstr "گزینه‌ی ثبت‌شده"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_quotation_spec_line__order_id
+msgid "Quotation"
+msgstr "پیش‌فاکتور"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sipanel_system_spec_line__system_id
+msgid "System"
+msgstr "سیستم"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_tech_image
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_tech_image
+msgid "Technical sheet schematic"
+msgstr "تصویر مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_tech_spec_ids
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_tech_spec_ids
+msgid "Technical specification"
+msgstr "ردیف‌های مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order__sipanel_system_print_name
+msgid "Requested System (printed, per language)"
+msgstr "سیستم درخواستی (چاپی، به تفکیک زبان)"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order__sipanel_liner_thickness__0_5
+msgid "0.5 mm"
+msgstr "۰.۵ میلیمتر"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields.selection,name:sipanel_quotation_lines.selection__sale_order__sipanel_liner_thickness__0_7
+msgid "0.7 mm"
+msgstr "۰.۷ میلیمتر"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_account_analytic_account__sipanel_shop_drawing_product_id
+msgid "Shop drawings product"
+msgstr "محصول نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_attribute_value__sipanel_spec_text
+msgid "Technical sheet text"
+msgstr "متن مشخصات فنی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_product_attribute_value__sipanel_price_required
+msgid "Price extra required to print"
+msgstr "قیمت اضافه برای چاپ الزامی است"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_shop_drawing_pct_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_shop_drawing_pct_default
+msgid "Default shop drawings %"
+msgstr "درصد پیش‌فرض نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_company__sipanel_shop_drawing_discount_default
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_res_config_settings__sipanel_shop_drawing_discount_default
+msgid "Default shop drawings discount %"
+msgstr "درصد پیش‌فرض تخفیف نقشه‌های اجرایی"
+
+#. module: sipanel_quotation_lines
+#: model:ir.model.fields,field_description:sipanel_quotation_lines.field_sale_order_line__sipanel_managed_role
+msgid "Managed line role"
+msgstr "نقش سطر خودکار"

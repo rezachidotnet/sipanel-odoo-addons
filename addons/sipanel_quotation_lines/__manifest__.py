@@ -6,7 +6,7 @@
                'time, bank account, validity) required before a quotation is printed or sent; System technical sheet '
                '(schematic + specification rows) printed on its own page; Shop Drawings percentage line; quotation options as '
                'native no_variant attributes (top-sheet material)',
-    'version': '19.0.1.3.0',
+    'version': '19.0.1.4.0',
     'category': 'Sales/Sales',
     'author': 'SIPANEL',
     'license': 'LGPL-3',
@@ -14,8 +14,9 @@
     # components the installation guard inspects; sipanel_quotation_project_info owns the Requested System;
     # sale_shamsi_report owns the quotation layout these report extensions sit in; sale_stock prints the Incoterm
     # column this module removes from the header box (installed: sipanel_scope_execution depends on it).
+    # sale_pdf_quote_builder (installed with sale_management) owns the "Quote Builder" tab this module labels in Persian.
     'depends': ['sale_management', 'sale_stock', 'analytic', 'sipanel_sale_scope', 'sipanel_quotation_project_info',
-                'sale_shamsi_report'],
+                'sale_shamsi_report', 'sale_pdf_quote_builder'],
     'data': [
         'security/ir.model.access.csv',
         'views/product_template_views.xml',

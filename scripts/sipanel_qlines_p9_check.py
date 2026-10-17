@@ -22,8 +22,20 @@ SALES_UID = int(os.environ.get('SIPANEL_P9_SALES_UID', '10'))
 # owner 2026-10-14 (P8b): flashing 3:1 prices -> supply 24,876,744,000, installation 10 %, shop drawings net 0
 UNTAXED, TAX, TOTAL, INSTALL_10 = 27_364_418_400, 2_736_441_840, 30_100_860_240, 2_487_674_400
 # P8b (owner requirements 2026-10-14): the flashing line is split 2:1 (108.47 + 54.23 = 162.70 m, same price)
-SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 43_800_000), ('SIP-000076', 54.23, 14_600_000),
+# P8c (owner 2026-10-17): the 20 cm flashing is a product of its own (FLASH20 = its SIP- code, found by name)
+SUPPLY_LINES = [('SIP-000074', 206.0, 88_000_000), ('SIP-000076', 108.47, 43_800_000), ('FLASH20', 54.23, 14_600_000),
                 ('SIP-000077', 18.0, 67_000_000)]
+PRODUCTS = {  # P8c: the line title is the product name (fa_IR exact, owner 2026-10-17; en_US translation)
+    'SIP-000074': ({'fa_IR': 'سیستم پوشش سقف و دیوار استندینگ سیم (فقط تأمین)',
+                    'en_US': 'Standing Seam roof and wall cladding system (supply only)'}, None),
+    'SIP-000076': ({'fa_IR': 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر (فقط تأمین)',
+                    'en_US': 'Flashing in the top-sheet material, developed width up to 58 cm (supply only)'}, 43_800_000),
+    'FLASH20': ({'fa_IR': 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر (فقط تأمین)',
+                 'en_US': 'Flashing in the top-sheet material, developed width up to 20 cm (supply only)'}, 14_600_000),
+    'SIP-000077': ({'fa_IR': 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)',
+                    'en_US': 'Galvanized sheet gutter, 1.5 mm (supply only)'}, None),
+}
+DEFAULTS = {'partner_lang': 'fa_IR', 'validity_days': 8}       # P8c (owner 2026-10-17, items 3 and 5)
 SHOP = {'pct': 2.0, 'discount': 100.0, 'price': 547_288_368, 'label_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)',
         'section_fa': 'نقشه‌های اجرایی', 'product_fa': 'تهیه‌ی نقشه‌های اجرایی (شاپ)'}
 # owner 2026-10-16: 7 rows (shop drawings row removed), schematic v4 (PNG rendering of the SVG delivered), 3 pages
@@ -54,11 +66,9 @@ TERMS = {'payment_term_en': '70% in advance, 30% before delivery.', 'delivery_da
          'terms_lines': ('اعتبار این پیش‌فاکتور تا تاریخ درج‌شده در بالای آن است.',
                          'قیمت‌ها بدون احتساب هزینه حمل، داربست، جرثقیل، اسکان و خوراک پرسنل نصب می‌باشد.',
                          'مقادیر این پیش‌فاکتور تقریبی است. مقادیر دقیق پس از تهیه‌ی نقشه‌های اجرایی (شاپ) استخراج می‌شود و ملاک محاسبه خواهد بود.'),
-         # P8b 2026-10-14: the material chosen on the line follows as the native «جنس ورق رویه: گالوانیزه» line
-         'lines': [('SIP-000074', 'سیستم پوشش سقف و دیوار استندینگ سیم (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
-                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
-                   ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر (فقط تأمین)\nجنس ورق رویه: گالوانیزه'),
-                   ('SIP-000077', 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)')]}
+         # P8c 2026-10-17: the native description a salesperson gets - "[code] product name" in the customer
+         # language + the material option line «جنس ورق رویه: گالوانیزه» (not printed)
+         'material_suffix': '\nجنس ورق رویه: گالوانیزه'}
 R = {'db': env.cr.dbname, 'checks': {}}
 su = env(su=True)
 
@@ -104,11 +114,28 @@ try:
         check(f'{code}_no_release_warnings', not warnings, warnings)
 
     # ---- master data
+    flash20 = su['product.template'].with_context(active_test=False, lang='en_US').search(
+        [('name', '=', PRODUCTS['FLASH20'][0]['en_US'])]).product_variant_ids
+    check('flash20_product', len(flash20) == 1 and bool(flash20.default_code), flash20.mapped('default_code'))
+    code_of = lambda c: (flash20.default_code if len(flash20) == 1 else 'FLASH20') if c == 'FLASH20' else c
+    SUPPLY_LINES = [(code_of(c), q, p) for c, q, p in SUPPLY_LINES]
+    R['products'] = {}
+    for key, (names, price) in PRODUCTS.items():
+        prod = su['product.product'].with_context(active_test=False).search([('default_code', '=', code_of(key))])
+        tmpl_names = stored(prod.product_tmpl_id, 'name') if len(prod) == 1 else {}
+        R['products'][code_of(key)] = {'name': tmpl_names, 'list_price': prod.list_price if len(prod) == 1 else None}
+        check(f'product_{key}_title', {k: tmpl_names.get(k) for k in names} == names, tmpl_names)
+        if price:
+            check(f'product_{key}_list_price', len(prod) == 1 and close(prod.list_price, price), prod.mapped('list_price'))
+    lang_defaults = su['ir.default'].search([('field_id', '=', su['ir.model.fields']._get('res.partner', 'lang').id)])
+    R['partner_lang_defaults'] = [(d.id, d.json_value, d.user_id.id, d.company_id.id) for d in lang_defaults]
+    check('default_partner_lang_fa', len(lang_defaults) == 1 and su['res.partner'].default_get(['lang'])['lang']
+          == DEFAULTS['partner_lang'], R['partner_lang_defaults'])
     unit = su.ref('uom.product_uom_unit')
     check('M4_sip_000075_in_units', install.uom_id == unit, install.uom_id.name)
     base = su['product.product'].with_context(active_test=False).search(
         [('default_code', 'in', [c for c, _q, _p in SUPPLY_LINES])])
-    check('installation_base_flags', len(base) == 3 and all(base.product_tmpl_id.mapped('sipanel_installation_base')),
+    check('installation_base_flags', len(base) == 4 and all(base.product_tmpl_id.mapped('sipanel_installation_base')),
           base.mapped('default_code'))
     seam = su['account.analytic.account'].with_context(lang='en_US').search(
         [('name', '=', 'Standing Seam'), ('active', '=', True)])
@@ -191,7 +218,7 @@ try:
     check('material_attribute_native_no_variant', len(attr) == 1 and attr.create_variant == 'no_variant'
           and stored(attr, 'name').get('fa_IR') == SHEET['material'][1] and len(attr.value_ids) == 2
           and alu.sipanel_price_required and not galv.sipanel_price_required, R['material'])
-    priced = ref.order_line.filtered(lambda l: l.product_id.default_code in ('SIP-000074', 'SIP-000076'))
+    priced = ref.order_line.filtered(lambda l: l.product_id.default_code in ('SIP-000074', 'SIP-000076', code_of('FLASH20')))
     check('si26_2546_material_galvanized', len(priced) == 3 and all(
         l.product_no_variant_attribute_value_ids.product_attribute_value_id == galv for l in priced)
           and all(len(l.product_id.product_tmpl_id.with_context(active_test=False).product_variant_ids) == 1 for l in priced),
@@ -247,6 +274,8 @@ try:
     check('si26_2546_delivery_days', ref.sipanel_delivery_days == TERMS['delivery_days'])
     check('si26_2546_no_bank_line', not ref.sipanel_show_bank_account)
     check('si26_2546_incoterm_exw', ref.incoterm.code == TERMS['incoterm'], ref.incoterm.code)
+    check('company_default_validity_8_days', company.quotation_validity_days == DEFAULTS['validity_days'],
+          company.quotation_validity_days)
     check('si26_2546_dates', ref.validity_date == order_day + datetime.timedelta(days=TERMS['validity_days'])
           and not ref._sipanel_customer_document_problems() and not ref.commitment_date, [str(ref.date_order), str(ref.validity_date)])
     check('si26_2546_project_site', ref._sipanel_page1_project_site().name == TERMS['site'],
@@ -257,8 +286,15 @@ try:
     check('company_default_terms', all(t in texts['company_terms'] for t in TERMS['terms_lines'])
           and '...' not in texts['company_terms'], texts['company_terms'])
     check('company_tagline_fa', TERMS['tagline_fa'] in (texts['header_fa'] or ''), texts['header_fa'])
+    # owner 2026-10-17: the titles a salesperson gets - SI-26/2546 uses the same products, nothing typed
     names = sorted((l.product_id.default_code, l.name) for l in supply)
-    check('si26_2546_line_descriptions', names == sorted(TERMS['lines']) and 'ARCZIP' not in str(texts['lines']), names)
+    native = lambda l: l.with_context(lang=l.order_id._get_lang())._get_sale_order_line_multiline_description_sale()
+    titles = {l.product_id.default_code: l._sipanel_report_name_lines() for l in supply}
+    R['printed_titles'] = titles
+    expected = {code_of(k): [n['fa_IR']] for k, (n, _p) in PRODUCTS.items()}
+    check('si26_2546_line_descriptions', all(l.name == native(l) for l in supply) and titles == expected
+          and all(l.name.endswith(TERMS['material_suffix']) for l in supply if l.product_id.default_code != 'SIP-000077')
+          and 'ARCZIP' not in str(texts['lines']), names)
     notes = [(l.display_type, l.name) for l in ordered if l.display_type and not l.sipanel_is_installation_line]
     check('si26_2546_sections_notes', notes == [('line_section', 'سیستم پوشش سقف و دیوار استندینگ سیم'),   # P8b
                                                 ('line_section', 'متعلقات'),
@@ -354,6 +390,16 @@ try:
         material_lines = [l for l in ref.order_line if SHEET['material_line'][0] in (l.name or '')]
         check(f'layout_{lang}_material_line_not_printed', len(material_lines) == 3
               and not any(m in text for m in SHEET['material_line']), [len(material_lines)])
+        # owner 2026-10-17, item 4: the letterhead does not depend on the printing user's interface language
+        frames = {}
+        for user_lang in ('en_US', 'fa_IR'):
+            report = su['ir.actions.report'].with_context(lang=user_lang)
+            parts = report._prepare_html(report._render_qweb_html('sale.report_saleorder', ref.ids)[0],
+                                         report_model='sale.order')
+            frames[user_lang] = (parts[2], parts[3], parts[0])
+        dirs = [lxml_html.fromstring(f).xpath('//body')[0].get('dir') for f in frames['fa_IR'][:2]]
+        check(f'layout_{lang}_letterhead_independent_of_user_language', frames['en_US'] == frames['fa_IR']
+              and dirs == ['ltr', 'ltr'], dirs)
         pdf, _ = su['ir.actions.report']._render_qweb_pdf('sale.report_saleorder', ref.ids)
         with open(os.path.join(OUT, f'p9_SI-26-2546_{lang}.pdf'), 'wb') as f:
             f.write(pdf)

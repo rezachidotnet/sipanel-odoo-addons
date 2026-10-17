@@ -11,3 +11,4 @@ from . import quote_scope_revision
 from . import scope_version
 from . import tech_sheet
 from . import product_attribute
+from . import ir_actions_report

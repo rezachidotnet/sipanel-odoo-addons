@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
-"""UI acceptance test (owner 2026-10-16), run by `sipanel_qlines_clone_validate.sh uirun` on a CLONE only.
+"""UI acceptance test (owner 2026-10-16, re-test 2026-10-17), run by `sipanel_qlines_clone_validate.sh uirun` on a
+CLONE only.
 
-A normal salesperson (ui_sales) creates, in the web UI only, a new quotation that reproduces SI-26/2546 and prints the
-fa PDF; a Sales Manager (ui_manager) does the manager tasks (System sheet row, default terms, aluminium price extra).
+A normal salesperson (ui_sales) creates, in the web UI only, a new quotation that reproduces SI-26/2546 - products
+picked, nothing typed in the descriptions (the product names are the titles, owner 2026-10-17) - and prints the fa PDF
+from a Persian interface, then from an English interface (the PDF must not change). In the English interface the same
+salesperson makes a quotation for an English customer with the same products (English titles). The Persian interface
+is scanned for labels still in English. A Sales Manager (ui_manager) tries the manager tasks (System sheet row, default
+terms, aluminium price extra) - owner decision 2026-10-17: they stay admin-only, so "blocked" is the expected result.
 Every step is recorded in /out/ui_report.json: ok / blocked (exact reason) / failed, with a screenshot /out/NN_*.png.
 Login goes through /web/session/authenticate: on the clone the website login form stays hidden (its captcha script
 cannot load without internet) - this is the only step not done through the visible UI.
@@ -28,13 +33,34 @@ SYSTEM = 'استندینگ سیم'
 SECTION_1 = 'سیستم پوشش سقف و دیوار استندینگ سیم'
 SECTION_2 = 'متعلقات'
 NOTE = 'شامل: متعلقات استاندارد سیستم'
-LINES = [  # (section before, product search, description, qty, price)
-    ('SIP-000074', 'سیستم پوشش سقف و دیوار استندینگ سیم (فقط تأمین)', '206', '88000000'),
-    ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۵۸ سانتی‌متر (فقط تأمین)', '108.47', '43800000'),
-    ('SIP-000076', 'فلاشینگ هم‌جنس ورق رویه، عرض گسترده تا ۲۰ سانتی‌متر (فقط تأمین)', '54.23', '14600000'),
-    ('SIP-000077', 'آبرو ورق گالوانیزه ۱.۵ میلیمتر (فقط تأمین)', '18', '67000000'),
+
+def users_info():
+    """Written by sipanel_ui_test_users.py (test set-up): product codes as a salesperson finds them."""
+    try:
+        for line in open(f'{OUT}/users.log', encoding='utf-8'):
+            if line.startswith('SIPANEL_UI_USERS '):
+                return json.loads(line[len('SIPANEL_UI_USERS '):])
+    except OSError:
+        pass
+    return {}
+
+
+INFO = users_info()
+FLASH20 = INFO.get('products', {}).get('FLASH20', {}).get('code', 'FLASH20')
+LINES = [  # (product code, qty, unit price expected) - owner 2026-10-17: no description typed, the product name is the title
+    ('SIP-000074', '206', 88_000_000),
+    ('SIP-000076', '108.47', 43_800_000),
+    (FLASH20, '54.23', 14_600_000),
+    ('SIP-000077', '18', 67_000_000),
 ]
-PAYMENT_TERM = '۷۰٪ پیش‌پرداخت'
+UI = {  # texts that depend on the interface language
+    'fa': {'create': 'ایجاد', 'payment': '۷۰٪ پیش‌پرداخت', 'system': 'استندینگ سیم'},
+    'en': {'create': 'Create', 'payment': '70% in advance', 'system': 'Standing Seam'},
+}
+LANG_RE = {'fa': re.compile('فارسی|Persian'), 'en': re.compile(r'English \(US\)')}
+CUSTOMER_EN = 'UI Test English Customer'
+PROJECT_EN = 'UI English titles check'
+QUOTATION = {}
 
 
 def step(name, fn, *args):
@@ -147,20 +173,20 @@ def s_open_new(page):
     return page.url
 
 
-def s_customer(page):
+def s_customer(page, name=CUSTOMER, ui='fa'):
     inp = field(page, 'partner_id').locator('input').first
     inp.click()
-    inp.fill(CUSTOMER)
+    inp.fill(name)
     page.locator('.o-autocomplete--dropdown-menu').first.wait_for()
     page.wait_for_timeout(800)
-    page.locator('.o-autocomplete--dropdown-item').filter(has_text='ایجاد').first.click()   # quick create «ایجاد "..."»
+    page.locator('.o-autocomplete--dropdown-item').filter(has_text=UI[ui]['create']).first.click()   # quick create
     idle(page)
     return field(page, 'partner_id').locator('input').first.input_value()
 
 
-def s_customer_lang(page):
-    """Production stores a global default res.partner.lang = en_US (ir.default id 1): a customer created from the
-    quotation is English, so the quotation would print in English. The salesperson sets Persian on the customer."""
+def s_customer_lang(page, want='fa'):
+    """Owner 2026-10-17, item 3: the default contact language is fa_IR, so a customer quick-created from the quotation
+    is Persian; the salesperson only checks it (fa) or sets English for an English customer (en)."""
     f = field(page, 'partner_id')
     f.hover()
     f.locator('.o_external_button').first.click()           # opens the customer (the quotation is saved first)
@@ -169,39 +195,46 @@ def s_customer_lang(page):
     lang = page.locator('.o_form_view div[name="lang"] input').first
     was = lang.input_value()
     now = was
-    for attempt in range(3):                          # the select menu sometimes closes before the click lands
+    for attempt in range(3 if not LANG_RE[want].search(was) else 0):   # the select menu sometimes closes early
         lang.click()
-        page.locator('.o_select_menu_item').filter(has_text=re.compile('فارسی|Persian')).first.wait_for()
+        page.locator('.o_select_menu_item').filter(has_text=LANG_RE[want]).first.wait_for()
         page.wait_for_timeout(400)
-        page.locator('.o_select_menu_item').filter(has_text=re.compile('فارسی|Persian')).first.click()
+        page.locator('.o_select_menu_item').filter(has_text=LANG_RE[want]).first.click()
         idle(page, 600)
         now = lang.input_value()
-        if 'فارسی' in now or 'Persian' in now:
+        if LANG_RE[want].search(now):
             break
-    if not ('فارسی' in now or 'Persian' in now):
+    if not LANG_RE[want].search(now):
         raise AssertionError(f'customer language still {now!r}')
     page.screenshot(path=f'{OUT}/{N[0]:02d}_customer_language.png', full_page=True)
-    page.locator('.o_form_button_save').first.click()
-    idle(page, 1000)
+    btn = page.locator('.o_form_button_save').first
+    if btn.is_visible():                              # nothing to save when the default language was the right one
+        btn.click()
+        idle(page, 1000)
     page.locator('.o_back_button a').first.click()          # back to the quotation (breadcrumb)
     page.wait_for_selector('.o_form_view div[name="sipanel_requested_system_id"]')
     idle(page, 800)
-    return {'language_before': was, 'language_after': now, 'quotation': page.url}
+    return {'language_default': was, 'default_is_persian': bool(LANG_RE['fa'].search(was)), 'language_after': now,
+            'changed': was != now, 'quotation': page.url}
 
 
-def s_header(page):
-    m2o(page, 'payment_term_id', PAYMENT_TERM)
+def s_header(page, ui='fa'):
+    m2o(page, 'payment_term_id', UI[ui]['payment'])
     type_into(page, 'sipanel_delivery_days', '45')
     bank = field(page, 'sipanel_show_bank_account').locator('input').first
     if bank.is_checked():
         bank.uncheck()
+    # owner 2026-10-17, item 5: validity 8 days by default (native setting) - read, not typed
     return {'payment_term': field(page, 'payment_term_id').locator('input').first.input_value(),
-            'bank_line': bank.is_checked()}
+            'bank_line': bank.is_checked(),
+            'date_order': field(page, 'date_order').locator('input').first.input_value(),
+            'validity_date': field(page, 'validity_date').locator('input').first.input_value(),
+            'validity_shamsi': field(page, 'validity_date_shamsi').inner_text().strip()}
 
 
-def s_project(page):
-    type_into(page, 'sipanel_project_name', PROJECT)
-    m2o(page, 'sipanel_requested_system_id', SYSTEM)
+def s_project(page, project=PROJECT, ui='fa'):
+    type_into(page, 'sipanel_project_name', project)
+    m2o(page, 'sipanel_requested_system_id', UI[ui]['system'])
     return field(page, 'sipanel_requested_system_id').locator('input').first.input_value()
 
 
@@ -234,7 +267,11 @@ def s_note(page, text):
     return text
 
 
-def s_line(page, code, description, qty, price):
+def number(text):
+    return float((text or '0').translate(str.maketrans('۰۱۲۳۴۵۶۷۸۹٬٫', '0123456789,.')).replace(',', '') or 0)
+
+
+def s_line(page, code, qty, price):
     row = row_add(page, 0)
     prod = row.locator('td[name="product_template_id"] input.o_input, td[name="product_id"] input.o_input').first
     for attempt in range(3):                          # the autocomplete sometimes misses a fill(): type it
@@ -269,22 +306,26 @@ def s_line(page, code, description, qty, price):
         last.locator('td[name="product_uom_qty"]').click()          # back into the line after the configurator
         idle(page, 800)
     row = page.locator('div[name="order_line"] tr.o_selected_row').first
-    open(f'{OUT}/{N[0]:02d}_row_dom.html', 'w').write(row.inner_html())
-    desc = row.locator('td[name="product_template_id"] textarea, td[name="product_id"] textarea').first
-    if desc.count() and not desc.is_visible():         # no description yet: the «add a description» button shows it
-        row.locator('#labelVisibilityButtonId, button.fa-bars').first.click()
-        idle(page, 400)
-    current = desc.input_value() if desc.count() else ''
-    keep = [l for l in current.split('\n') if ':' in l]              # the native "<attribute>: <value>" line(s)
-    if desc.count():
-        desc.fill('\n'.join([description] + keep))
     q = row.locator('td[name="product_uom_qty"] input').first
     q.fill(qty)
-    p = row.locator('td[name="price_unit"] input').first
-    p.fill(price)
-    p.press('Tab')
+    q.press('Tab')
     idle(page, 800)
-    return {'configurator': configured, 'description_before': current}
+    row = page.locator('div[name="order_line"] tr.o_selected_row').first
+    if not row.count():
+        page.locator('div[name="order_line"] tr.o_data_row:not(.o_is_line_section):not(.o_is_line_note)').last.locator(
+            'td[name="price_unit"]').click()
+        idle(page, 600)
+        row = page.locator('div[name="order_line"] tr.o_selected_row').first
+    p = row.locator('td[name="price_unit"] input').first
+    auto = number(p.input_value())
+    typed = abs(auto - price) > 0.5                   # the list price is the expected price: nothing to type
+    if typed:
+        p.fill(str(price))
+        p.press('Tab')
+        idle(page, 800)
+    label = row.locator('td[name="product_template_id"], td[name="product_id"]').first.inner_text()
+    return {'configurator': configured, 'price_from_product': auto, 'price_typed': typed,
+            'line_label': re.sub(r'\s+', ' ', label)[:200], 'description_typed': False}
 
 
 def s_tech_sheet(page):
@@ -295,7 +336,9 @@ def s_tech_sheet(page):
     rows = page.locator('.o_form_view div[name="sipanel_tech_spec_ids"] .o_data_row').count()
     img = page.locator('.o_form_view div[name="sipanel_tech_image"] img').count()
     value = liner.locator('input').first
-    return {'rows': rows, 'image': img, 'liner': value.input_value() if value.count() else liner.inner_text()[:80]}
+    helptext = page.locator('.o_form_view div[name="sipanel_tech_sheet_help"]')
+    return {'rows': rows, 'image': img, 'liner': value.input_value() if value.count() else liner.inner_text()[:80],
+            'help': re.sub(r'\s+', ' ', helptext.first.inner_text()) if helptext.count() else None}
 
 
 def s_save(page):
@@ -314,14 +357,76 @@ def s_lines_summary(page):
     return {'rows': out, 'totals': totals}
 
 
-def s_print(page):
-    """The «چاپ» (Print) button of the quotation header: the PDF of the quotation report is downloaded."""
+def s_print(page, name='ui_quotation_fa_IR_ui-fa.pdf', url=None):
+    """The «چاپ» / Print button of the quotation header: the PDF of the quotation report is downloaded."""
+    if url:
+        page.goto(url, wait_until='domcontentloaded')
+        page.wait_for_selector('.o_form_view div[name="partner_id"]')
+        idle(page, 1000)
     btn = page.locator('.o_form_view .o_statusbar_buttons button[name="sale.action_report_saleorder"]').first
     with page.expect_download(timeout=T) as dl:
         btn.click()
-    path = f'{OUT}/ui_quotation_fa_IR.pdf'
+    path = f'{OUT}/{name}'
     dl.value.save_as(path)
-    return {'pdf': path, 'suggested': dl.value.suggested_filename}
+    return {'pdf': path, 'suggested': dl.value.suggested_filename, 'quotation': page.url}
+
+
+def s_remember(page, key):
+    QUOTATION[key] = page.url
+    return page.url
+
+
+LATIN = re.compile('[A-Za-z]')
+PERSIAN_RE = re.compile('[\u0600-\u06FF]')
+
+
+def s_english_labels(page):
+    """Owner 2026-10-17, item 6: labels of the quotation form still in English in the Persian interface (every tab).
+    Codes, units, the company and product names are data, not labels: only labels, tabs, column titles and buttons."""
+    found = {}
+    for tab_name in ('order_lines', 'sipanel_tech_sheet', 'other_information'):
+        tabs = page.locator(f'.o_notebook a.nav-link[name="{tab_name}"]')
+        if tabs.count():
+            tabs.first.click()
+            idle(page, 500)
+        texts = page.locator('.o_form_view .o_form_label, .o_form_view .o_notebook .nav-link, '
+                             '.o_form_view th, .o_form_view .o_statusbar_buttons button, '
+                             '.o_form_view div[name="sipanel_tech_sheet_help"]').all_inner_texts()
+        for t in texts:
+            t = ' '.join(t.split())
+            if t and LATIN.search(t) and not PERSIAN_RE.search(t) and t not in ('PDF',):
+                found.setdefault(t, tab_name)
+    tab(page, 'order_lines')
+    return {'english_labels': found, 'count': len(found)}
+
+
+def s_ui_language(page, want='en'):
+    """The salesperson switches the interface language in the user menu (Preferences), as a user would."""
+    page.locator('.o_user_menu .dropdown-toggle, .o_user_menu button').first.click()
+    page.wait_for_timeout(600)
+    item = page.locator('.o-dropdown--menu [data-menu="settings"], .o-dropdown--menu .dropdown-item').filter(
+        has_text=re.compile('تنظیمات|Preferences|ترجیحات')).first
+    item.click()
+    page.wait_for_selector('.modal .o_form_view div[name="lang"], .o_form_view div[name="lang"]')
+    idle(page, 800)
+    scope = '.modal .o_form_view' if page.locator('.modal .o_form_view div[name="lang"]').count() else '.o_form_view'
+    lang = page.locator(f'{scope} div[name="lang"] input').first
+    was = lang.input_value()
+    for attempt in range(3):
+        lang.click()
+        page.locator('.o_select_menu_item').filter(has_text=LANG_RE[want]).first.wait_for()
+        page.wait_for_timeout(400)
+        page.locator('.o_select_menu_item').filter(has_text=LANG_RE[want]).first.click()
+        idle(page, 600)
+        if LANG_RE[want].search(lang.input_value()):
+            break
+    now = lang.input_value()
+    page.screenshot(path=f'{OUT}/{N[0]:02d}_preferences_language.png', full_page=True)
+    page.locator('.modal-footer button.btn-primary, .modal .o_form_button_save, .o_form_button_save').first.click()
+    page.wait_for_timeout(2500)
+    page.wait_for_selector('.o_main_navbar')
+    idle(page, 1500)
+    return {'interface_before': was, 'interface_after': now, 'html_lang': page.evaluate('document.documentElement.lang')}
 
 
 # ---------------------------------------------------------------- Sales Manager
@@ -476,27 +581,49 @@ def main():
             page = login(browser, 'ui_sales')
             step('salesperson: new quotation', s_open_new, page)
             step('salesperson: customer (quick create)', s_customer, page)
-            step('salesperson: customer language Persian (default is English)', s_customer_lang, page)
-            step('salesperson: payment term, delivery 45 days, bank line off', s_header, page)
+            step('salesperson: customer language (default Persian)', s_customer_lang, page, 'fa')
+            step('salesperson: payment term, delivery 45 days, bank line off, validity', s_header, page)
             step('salesperson: project name + Requested System', s_project, page)
             step('salesperson: installation 10 %, shop drawings 2 % / 100 %', s_percentages, page)
             step('salesperson: section roof + wall', s_section, page, SECTION_1)
-            step('salesperson: roof line (material galvanized)', s_line, page, *LINES[0])
+            step('salesperson: roof product (material galvanized)', s_line, page, *LINES[0])
             step('salesperson: section accessories', s_section, page, SECTION_2)
-            step('salesperson: flashing 58 cm', s_line, page, *LINES[1])
-            step('salesperson: flashing 20 cm', s_line, page, *LINES[2])
-            step('salesperson: gutter', s_line, page, *LINES[3])
+            step('salesperson: flashing 58 cm product', s_line, page, *LINES[1])
+            step('salesperson: flashing 20 cm product', s_line, page, *LINES[2])
+            step('salesperson: gutter product', s_line, page, *LINES[3])
             step('salesperson: note', s_note, page, NOTE)
             step('salesperson: save', s_save, page)
-            step('salesperson: technical sheet tab (liner 0.7)', s_tech_sheet, page)
+            step('salesperson: (quotation url)', s_remember, page, 'fa')
+            step('salesperson: technical sheet tab (liner 0.7, help text)', s_tech_sheet, page)
             step('salesperson: lines and totals', s_lines_summary, page)
-            step('salesperson: print fa PDF', s_print, page)
+            step('salesperson: Persian interface - labels still in English', s_english_labels, page)
+            step('salesperson: print fa PDF (Persian interface)', s_print, page, 'ui_quotation_fa_IR_ui-fa.pdf')
+            step('salesperson: interface language English (Preferences)', s_ui_language, page, 'en')
+            step('salesperson: print fa PDF again (English interface)', s_print, page, 'ui_quotation_fa_IR_ui-en.pdf',
+                 QUOTATION.get('fa'))
+            # English customer, same products: English titles
+            step('salesperson (en): new quotation', s_open_new, page)
+            step('salesperson (en): customer (quick create)', s_customer, page, CUSTOMER_EN, 'en')
+            step('salesperson (en): customer language English', s_customer_lang, page, 'en')
+            step('salesperson (en): payment term, delivery 45 days, validity', s_header, page, 'en')
+            step('salesperson (en): project name + Requested System', s_project, page, PROJECT_EN, 'en')
+            step('salesperson (en): installation 10 %, shop drawings 2 % / 100 %', s_percentages, page)
+            for code, qty, price in LINES:
+                step(f'salesperson (en): product {code}', s_line, page, code, qty, price)
+            step('salesperson (en): save', s_save, page)
+            step('salesperson (en): (quotation url)', s_remember, page, 'en')
+            step('salesperson (en): lines and totals', s_lines_summary, page)
+            step('salesperson (en): print en PDF (English interface)', s_print, page, 'ui_quotation_en_US_ui-en.pdf')
+            step('salesperson: interface language back to Persian', s_ui_language, page, 'fa')
+            step('salesperson: print en PDF again (Persian interface)', s_print, page, 'ui_quotation_en_US_ui-fa.pdf',
+                 QUOTATION.get('en'))
             page.context.close()
         if 'all' in STEPS or 'manager' in STEPS:
             page = login(browser, 'ui_manager')
-            step('manager: edit a row of the System technical sheet', m_system_sheet, page)
-            step('manager: default terms text', m_terms, page)
-            step('manager: aluminium price extra (set, then reset)', m_aluminium, page)
+            # owner decision 2026-10-17 (option A): these stay admin tasks - "blocked" is the expected result
+            step('manager: edit a row of the System technical sheet (expected: admin only)', m_system_sheet, page)
+            step('manager: default terms text (expected: admin only)', m_terms, page)
+            step('manager: aluminium price extra (expected: admin only)', m_aluminium, page)
             page.context.close()
         browser.close()
     REPORT['finished'] = time.strftime('%Y-%m-%d %H:%M:%S')
